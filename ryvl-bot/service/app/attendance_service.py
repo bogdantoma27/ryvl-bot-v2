@@ -198,8 +198,6 @@ def create_series(db: Session, payload: AttendanceCreateRequest, guild_id: str, 
         else:
             publish_at = _publish_at_for_kickoff(kickoff_at, series.timezone, occurrence_publish_time)
 
-        if publish_at > kickoff_at:
-            raise ValueError("publish_time cannot be after kickoff time")
         event = AttendanceEvent(
             series_id=series.id,
             occurrence_number=occurrence_number,
@@ -393,8 +391,6 @@ def edit_event(db: Session, event_id: int, payload: AttendanceEditRequest) -> di
         event.closes_at = new_start
         effective_publish_time = publish_time or _publish_time_from_dt(event.starts_at, series.timezone)
         event.starts_at = _publish_at_for_kickoff(new_start, series.timezone, effective_publish_time)
-        if event.starts_at > event.closes_at:
-            raise ValueError("publish_time cannot be after kickoff time")
         event.updated_at = datetime.now(timezone.utc)
     else:
         current_delta = new_start - event.closes_at
@@ -410,8 +406,6 @@ def edit_event(db: Session, event_id: int, payload: AttendanceEditRequest) -> di
             row.closes_at = row.closes_at + current_delta
             effective_publish_time = publish_time or _publish_time_from_dt(row.starts_at, series.timezone)
             row.starts_at = _publish_at_for_kickoff(row.closes_at, series.timezone, effective_publish_time)
-            if row.starts_at > row.closes_at:
-                raise ValueError("publish_time cannot be after kickoff time")
             row.updated_at = datetime.now(timezone.utc)
 
     if payload.vote_updates:
@@ -462,8 +456,6 @@ def reschedule_event(db: Session, event_id: int, payload: AttendanceRescheduleRe
         event.closes_at = new_start
         effective_publish_time = publish_time or _publish_time_from_dt(event.starts_at, series.timezone)
         event.starts_at = _publish_at_for_kickoff(new_start, series.timezone, effective_publish_time)
-        if event.starts_at > event.closes_at:
-            raise ValueError("publish_time cannot be after kickoff time")
         db.commit()
         db.refresh(event)
         event = db.execute(
@@ -487,8 +479,6 @@ def reschedule_event(db: Session, event_id: int, payload: AttendanceRescheduleRe
         row.closes_at = row.closes_at + current_delta
         effective_publish_time = publish_time or _publish_time_from_dt(row.starts_at, series.timezone)
         row.starts_at = _publish_at_for_kickoff(row.closes_at, series.timezone, effective_publish_time)
-        if row.starts_at > row.closes_at:
-            raise ValueError("publish_time cannot be after kickoff time")
 
     db.commit()
     db.refresh(event)
@@ -504,8 +494,10 @@ def close_due_events(db: Session) -> list[int]:
     now = datetime.now(timezone.utc)
     due = db.execute(
         select(AttendanceEvent).where(
-            AttendanceEvent.status.in_([EventStatus.SCHEDULED, EventStatus.OPEN]),
+            AttendanceEvent.status == EventStatus.OPEN,
             AttendanceEvent.closes_at <= now,
+            # If appearance is configured after kickoff, avoid instant auto-close.
+            AttendanceEvent.starts_at <= AttendanceEvent.closes_at,
         )
     ).scalars().all()
 
@@ -528,7 +520,6 @@ def list_due_publication_events(db: Session, *, limit: int = 20) -> list[dict]:
             AttendanceEvent.status == EventStatus.SCHEDULED,
             AttendanceEvent.message_id.is_(None),
             AttendanceEvent.starts_at <= now,
-            AttendanceEvent.closes_at > now,
         )
         .order_by(AttendanceEvent.starts_at.asc())
         .limit(limit)
