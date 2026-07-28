@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 
-import { ApiService, DiagnosticsResponse, HealthResponse } from '../../core/api.service';
+import { ApiService, DiagnosticsResponse } from '../../core/api.service';
 import { SnackbarService } from '../../core/snackbar.service';
 
 @Component({
@@ -19,12 +19,12 @@ import { SnackbarService } from '../../core/snackbar.service';
         </div>
       </header>
 
-      @if (health() || diagnostics()) {
+      @if (diagnostics()) {
         <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <article class="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
-            <p class="text-xs text-slate-500">API healthz</p>
-            <p class="mt-1 text-sm font-semibold" [class.text-emerald-300]="health()?.status === 'ok'" [class.text-rose-300]="health()?.status !== 'ok'">
-              {{ health()?.status || 'n/a' }}
+            <p class="text-xs text-slate-500">API status</p>
+            <p class="mt-1 text-sm font-semibold" [class.text-emerald-300]="diagnostics()?.status === 'ok'" [class.text-rose-300]="diagnostics()?.status !== 'ok'">
+              {{ diagnostics()?.status || 'n/a' }}
             </p>
           </article>
 
@@ -139,7 +139,6 @@ export class DiagnosticsPageComponent implements OnInit {
   protected readonly loading = signal(false);
   protected readonly error = signal('');
   protected readonly loadedAt = signal('');
-  protected readonly health = signal<HealthResponse | null>(null);
   protected readonly diagnostics = signal<DiagnosticsResponse | null>(null);
 
   async ngOnInit(): Promise<void> {
@@ -149,12 +148,9 @@ export class DiagnosticsPageComponent implements OnInit {
   protected async load(): Promise<void> {
     this.loading.set(true);
     try {
-      const [health, diagnostics] = await Promise.all([
-        this.api.getHealth(),
-        this.api.getDiagnostics(),
-      ]);
-      this.health.set(health);
+      const diagnostics = await this.api.getDiagnostics();
       this.diagnostics.set(diagnostics);
+
       this.loadedAt.set(new Date().toLocaleString());
     } catch {
       this.snackbar.error('Failed to load diagnostics from API.');

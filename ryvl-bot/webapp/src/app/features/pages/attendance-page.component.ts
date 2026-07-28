@@ -328,7 +328,7 @@ function todayDateInput(): string {
           <form class="grid gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3 md:grid-cols-2">
             <p class="md:col-span-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Edit event #{{ selectedEvent()!.id }}</p>
             <p class="md:col-span-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
-              Changes are saved live. No manual save is required.
+              Changes are local until you press Save changes.
             </p>
             @if (selectedEvent()!.status === 'cancelled') {
               <div class="md:col-span-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
@@ -433,6 +433,7 @@ function todayDateInput(): string {
                 @if (selectedEvent()!.status === 'cancelled') {
                   <button class="rounded-lg bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400 disabled:opacity-50" [disabled]="loading()" type="button" (click)="deleteCancelledEvent(selectedEvent()!.id)">Delete permanently</button>
                 } @else {
+                  <button class="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50" [disabled]="loading() || !manageDraftDirty()" type="button" (click)="saveEventChanges()">Save changes</button>
                   <button class="rounded-lg bg-rose-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-400 disabled:opacity-50" [disabled]="loading()" type="button" (click)="cancelSelectedEvent()">Cancel event</button>
                 }
                 <button class="rounded-lg border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-slate-800 disabled:opacity-50" [disabled]="loading()" type="button" (click)="clearSelectedEvent()">Close editor</button>
@@ -459,9 +460,6 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
   private readonly snackbar = inject(SnackbarService);
   private attendanceUpdatesSource: EventSource | null = null;
   private suppressManageLiveSync = false;
-  private manageLiveSyncTimer: ReturnType<typeof setTimeout> | null = null;
-  private manageLiveSyncInFlight = false;
-  private manageLiveSyncQueued = false;
 
   protected readonly loading = signal(false);
   protected readonly error = signal('');
@@ -476,6 +474,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
   protected readonly managePage = signal(1);
   protected readonly managePageSize = signal(10);
   protected readonly selectedManageEventIds = signal<number[]>([]);
+  protected readonly manageDraftDirty = signal(false);
   protected readonly voteDraftDirty = signal(false);
   protected readonly voteDraft = signal<Record<VoteBucket, string[]>>({
     accepted: [],
@@ -767,6 +766,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
 
   protected pickEvent(value: number | null): void {
     this.selectedEventId.set(value);
+    this.manageDraftDirty.set(false);
     this.voteDraftDirty.set(false);
     const event = this.selectedEvent();
     if (!event) return;
@@ -1264,55 +1264,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
 
   protected onManageFormChanged(debounce = false): void {
     if (this.suppressManageLiveSync) return;
-    if (debounce) {
-      if (this.manageLiveSyncTimer) {
-        clearTimeout(this.manageLiveSyncTimer);
-      }
-      this.manageLiveSyncTimer = setTimeout(() => {
-        this.manageLiveSyncTimer = null;
-        void this.syncManageFormLive();
-      }, 500);
-      return;
-    }
-    void this.syncManageFormLive();
-  }
-
-  private async syncManageFormLive(): Promise<void> {
-    if (this.manageLiveSyncInFlight) {
-      this.manageLiveSyncQueued = true;
-      return;
-    }
-
-    const selected = this.selectedEvent();
-    if (!selected) return;
-    if (selected.status === 'cancelled') return;
-    if (!this.manage.reschedule_date || !this.manage.reschedule_time) return;
-
-    this.manageLiveSyncInFlight = true;
-    this.loading.set(true);
-    try {
-      const startsAt = this.wallTimeToUtcIso(this.manage.reschedule_date, this.manage.reschedule_time, this.manage.timezone || this.defaultTimezone());
-      await this.api.editAttendanceEvent(selected.id, {
-        title: this.manage.title.trim(),
-        description: this.manage.description.trim(),
-        timezone: this.manage.timezone,
-        starts_at: startsAt,
-        publish_time: this.manage.publish_time || null,
-        scope: this.manage.reschedule_scope,
-        expected_updated_at: selected.updated_at,
-      });
-      await this.load(false);
-      this.pickEvent(selected.id);
-    } catch (error) {
-      this.snackbar.error(this.apiErrorMessage(error, 'Failed to save live changes.'));
-    } finally {
-      this.loading.set(false);
-      this.manageLiveSyncInFlight = false;
-      if (this.manageLiveSyncQueued) {
-        this.manageLiveSyncQueued = false;
-        void this.syncManageFormLive();
-      }
-    }
+    this.manageDraftDirty.set(true);
   }
 
   protected dragMember(memberId: string): void {
@@ -1327,7 +1279,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     event.preventDefault();
     const memberId = this.draggedMemberId();
     if (!memberId) return;
-    void this.moveMemberToStatus(memberId, status);
+    this.moveMemberToStatus(memberId, status);
     this.draggedMemberId.set('');
   }
 
@@ -1335,12 +1287,11 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     event.preventDefault();
     const memberId = this.draggedMemberId();
     if (!memberId) return;
-    void this.removeMemberVote(memberId);
+    this.removeMemberVote(memberId);
     this.draggedMemberId.set('');
   }
 
-  protected async moveMemberToStatus(memberId: string, status: VoteBucket): Promise<void> {
-    if (this.loading()) return;
+  protected moveMemberToStatus(memberId: string, status: VoteBucket): void {
     const selected = this.selectedEvent();
     if (!selected) return;
     if (selected.status === 'cancelled') return;
@@ -1348,7 +1299,6 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     const current = this.voteMapFromDraft()[memberId] || null;
     if (current === status) return;
 
-    const previousDraft = this.voteDraft();
     const next: Record<VoteBucket, string[]> = {
       accepted: this.voteDraft().accepted.filter(value => value !== memberId),
       declined: this.voteDraft().declined.filter(value => value !== memberId),
@@ -1357,28 +1307,10 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     next[status] = [...next[status], memberId];
     this.voteDraft.set(next);
     this.voteDraftDirty.set(true);
-
-    this.loading.set(true);
-    try {
-      await this.api.setAttendanceVote(selected.id, {
-        user_discord_id: memberId,
-        display_name: this.memberName(memberId),
-        status,
-      });
-      this.voteDraftDirty.set(false);
-      await this.load(false);
-      this.pickEvent(selected.id);
-    } catch (error) {
-      this.voteDraft.set(previousDraft);
-      this.voteDraftDirty.set(false);
-      this.snackbar.error(this.apiErrorMessage(error, 'Failed to update vote.'));
-    } finally {
-      this.loading.set(false);
-    }
+    this.manageDraftDirty.set(true);
   }
 
-  protected async removeMemberVote(memberId: string): Promise<void> {
-    if (this.loading()) return;
+  protected removeMemberVote(memberId: string): void {
     const selected = this.selectedEvent();
     if (!selected) return;
     if (selected.status === 'cancelled') return;
@@ -1386,27 +1318,13 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     const current = this.voteMapFromDraft()[memberId] || null;
     if (!current) return;
 
-    const previousDraft = this.voteDraft();
     this.voteDraft.set({
       accepted: this.voteDraft().accepted.filter(value => value !== memberId),
       declined: this.voteDraft().declined.filter(value => value !== memberId),
       tentative: this.voteDraft().tentative.filter(value => value !== memberId),
     });
     this.voteDraftDirty.set(true);
-
-    this.loading.set(true);
-    try {
-      await this.api.removeAttendanceVote(selected.id, memberId);
-      this.voteDraftDirty.set(false);
-      await this.load(false);
-      this.pickEvent(selected.id);
-    } catch (error) {
-      this.voteDraft.set(previousDraft);
-      this.voteDraftDirty.set(false);
-      this.snackbar.error(this.apiErrorMessage(error, 'Failed to remove vote.'));
-    } finally {
-      this.loading.set(false);
-    }
+    this.manageDraftDirty.set(true);
   }
 
   async saveEventChanges(): Promise<void> {
@@ -1448,6 +1366,8 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
       await this.load(false);
       this.snackbar.success('Event changes saved and synced to Discord.');
       this.pickEvent(selected.id);
+      this.manageDraftDirty.set(false);
+      this.voteDraftDirty.set(false);
     } catch (error) {
       this.voteDraft.set(originalDraft);
       this.voteDraftDirty.set(false);
@@ -1459,6 +1379,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
 
   protected clearSelectedEvent(): void {
     this.selectedEventId.set(null);
+    this.manageDraftDirty.set(false);
     this.voteDraftDirty.set(false);
     this.manage.title = 'Attendance';
     this.manage.description = '';
