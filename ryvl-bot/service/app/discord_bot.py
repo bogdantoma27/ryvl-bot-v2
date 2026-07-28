@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Optional
@@ -12,6 +13,7 @@ from discord.ext import commands
 from app.attendance_service import cancel_event_by_message_id, close_event, create_series, remove_vote, reschedule_event, set_event_message_id, set_vote
 from app.config import Settings
 from app.db import SessionLocal
+from app.lineup_formations import FORMATIONS
 from app.lineup_renderer import render_lineup_png
 from app.models import AttendanceSeries, VoteStatus
 from app.schemas import AttendanceCreateRequest, AttendanceRescheduleRequest, AttendanceVoteRequest
@@ -19,6 +21,260 @@ from app.time_utils import format_dual_kickoff_lines
 
 logger = logging.getLogger(__name__)
 ATTENDANCE_BUTTON_PREFIX = "attendance_vote:"
+
+
+class LineupSetupModal(discord.ui.Modal, title="Lineup Setup"):
+    formation = discord.ui.TextInput(
+        label="Formation key (example: 4231)",
+        placeholder="Use one of the supported formation keys",
+        required=True,
+        max_length=32,
+    )
+    lineup_title = discord.ui.TextInput(
+        label="Lineup title",
+        placeholder="Example: RYVL Match Lineup",
+        required=True,
+        max_length=120,
+    )
+    kickoff_date = discord.ui.TextInput(
+        label="Kickoff date (optional, YYYY-MM-DD)",
+        required=False,
+        max_length=10,
+    )
+    kickoff_time = discord.ui.TextInput(
+        label="Kickoff time (optional, HH:mm)",
+        required=False,
+        max_length=5,
+    )
+
+    def __init__(self, *, formation: str = "", title_value: str = "", date: str = "", time: str = ""):
+        super().__init__(timeout=300)
+        self.formation.default = formation
+        self.lineup_title.default = title_value
+        self.kickoff_date.default = date
+        self.kickoff_time.default = time
+        self.submitted = False
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.submitted = True
+        await interaction.response.defer(ephemeral=True)
+        self.stop()
+
+
+class LineupCustomNameModal(discord.ui.Modal, title="Set Custom Player Name"):
+    player_name = discord.ui.TextInput(
+        label="Player name",
+        placeholder="Type any display name",
+        required=True,
+        max_length=28,
+    )
+
+    def __init__(self, *, slot_label: str):
+        super().__init__(timeout=300)
+        self.player_name.label = f"Player name for {slot_label}"
+        self.submitted = False
+        self.value = ""
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        self.submitted = True
+        self.value = str(self.player_name.value or "").strip()[:28]
+        await interaction.response.defer(ephemeral=True)
+        self.stop()
+
+
+class LineupMemberSelect(discord.ui.UserSelect):
+    def __init__(self):
+        super().__init__(placeholder="Choose a member for current slot", min_values=1, max_values=1)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        view = self.view
+        if not isinstance(view, LineupWizardView):
+            return
+        await view.handle_member_select(interaction, self)
+
+
+class LineupWizardView(discord.ui.View):
+    def __init__(
+        self,
+        *,
+        bot: commands.Bot,
+        owner_id: int,
+        channel_id: int,
+        formation_key: str,
+        title: str,
+        kickoff_at: datetime | None,
+    ):
+        super().__init__(timeout=900)
+        self.bot = bot
+        self.owner_id = owner_id
+        self.channel_id = channel_id
+        self.formation_key = formation_key
+        self.title = title
+        self.kickoff_at = kickoff_at
+        self.layout = FORMATIONS[formation_key]
+        self.slot_order = [position.key for position in self.layout.positions]
+        self.current_index = 0
+        self.players: dict[str, str] = {}
+        self.message: discord.Message | None = None
+
+        self.add_item(LineupMemberSelect())
+
+    def _is_owner(self, interaction: discord.Interaction) -> bool:
+        return interaction.user.id == self.owner_id
+
+    def _current_slot_key(self) -> str:
+        return self.slot_order[self.current_index]
+
+    def _current_slot_label(self) -> str:
+        slot_key = self._current_slot_key()
+        return next((position.label for position in self.layout.positions if position.key == slot_key), slot_key.upper())
+
+    def _progress_text(self) -> str:
+        current = self.current_index + 1
+        total = len(self.slot_order)
+        lines = [
+            f"**Lineup wizard** - `{self.layout.label}`",
+            f"Title: **{self.title}**",
+            f"Target channel: <#{self.channel_id}>",
+            f"Step {current}/{total}: choose player for **{self._current_slot_label()}** (`{self._current_slot_key()}`)",
+            "Use either member select, custom name, or skip this slot.",
+        ]
+        if self.players:
+            preview = ", ".join(f"{key.upper()}: {value}" for key, value in self.players.items())
+            lines.append(f"Selected: {preview}")
+        return "\n".join(lines)
+
+    async def _refresh_message(self) -> None:
+        if self.message is None:
+            return
+        await self.message.edit(content=self._progress_text(), view=self)
+
+    async def _advance(self) -> None:
+        if self.current_index < len(self.slot_order) - 1:
+            self.current_index += 1
+            await self._refresh_message()
+            return
+        await self._finish()
+
+    async def _go_back(self) -> None:
+        if self.current_index <= 0:
+            await self._refresh_message()
+            return
+        self.current_index -= 1
+        await self._refresh_message()
+
+    async def _finish(self) -> None:
+        kickoff_line = ""
+        kickoff_iso = ""
+        kickoff_lines: list[str] = []
+        if self.kickoff_at is not None:
+            kickoff_line = f"\nKickoff: <t:{int(self.kickoff_at.timestamp())}:F>"
+            kickoff_iso = self.kickoff_at.isoformat()
+            kickoff_lines = format_dual_kickoff_lines(self.kickoff_at)
+
+        image = render_lineup_png(
+            formation=self.formation_key,
+            players=self.players,
+            title=self.title,
+            kickoff_text=f"Kickoff: {kickoff_iso}" if kickoff_iso else "",
+            kickoff_rows=[
+                {"flag": "ro", "text": kickoff_lines[0].replace("🇷🇴 ", "")},
+                {"flag": "uk", "text": kickoff_lines[1].replace("🇬🇧 ", "")},
+            ] if kickoff_lines else None,
+        )
+
+        channel = self.bot.get_channel(self.channel_id)
+        if channel is None:
+            channel = await self.bot.fetch_channel(self.channel_id)
+        if not hasattr(channel, "send"):
+            raise RuntimeError("Target channel cannot send messages")
+
+        dual_block = f"\n{kickoff_lines[0]}\n{kickoff_lines[1]}" if kickoff_lines else ""
+        content = f"**{self.title}**\nFormation: `{self.formation_key}`{kickoff_line}{dual_block}"
+        message = await channel.send(
+            content=content,
+            file=discord.File(BytesIO(image), filename=f"lineup-{self.formation_key}.png"),
+        )
+        if self.message is not None:
+            await self.message.edit(
+                content=f"Lineup posted in <#{self.channel_id}>. Message ID `{message.id}`.",
+                view=None,
+            )
+        self.stop()
+
+    async def handle_member_select(self, interaction: discord.Interaction, select: LineupMemberSelect) -> None:
+        if not self._is_owner(interaction):
+            await interaction.response.send_message("Only the command author can use this lineup wizard.", ephemeral=True)
+            return
+        member = select.values[0]
+        name = getattr(member, "display_name", None) or getattr(member, "name", "")
+        slot = self._current_slot_key()
+        self.players[slot] = str(name).strip()[:28]
+        await interaction.response.defer(ephemeral=True)
+        await self._advance()
+
+    @discord.ui.button(label="Type Custom Name", style=discord.ButtonStyle.secondary)
+    async def set_custom_name(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        if not self._is_owner(interaction):
+            await interaction.response.send_message("Only the command author can use this lineup wizard.", ephemeral=True)
+            return
+        modal = LineupCustomNameModal(slot_label=self._current_slot_label())
+        await interaction.response.send_modal(modal)
+        timed_out = await modal.wait()
+        if timed_out or not modal.submitted or not modal.value:
+            return
+        self.players[self._current_slot_key()] = modal.value
+        await self._advance()
+
+    @discord.ui.button(label="Skip Slot", style=discord.ButtonStyle.primary)
+    async def skip_slot(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        if not self._is_owner(interaction):
+            await interaction.response.send_message("Only the command author can use this lineup wizard.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        await self._advance()
+
+    @discord.ui.button(label="Back", style=discord.ButtonStyle.secondary)
+    async def back(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        if not self._is_owner(interaction):
+            await interaction.response.send_message("Only the command author can use this lineup wizard.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        await self._go_back()
+
+    @discord.ui.button(label="Reset Current Slot", style=discord.ButtonStyle.secondary)
+    async def reset_current_slot(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        if not self._is_owner(interaction):
+            await interaction.response.send_message("Only the command author can use this lineup wizard.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        self.players.pop(self._current_slot_key(), None)
+        await self._refresh_message()
+
+    @discord.ui.button(label="Finish Now", style=discord.ButtonStyle.success)
+    async def finish_now(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        if not self._is_owner(interaction):
+            await interaction.response.send_message("Only the command author can use this lineup wizard.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        await self._finish()
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+    async def cancel(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+        if not self._is_owner(interaction):
+            await interaction.response.send_message("Only the command author can use this lineup wizard.", ephemeral=True)
+            return
+        await interaction.response.defer(ephemeral=True)
+        if self.message is not None:
+            await self.message.edit(content="Lineup wizard cancelled.", view=None)
+        self.stop()
+
+    async def on_timeout(self) -> None:
+        if self.message is not None:
+            try:
+                await self.message.edit(content="Lineup wizard expired. Please run /lineup_post again.", view=None)
+            except Exception:
+                pass
 
 
 def _truncate(value: str, limit: int = 1024) -> str:
@@ -214,12 +470,424 @@ class RyvlBot(commands.Bot):
         self.settings = settings
 
     async def setup_hook(self) -> None:
+        class AttendanceCreateModal(discord.ui.Modal, title="Attendance - Create Event"):
+            title_input = discord.ui.TextInput(
+                label="Title",
+                placeholder="Example: RYVL Training",
+                required=True,
+                max_length=120,
+            )
+            date_input = discord.ui.TextInput(
+                label="Date (YYYY-MM-DD)",
+                required=True,
+                max_length=10,
+            )
+            time_input = discord.ui.TextInput(
+                label="Time (HH:mm)",
+                required=True,
+                max_length=5,
+            )
+            description_input = discord.ui.TextInput(
+                label="Description",
+                placeholder="Respond with accept, tentative or decline.",
+                required=False,
+                max_length=400,
+                style=discord.TextStyle.paragraph,
+            )
+            recurrence_input = discord.ui.TextInput(
+                label="Recurrence (none|weekly) and repeat_count (optional)",
+                placeholder="Examples: none  OR  weekly 6",
+                required=False,
+                max_length=32,
+            )
+
+            def __init__(self):
+                super().__init__(timeout=300)
+                self.submitted = False
+
+            async def on_submit(self, interaction: discord.Interaction) -> None:
+                self.submitted = True
+                await interaction.response.defer(ephemeral=True)
+                self.stop()
+
+        class AttendanceVoteModal(discord.ui.Modal, title="Attendance - Set Vote"):
+            event_id_input = discord.ui.TextInput(label="Event ID", required=True, max_length=32)
+            status_input = discord.ui.TextInput(
+                label="Status (accepted|tentative|declined)",
+                required=True,
+                max_length=16,
+            )
+
+            def __init__(self):
+                super().__init__(timeout=300)
+                self.submitted = False
+
+            async def on_submit(self, interaction: discord.Interaction) -> None:
+                self.submitted = True
+                await interaction.response.defer(ephemeral=True)
+                self.stop()
+
+        class AttendanceRescheduleModal(discord.ui.Modal, title="Attendance - Reschedule"):
+            event_id_input = discord.ui.TextInput(label="Event ID", required=True, max_length=32)
+            date_input = discord.ui.TextInput(label="New date (YYYY-MM-DD)", required=True, max_length=10)
+            time_input = discord.ui.TextInput(label="New time (HH:mm)", required=True, max_length=5)
+            scope_input = discord.ui.TextInput(
+                label="Scope (this_occurrence_only|this_and_following)",
+                required=False,
+                max_length=32,
+            )
+
+            def __init__(self):
+                super().__init__(timeout=300)
+                self.submitted = False
+
+            async def on_submit(self, interaction: discord.Interaction) -> None:
+                self.submitted = True
+                await interaction.response.defer(ephemeral=True)
+                self.stop()
+
+        class AttendanceCloseModal(discord.ui.Modal, title="Attendance - Close Event"):
+            event_id_input = discord.ui.TextInput(label="Event ID", required=True, max_length=32)
+
+            def __init__(self):
+                super().__init__(timeout=300)
+                self.submitted = False
+
+            async def on_submit(self, interaction: discord.Interaction) -> None:
+                self.submitted = True
+                await interaction.response.defer(ephemeral=True)
+                self.stop()
+
+        class AttendanceRemoveVoteModal(discord.ui.Modal, title="Attendance - Remove Vote"):
+            event_id_input = discord.ui.TextInput(label="Event ID", required=True, max_length=32)
+            user_input = discord.ui.TextInput(
+                label="User mention or user ID",
+                placeholder="Example: @Player or 1234567890",
+                required=True,
+                max_length=64,
+            )
+
+            def __init__(self):
+                super().__init__(timeout=300)
+                self.submitted = False
+
+            async def on_submit(self, interaction: discord.Interaction) -> None:
+                self.submitted = True
+                await interaction.response.defer(ephemeral=True)
+                self.stop()
+
+        class AttendanceWizardView(discord.ui.View):
+            def __init__(self, *, bot: "RyvlBot", owner_id: int):
+                super().__init__(timeout=900)
+                self.bot = bot
+                self.owner_id = owner_id
+                self.message: discord.Message | None = None
+
+            def _is_owner(self, interaction: discord.Interaction) -> bool:
+                return interaction.user.id == self.owner_id
+
+            def _text(self) -> str:
+                return (
+                    "**Attendance Wizard**\n"
+                    "Choose an action below.\n"
+                    "- Create: new attendance event\n"
+                    "- Vote: set your response\n"
+                    "- Reschedule: move an event\n"
+                    "- Close: close responses\n"
+                    "- Remove Vote: remove a user vote"
+                )
+
+            async def _send_owner_only(self, interaction: discord.Interaction) -> bool:
+                if self._is_owner(interaction):
+                    return True
+                await interaction.response.send_message("Only the command author can use this attendance wizard.", ephemeral=True)
+                return False
+
+            async def _resolve_channel(self, interaction: discord.Interaction) -> TextChannel | None:
+                if self.bot.settings.default_attendance_channel_id:
+                    fetched = self.bot.get_channel(int(self.bot.settings.default_attendance_channel_id))
+                    if isinstance(fetched, TextChannel):
+                        return fetched
+                if isinstance(interaction.channel, TextChannel):
+                    return interaction.channel
+                return None
+
+            @discord.ui.button(label="Create", style=discord.ButtonStyle.success)
+            async def create_action(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+                if not await self._send_owner_only(interaction):
+                    return
+                modal = AttendanceCreateModal()
+                await interaction.response.send_modal(modal)
+                timed_out = await modal.wait()
+                if timed_out or not modal.submitted:
+                    return
+
+                channel_target = await self._resolve_channel(interaction)
+                if channel_target is None:
+                    await interaction.followup.send("No target channel found. Configure default attendance channel.", ephemeral=True)
+                    return
+
+                title = str(modal.title_input.value or "").strip()
+                date_raw = str(modal.date_input.value or "").strip()
+                time_raw = str(modal.time_input.value or "").strip()
+                description = str(modal.description_input.value or "Respond with accept, tentative or decline.").strip() or "Respond with accept, tentative or decline."
+                recurrence_raw = str(modal.recurrence_input.value or "none").strip().lower()
+                recurrence = "none"
+                repeat_count: int | None = None
+                parts = recurrence_raw.split()
+                if parts:
+                    recurrence = parts[0] if parts[0] in {"none", "weekly"} else "none"
+                    if recurrence == "weekly" and len(parts) > 1 and parts[1].isdigit():
+                        repeat_count = int(parts[1])
+
+                try:
+                    starts_at = _parse_datetime(date_raw, time_raw, self.bot.settings.default_timezone)
+                except ValueError:
+                    await interaction.followup.send("Invalid date/time. Use YYYY-MM-DD and HH:mm.", ephemeral=True)
+                    return
+
+                if recurrence == "weekly" and repeat_count is not None and (repeat_count < 2 or repeat_count > 52):
+                    await interaction.followup.send("repeat_count must be between 2 and 52 for weekly events.", ephemeral=True)
+                    return
+
+                with SessionLocal() as db:
+                    payload = AttendanceCreateRequest(
+                        channel_id=str(channel_target.id),
+                        title=title,
+                        description=description,
+                        timezone=self.bot.settings.default_timezone,
+                        starts_at=starts_at,
+                        recurrence=recurrence,
+                        repeat_count=repeat_count if recurrence == "weekly" else None,
+                    )
+                    series = create_series(
+                        db,
+                        payload,
+                        guild_id=self.bot.settings.discord_guild_id,
+                        created_by_discord_id=str(interaction.user.id),
+                    )
+                    first_event = next((event for event in series.get("events", []) if event.get("occurrence_number") == 1), None)
+                    if first_event is None:
+                        await interaction.followup.send("Could not create first attendance occurrence.", ephemeral=True)
+                        return
+                    message = await self.bot.post_attendance_message(
+                        channel_id=int(channel_target.id),
+                        series=series,
+                        event=first_event,
+                    )
+                    set_event_message_id(db, int(first_event["id"]), str(message.id))
+
+                await interaction.followup.send(
+                    f"Attendance created. Event ID `{first_event['id']}` posted in <#{channel_target.id}>.",
+                    ephemeral=True,
+                )
+
+            @discord.ui.button(label="Vote", style=discord.ButtonStyle.primary)
+            async def vote_action(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+                if not await self._send_owner_only(interaction):
+                    return
+                modal = AttendanceVoteModal()
+                await interaction.response.send_modal(modal)
+                timed_out = await modal.wait()
+                if timed_out or not modal.submitted:
+                    return
+
+                event_raw = str(modal.event_id_input.value or "").strip()
+                status_raw = str(modal.status_input.value or "").strip().lower()
+                if not event_raw.isdigit():
+                    await interaction.followup.send("Event ID must be numeric.", ephemeral=True)
+                    return
+                try:
+                    vote_status = VoteStatus(status_raw)
+                except ValueError:
+                    await interaction.followup.send("Status must be accepted, tentative, or declined.", ephemeral=True)
+                    return
+
+                with SessionLocal() as db:
+                    try:
+                        event = set_vote(
+                            db,
+                            int(event_raw),
+                            AttendanceVoteRequest(
+                                user_discord_id=str(interaction.user.id),
+                                display_name=interaction.user.display_name,
+                                status=vote_status,
+                            ),
+                        )
+                    except LookupError:
+                        await interaction.followup.send("Event not found.", ephemeral=True)
+                        return
+                    except ValueError as error:
+                        await interaction.followup.send(str(error), ephemeral=True)
+                        return
+                    try:
+                        await _sync_attendance_message(self.bot, db, event)
+                    except Exception:
+                        logger.exception("Failed to sync attendance message for event %s", event_raw)
+
+                await interaction.followup.send(f"Vote set to **{vote_status.value}** for event `{event_raw}`.", ephemeral=True)
+
+            @discord.ui.button(label="Reschedule", style=discord.ButtonStyle.primary)
+            async def reschedule_action(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+                if not await self._send_owner_only(interaction):
+                    return
+                modal = AttendanceRescheduleModal()
+                await interaction.response.send_modal(modal)
+                timed_out = await modal.wait()
+                if timed_out or not modal.submitted:
+                    return
+
+                event_raw = str(modal.event_id_input.value or "").strip()
+                date_raw = str(modal.date_input.value or "").strip()
+                time_raw = str(modal.time_input.value or "").strip()
+                scope_raw = str(modal.scope_input.value or "this_occurrence_only").strip() or "this_occurrence_only"
+                if scope_raw not in {"this_occurrence_only", "this_and_following"}:
+                    scope_raw = "this_occurrence_only"
+                if not event_raw.isdigit():
+                    await interaction.followup.send("Event ID must be numeric.", ephemeral=True)
+                    return
+                try:
+                    starts_at = _parse_datetime(date_raw, time_raw, self.bot.settings.default_timezone)
+                except ValueError:
+                    await interaction.followup.send("Invalid date/time. Use YYYY-MM-DD and HH:mm.", ephemeral=True)
+                    return
+
+                with SessionLocal() as db:
+                    try:
+                        event = reschedule_event(
+                            db,
+                            int(event_raw),
+                            AttendanceRescheduleRequest(starts_at=starts_at, scope=scope_raw),
+                        )
+                    except LookupError:
+                        await interaction.followup.send("Event not found.", ephemeral=True)
+                        return
+                    except ValueError as error:
+                        await interaction.followup.send(str(error), ephemeral=True)
+                        return
+                    try:
+                        await _sync_attendance_message(self.bot, db, event)
+                    except Exception:
+                        logger.exception("Failed to sync attendance message for event %s", event_raw)
+
+                await interaction.followup.send(
+                    f"Event `{event_raw}` rescheduled to {date_raw} {time_raw} ({self.bot.settings.default_timezone}).",
+                    ephemeral=True,
+                )
+
+            @discord.ui.button(label="Close", style=discord.ButtonStyle.secondary)
+            async def close_action(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+                if not await self._send_owner_only(interaction):
+                    return
+                modal = AttendanceCloseModal()
+                await interaction.response.send_modal(modal)
+                timed_out = await modal.wait()
+                if timed_out or not modal.submitted:
+                    return
+
+                event_raw = str(modal.event_id_input.value or "").strip()
+                if not event_raw.isdigit():
+                    await interaction.followup.send("Event ID must be numeric.", ephemeral=True)
+                    return
+
+                with SessionLocal() as db:
+                    try:
+                        event = close_event(db, int(event_raw))
+                    except LookupError:
+                        await interaction.followup.send("Event not found.", ephemeral=True)
+                        return
+                    try:
+                        await _sync_attendance_message(self.bot, db, event)
+                    except Exception:
+                        logger.exception("Failed to sync attendance message for event %s", event_raw)
+
+                await interaction.followup.send(f"Event `{event_raw}` closed.", ephemeral=True)
+
+            @discord.ui.button(label="Remove Vote", style=discord.ButtonStyle.secondary)
+            async def remove_vote_action(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+                if not await self._send_owner_only(interaction):
+                    return
+                modal = AttendanceRemoveVoteModal()
+                await interaction.response.send_modal(modal)
+                timed_out = await modal.wait()
+                if timed_out or not modal.submitted:
+                    return
+
+                event_raw = str(modal.event_id_input.value or "").strip()
+                user_raw = str(modal.user_input.value or "").strip()
+                if not event_raw.isdigit():
+                    await interaction.followup.send("Event ID must be numeric.", ephemeral=True)
+                    return
+
+                match = re.search(r"(\d{5,})", user_raw)
+                if not match:
+                    await interaction.followup.send("User must be a mention or a numeric user ID.", ephemeral=True)
+                    return
+                user_id = match.group(1)
+
+                with SessionLocal() as db:
+                    try:
+                        event = remove_vote(db, int(event_raw), str(user_id))
+                    except LookupError:
+                        await interaction.followup.send("Event not found.", ephemeral=True)
+                        return
+                    except ValueError as error:
+                        await interaction.followup.send(str(error), ephemeral=True)
+                        return
+                    try:
+                        await _sync_attendance_message(self.bot, db, event)
+                    except Exception:
+                        logger.exception("Failed to sync attendance message for event %s", event_raw)
+
+                await interaction.followup.send(
+                    f"Removed vote for <@{user_id}> from event `{event_raw}`.",
+                    ephemeral=True,
+                )
+
+            @discord.ui.button(label="Close Wizard", style=discord.ButtonStyle.danger)
+            async def close_wizard(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
+                if not await self._send_owner_only(interaction):
+                    return
+                await interaction.response.defer(ephemeral=True)
+                if self.message is not None:
+                    await self.message.edit(content="Attendance wizard closed.", view=None)
+                self.stop()
+
+            async def on_timeout(self) -> None:
+                if self.message is not None:
+                    try:
+                        await self.message.edit(content="Attendance wizard expired. Run /attendance_wizard again.", view=None)
+                    except Exception:
+                        pass
+
+        async def formation_autocomplete(_: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+            value = str(current or "").strip().lower()
+            matches: list[app_commands.Choice[str]] = []
+            for key in sorted(FORMATIONS.keys()):
+                label = FORMATIONS[key].label
+                searchable = f"{key} {label}".lower()
+                if value and value not in searchable:
+                    continue
+                matches.append(app_commands.Choice(name=f"{label} ({key})", value=key))
+                if len(matches) >= 25:
+                    break
+            return matches
+
         @self.tree.command(name="ping", description="Health check")
         async def ping(interaction: discord.Interaction):
             await interaction.response.send_message("pong", ephemeral=True)
 
         @self.tree.command(name="attendance_create", description="Create attendance event")
         @app_commands.default_permissions(administrator=True)
+        @app_commands.describe(
+            title="Public title shown in Discord for this attendance event",
+            date="Kickoff date in YYYY-MM-DD format",
+            time="Kickoff time in HH:mm format (24h)",
+            channel="Target Discord text channel (optional if default attendance channel is configured)",
+            description="Optional details shown under the attendance title",
+            recurrence="Choose one time or weekly recurrence",
+            repeat_count="For weekly recurrence only: how many occurrences (2-52)",
+        )
         @app_commands.choices(
             recurrence=[
                 app_commands.Choice(name="One time", value="none"),
@@ -290,6 +958,10 @@ class RyvlBot(commands.Bot):
             )
 
         @self.tree.command(name="attendance_vote", description="Set your attendance vote for an event")
+        @app_commands.describe(
+            event_id="Attendance event ID visible in the attendance message footer",
+            status="Your response for the selected attendance event",
+        )
         @app_commands.choices(
             status=[
                 app_commands.Choice(name="Accepted", value="accepted"),
@@ -336,6 +1008,12 @@ class RyvlBot(commands.Bot):
 
         @self.tree.command(name="attendance_reschedule", description="Reschedule an attendance event")
         @app_commands.default_permissions(administrator=True)
+        @app_commands.describe(
+            event_id="Attendance event ID to reschedule",
+            date="New kickoff date in YYYY-MM-DD format",
+            time="New kickoff time in HH:mm format (24h)",
+            scope="Apply only to this occurrence or to this and following ones",
+        )
         @app_commands.choices(
             scope=[
                 app_commands.Choice(name="Only this occurrence", value="this_occurrence_only"),
@@ -382,6 +1060,7 @@ class RyvlBot(commands.Bot):
 
         @self.tree.command(name="attendance_close", description="Close an attendance event")
         @app_commands.default_permissions(administrator=True)
+        @app_commands.describe(event_id="Attendance event ID to close")
         async def attendance_close(interaction: discord.Interaction, event_id: int):
             await interaction.response.defer(ephemeral=True)
             with SessionLocal() as db:
@@ -400,6 +1079,10 @@ class RyvlBot(commands.Bot):
 
         @self.tree.command(name="attendance_remove_vote", description="Remove a user's attendance vote")
         @app_commands.default_permissions(administrator=True)
+        @app_commands.describe(
+            event_id="Attendance event ID from which to remove a vote",
+            user="Server member whose vote will be removed",
+        )
         async def attendance_remove_vote(
             interaction: discord.Interaction,
             event_id: int,
@@ -426,82 +1109,103 @@ class RyvlBot(commands.Bot):
                 ephemeral=True,
             )
 
-        @self.tree.command(name="lineup_post", description="Post lineup text to a channel")
+        @self.tree.command(name="lineup_post", description="Open step-by-step lineup wizard and post to a channel")
         @app_commands.default_permissions(administrator=True)
+        @app_commands.describe(
+            channel="Target Discord text channel (optional if default lineup channel is configured)",
+            formation="Formation key (for example 4231). Optional - can be set in wizard",
+            title="Lineup title shown in Discord and on image. Optional - can be set in wizard",
+            date="Kickoff date YYYY-MM-DD (optional)",
+            time="Kickoff time HH:mm (optional)",
+        )
+        @app_commands.autocomplete(formation=formation_autocomplete)
         async def lineup_post(
             interaction: discord.Interaction,
-            formation: str,
-            title: str,
             channel: Optional[TextChannel] = None,
+            formation: Optional[str] = None,
+            title: Optional[str] = None,
             date: Optional[str] = None,
             time: Optional[str] = None,
-            players_json: Optional[str] = None,
         ):
-            await interaction.response.defer(ephemeral=True)
-
             channel_target = channel
             if channel_target is None and self.settings.default_lineup_channel_id:
                 fetched = self.get_channel(int(self.settings.default_lineup_channel_id))
                 if isinstance(fetched, TextChannel):
                     channel_target = fetched
             if channel_target is None:
-                await interaction.followup.send("No channel provided and no default lineup channel configured.", ephemeral=True)
+                await interaction.response.send_message("No channel provided and no default lineup channel configured.", ephemeral=True)
                 return
 
-            kickoff_line = ""
-            kickoff_iso = ""
-            kickoff_lines: list[str] = []
-            if date and time:
-                try:
-                    kickoff_at = _parse_datetime(date, time, self.settings.default_timezone)
-                    kickoff_line = f"\nKickoff: <t:{int(kickoff_at.timestamp())}:F>"
-                    kickoff_iso = kickoff_at.isoformat()
-                    kickoff_lines = format_dual_kickoff_lines(kickoff_at)
-                except ValueError:
-                    await interaction.followup.send("Invalid date/time for kickoff.", ephemeral=True)
-                    return
+            formation_value = str(formation or "").strip().lower()
+            title_value = str(title or "").strip()
+            date_value = str(date or "").strip()
+            time_value = str(time or "").strip()
 
-            players: dict[str, str] = {}
-            if players_json:
-                try:
-                    import json
-
-                    data = json.loads(players_json)
-                    if isinstance(data, dict):
-                        for key, value in data.items():
-                            slot = str(key).strip().lower()
-                            player = str(value).strip()
-                            if slot and player:
-                                players[slot] = player[:28]
-                except Exception:
-                    await interaction.followup.send("Invalid players_json. Use a JSON object like {\"gk\":\"Alex\"}.", ephemeral=True)
-                    return
-
-            try:
-                image = render_lineup_png(
-                    formation=formation.strip(),
-                    players=players,
-                    title=title.strip(),
-                    kickoff_text=f"Kickoff: {kickoff_iso}" if kickoff_iso else "",
-                    kickoff_rows=[
-                        {"flag": "ro", "text": kickoff_lines[0].replace("🇷🇴 ", "")},
-                        {"flag": "uk", "text": kickoff_lines[1].replace("🇬🇧 ", "")},
-                    ] if kickoff_lines else None,
+            if not formation_value or not title_value:
+                modal = LineupSetupModal(
+                    formation=formation_value,
+                    title_value=title_value,
+                    date=date_value,
+                    time=time_value,
                 )
-            except ValueError as error:
-                await interaction.followup.send(str(error), ephemeral=True)
+                await interaction.response.send_modal(modal)
+                timed_out = await modal.wait()
+                if timed_out or not modal.submitted:
+                    return
+                formation_value = str(modal.formation.value or "").strip().lower()
+                title_value = str(modal.lineup_title.value or "").strip()
+                date_value = str(modal.kickoff_date.value or "").strip()
+                time_value = str(modal.kickoff_time.value or "").strip()
+            else:
+                await interaction.response.defer(ephemeral=True)
+
+            if formation_value not in FORMATIONS:
+                help_values = ", ".join(sorted(FORMATIONS.keys())[:20])
+                await interaction.followup.send(
+                    f"Unknown formation `{formation_value}`. Example valid keys: {help_values}",
+                    ephemeral=True,
+                )
                 return
 
-            dual_block = f"\n{kickoff_lines[0]}\n{kickoff_lines[1]}" if kickoff_lines else ""
-            content = f"**{title.strip()}**\nFormation: `{formation.strip()}`{kickoff_line}{dual_block}"
-            message = await channel_target.send(
-                content=content,
-                file=discord.File(BytesIO(image), filename=f"lineup-{formation.strip()}.png"),
+            kickoff_at: datetime | None = None
+            if date_value and time_value:
+                try:
+                    kickoff_at = _parse_datetime(date_value, time_value, self.settings.default_timezone)
+                except ValueError:
+                    await interaction.followup.send("Invalid date/time for kickoff. Use YYYY-MM-DD and HH:mm.", ephemeral=True)
+                    return
+            elif date_value or time_value:
+                await interaction.followup.send("Please provide both date and time, or leave both empty.", ephemeral=True)
+                return
+
+            wizard = LineupWizardView(
+                bot=self,
+                owner_id=interaction.user.id,
+                channel_id=channel_target.id,
+                formation_key=formation_value,
+                title=title_value,
+                kickoff_at=kickoff_at,
             )
-            await interaction.followup.send(
-                f"Lineup posted in <#{channel_target.id}>. Message ID `{message.id}`.",
+            message = await interaction.followup.send(
+                wizard._progress_text(),
+                view=wizard,
                 ephemeral=True,
+                wait=True,
             )
+            wizard.message = message
+
+        @self.tree.command(name="attendance_wizard", description="Open step-by-step attendance wizard for create/vote/reschedule/close/remove")
+        @app_commands.default_permissions(administrator=True)
+        async def attendance_wizard(interaction: discord.Interaction):
+            await interaction.response.defer(ephemeral=True)
+            wizard = AttendanceWizardView(bot=self, owner_id=interaction.user.id)
+            message = await interaction.followup.send(
+                wizard._text(),
+                view=wizard,
+                ephemeral=True,
+                wait=True,
+            )
+            wizard.message = message
 
         if self.settings.discord_guild_id:
             guild = discord.Object(id=int(self.settings.discord_guild_id))
