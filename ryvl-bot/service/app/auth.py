@@ -28,6 +28,10 @@ class SessionUser:
     created_at: float
 
 
+def _cookie_samesite() -> str:
+    return "none" if settings.app_env == "production" else "lax"
+
+
 _sessions: dict[str, tuple[SessionUser, float]] = {}
 _oauth_states: dict[str, tuple[str, float]] = {}
 
@@ -341,7 +345,7 @@ async def discord_oauth_callback(request: Request, code: str = "", state: str = 
         value=session_token,
         httponly=True,
         secure=settings.app_env == "production",
-        samesite="lax",
+        samesite=_cookie_samesite(),
         max_age=SESSION_TTL_SECONDS,
         path="/",
     )
