@@ -611,8 +611,12 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
   private startRealtimeStream(): void {
     if (typeof window === 'undefined' || this.attendanceUpdatesSource) return;
     const baseUrl = this.api.getBaseUrl();
-    const url = `${baseUrl}/api/admin/attendance/stream`;
-    this.attendanceUpdatesSource = new EventSource(url, { withCredentials: true });
+    const sessionToken = this.api.getSessionToken();
+    const url = new URL(`${baseUrl}/api/admin/attendance/stream`);
+    if (sessionToken) {
+      url.searchParams.set('session_token', sessionToken);
+    }
+    this.attendanceUpdatesSource = new EventSource(url.toString(), { withCredentials: true });
     this.attendanceUpdatesSource.addEventListener('attendance-update', () => {
       void this.load(false);
     });

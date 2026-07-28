@@ -209,6 +209,10 @@ def _get_session_token(request: Request) -> str:
     if cookie_token:
         return cookie_token
 
+    query_token = str(request.query_params.get("session_token") or "").strip()
+    if query_token:
+        return query_token
+
     auth_header = str(request.headers.get("authorization") or "")
     if auth_header.lower().startswith("bearer "):
         return auth_header[7:].strip()

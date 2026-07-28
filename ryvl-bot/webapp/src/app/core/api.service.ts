@@ -275,10 +275,14 @@ export class ApiService {
   }
 
   async renderLineupPreview(payload: LineupPayload): Promise<Blob> {
+    const sessionToken = this.getSessionToken();
     const response = await fetch(`${this.baseUrl}/api/admin/lineup/render`, {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+      },
       body: JSON.stringify(payload),
     });
     if (!response.ok) {
