@@ -12,9 +12,7 @@ services:
       - key: APP_NAME
         value: RYVL Bot API
       - key: DATABASE_URL
-        fromDatabase:
-          name: ryvl-bot-db
-          property: connectionString
+        sync: false
       - key: ADMIN_APP_URL
         sync: false
       - key: PUBLIC_API_BASE_URL
@@ -54,6 +52,3 @@ services:
         source: /*
         destination: /index.html
 
-databases:
-  - name: ryvl-bot-db
-    plan: free
