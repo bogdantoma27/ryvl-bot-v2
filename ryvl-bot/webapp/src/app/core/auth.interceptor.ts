@@ -1,23 +1,33 @@
 import { HttpErrorResponse, HttpInterceptorFn } from '@angular/common/http';
+import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
+
+import { ApiService } from './api.service';
 
 let forcedLogoutInProgress = false;
 
-export const authInterceptor: HttpInterceptorFn = (request, next) =>
-  next(request).pipe(
+export const authInterceptor: HttpInterceptorFn = (request, next) => {
+  const api = inject(ApiService);
+  const sessionToken = api.getSessionToken();
+  const authRequest = sessionToken && !request.headers.has('Authorization')
+    ? request.clone({ setHeaders: { Authorization: `Bearer ${sessionToken}` } })
+    : request;
+
+  return next(authRequest).pipe(
     catchError(error => {
       if (
         error instanceof HttpErrorResponse &&
         error.status === 401 &&
         typeof window !== 'undefined' &&
-        !request.url.includes('/api/auth/me') &&
-        !request.url.includes('/api/auth/logout') &&
-        !request.url.includes('/api/auth/discord')
+        !authRequest.url.includes('/api/auth/me') &&
+        !authRequest.url.includes('/api/auth/logout') &&
+        !authRequest.url.includes('/api/auth/discord')
       ) {
         if (forcedLogoutInProgress) {
           return throwError(() => error);
         }
         forcedLogoutInProgress = true;
+        api.setSessionToken(null);
         const runtimeValue = String((window as Window & { __RYVL_API_BASE_URL__?: string }).__RYVL_API_BASE_URL__ || '').trim();
         let logoutUrl = '/api/auth/logout';
         if (runtimeValue) {
@@ -38,3 +48,4 @@ export const authInterceptor: HttpInterceptorFn = (request, next) =>
       return throwError(() => error);
     }),
   );
+};

@@ -143,6 +143,7 @@ export interface LineupPayload {
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
+  private readonly sessionStorageKey = 'ryvl_session_token';
   private readonly baseUrl = (() => {
     const runtimeValue = String((globalThis as { __RYVL_API_BASE_URL__?: string }).__RYVL_API_BASE_URL__ || '').trim();
     if (runtimeValue) return runtimeValue;
@@ -157,6 +158,20 @@ export class ApiService {
   })();
 
   private readonly options = { withCredentials: true as const };
+
+  getSessionToken(): string {
+    if (typeof window === 'undefined') return '';
+    return window.sessionStorage.getItem(this.sessionStorageKey) || '';
+  }
+
+  setSessionToken(value: string | null): void {
+    if (typeof window === 'undefined') return;
+    if (value) {
+      window.sessionStorage.setItem(this.sessionStorageKey, value);
+      return;
+    }
+    window.sessionStorage.removeItem(this.sessionStorageKey);
+  }
 
   getBaseUrl(): string {
     return this.baseUrl;
@@ -173,7 +188,8 @@ export class ApiService {
   }
 
   logout(): Promise<void> {
-    return firstValueFrom(this.http.post<void>(`${this.baseUrl}/api/auth/logout`, {}, this.options));
+    return firstValueFrom(this.http.post<void>(`${this.baseUrl}/api/auth/logout`, {}, this.options))
+      .finally(() => this.setSessionToken(null));
   }
 
   getBootstrap(): Promise<BootstrapResponse> {

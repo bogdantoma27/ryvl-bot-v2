@@ -1,7 +1,9 @@
+import base64
+import hashlib
+import hmac
 import json
 import secrets
 import time
-import base64
 import urllib.parse
 from dataclasses import dataclass
 
@@ -32,7 +34,6 @@ def _cookie_samesite() -> str:
     return "none" if settings.app_env == "production" else "lax"
 
 
-_sessions: dict[str, tuple[SessionUser, float]] = {}
 _oauth_states: dict[str, tuple[str, float]] = {}
 
 
@@ -42,13 +43,72 @@ def _now() -> float:
 
 def _cleanup() -> None:
     now = _now()
-    expired_sessions = [key for key, (_, expires) in _sessions.items() if expires <= now]
-    for key in expired_sessions:
-        _sessions.pop(key, None)
-
     expired_states = [key for key, (_, expires) in _oauth_states.items() if expires <= now]
     for key in expired_states:
         _oauth_states.pop(key, None)
+
+
+def _urlsafe_b64encode(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("utf-8").rstrip("=")
+
+
+def _urlsafe_b64decode(value: str) -> bytes:
+    padding = "=" * (-len(value) % 4)
+    return base64.urlsafe_b64decode(value + padding)
+
+
+def _session_sign(payload_segment: str) -> str:
+    secret = settings.session_secret.encode("utf-8")
+    signature = hmac.new(secret, payload_segment.encode("utf-8"), hashlib.sha256).digest()
+    return _urlsafe_b64encode(signature)
+
+
+def _session_payload(user_payload: dict) -> dict[str, str | float | None]:
+    created_at = _now()
+    return {
+        "user_id": str(user_payload.get("id") or ""),
+        "username": str(user_payload.get("username") or ""),
+        "discriminator": str(user_payload.get("discriminator") or ""),
+        "avatar": user_payload.get("avatar"),
+        "created_at": created_at,
+        "expires_at": created_at + SESSION_TTL_SECONDS,
+    }
+
+
+def _encode_session_token(user_payload: dict) -> str:
+    payload = _session_payload(user_payload)
+    payload_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    payload_segment = _urlsafe_b64encode(payload_bytes)
+    signature_segment = _session_sign(payload_segment)
+    return f"{payload_segment}.{signature_segment}"
+
+
+def _decode_session_token(token: str) -> SessionUser | None:
+    try:
+        payload_segment, signature_segment = token.split(".", 1)
+    except ValueError:
+        return None
+
+    expected_signature = _session_sign(payload_segment)
+    if not hmac.compare_digest(signature_segment, expected_signature):
+        return None
+
+    try:
+        payload = json.loads(_urlsafe_b64decode(payload_segment).decode("utf-8"))
+    except Exception:
+        return None
+
+    expires_at = float(payload.get("expires_at") or 0)
+    if expires_at <= _now():
+        return None
+
+    return SessionUser(
+        user_id=str(payload.get("user_id") or ""),
+        username=str(payload.get("username") or ""),
+        discriminator=str(payload.get("discriminator") or ""),
+        avatar=payload.get("avatar"),
+        created_at=float(payload.get("created_at") or 0),
+    )
 
 
 def _http_json(url: str, *, method: str = "GET", headers: dict[str, str] | None = None, body: bytes | None = None) -> dict:
@@ -199,29 +259,11 @@ async def _user_is_admin_in_guild(request: Request, user_id: str) -> bool:
 
 
 def _new_session(user_payload: dict) -> str:
-    _cleanup()
-    token = secrets.token_urlsafe(32)
-    user = SessionUser(
-        user_id=str(user_payload.get("id")),
-        username=str(user_payload.get("username") or ""),
-        discriminator=str(user_payload.get("discriminator") or ""),
-        avatar=user_payload.get("avatar"),
-        created_at=_now(),
-    )
-    _sessions[token] = (user, _now() + SESSION_TTL_SECONDS)
-    return token
+    return _encode_session_token(user_payload)
 
 
 def _session_user(token: str) -> SessionUser | None:
-    _cleanup()
-    row = _sessions.get(token)
-    if row is None:
-        return None
-    user, expires = row
-    if expires <= _now():
-        _sessions.pop(token, None)
-        return None
-    return user
+    return _decode_session_token(token)
 
 
 async def require_admin_session(request: Request) -> SessionUser:
@@ -254,6 +296,22 @@ def _redirect_with_auth_error(target: str | None, *, error: str, description: st
         )
     )
     return RedirectResponse(url=rebuilt, status_code=302)
+
+
+def _append_query_param(target: str, key: str, value: str) -> str:
+    url = urllib.parse.urlparse(target)
+    query = urllib.parse.parse_qs(url.query, keep_blank_values=True)
+    query[key] = [value]
+    return urllib.parse.urlunparse(
+        (
+            url.scheme,
+            url.netloc,
+            url.path,
+            url.params,
+            urllib.parse.urlencode(query, doseq=True),
+            url.fragment,
+        )
+    )
 
 
 @router.get("/discord/start")
@@ -339,7 +397,8 @@ async def discord_oauth_callback(request: Request, code: str = "", state: str = 
         )
 
     session_token = _new_session(user_payload)
-    response = RedirectResponse(url=return_to, status_code=302)
+    redirect_target = _append_query_param(return_to, "session_token", session_token)
+    response = RedirectResponse(url=redirect_target, status_code=302)
     response.set_cookie(
         key=SESSION_COOKIE,
         value=session_token,
@@ -349,6 +408,7 @@ async def discord_oauth_callback(request: Request, code: str = "", state: str = 
         max_age=SESSION_TTL_SECONDS,
         path="/",
     )
+    response.headers["X-RYVL-Session"] = session_token
     return response
 
 
@@ -367,10 +427,6 @@ async def auth_me(user: SessionUser = Depends(require_admin_session)) -> dict:
 
 @router.post("/logout")
 async def auth_logout(request: Request) -> Response:
-    token = _get_session_token(request)
-    if token:
-        _sessions.pop(token, None)
-
     response = Response(status_code=204)
     response.delete_cookie(SESSION_COOKIE, path="/")
     return response

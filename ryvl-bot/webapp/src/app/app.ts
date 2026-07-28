@@ -148,7 +148,19 @@ export class App implements OnInit {
     url.searchParams.delete('return_to');
     url.searchParams.delete('code');
     url.searchParams.delete('state');
+    url.searchParams.delete('session_token');
     return url.toString();
+  }
+
+  private consumeSessionTokenFromUrl(): void {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    const sessionToken = String(url.searchParams.get('session_token') || '').trim();
+    if (!sessionToken) return;
+
+    this.api.setSessionToken(sessionToken);
+    url.searchParams.delete('session_token');
+    window.history.replaceState({}, '', url.toString());
   }
 
   private consumeAuthErrorFromUrl(): void {
@@ -168,10 +180,12 @@ export class App implements OnInit {
     url.searchParams.delete('return_to');
     url.searchParams.delete('code');
     url.searchParams.delete('state');
+    url.searchParams.delete('session_token');
     window.history.replaceState({}, '', url.toString());
   }
 
   async ngOnInit(): Promise<void> {
+    this.consumeSessionTokenFromUrl();
     this.consumeAuthErrorFromUrl();
     const returnTo = this.buildReturnTo();
     this.loginUrl.set(this.api.getDiscordLoginUrl(returnTo));
