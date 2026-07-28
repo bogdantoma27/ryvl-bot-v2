@@ -77,6 +77,12 @@ function todayDateInput(): string {
               <span class="text-xs text-slate-400">Kickoff time</span>
               <input #kickoffTimeInput class="picker-input w-full cursor-pointer rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" type="time" [(ngModel)]="form.kickoff_time" (click)="openNativePicker(kickoffTimeInput)" (focus)="openNativePicker(kickoffTimeInput)" (ngModelChange)="touchPreview()" name="kickoff_time" required />
             </label>
+
+            <label class="space-y-1 sm:col-span-2">
+              <span class="text-xs text-slate-400">Appearance time (not kickoff)</span>
+              <input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" type="time" [(ngModel)]="form.publish_time" (ngModelChange)="touchPreview()" name="publish_time" />
+              <p class="text-[11px] text-slate-500">For recurrent events, each occurrence is published at this hour.</p>
+            </label>
           </div>
 
           <div class="grid gap-3 sm:grid-cols-2">
@@ -337,6 +343,10 @@ function todayDateInput(): string {
               <span class="text-xs text-slate-400">New kickoff time</span>
               <input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:opacity-50" type="time" [(ngModel)]="manage.reschedule_time" (ngModelChange)="onManageFormChanged()" name="reschedule_time" [disabled]="selectedEvent()!.status === 'cancelled'" />
             </label>
+            <label class="space-y-1">
+              <span class="text-xs text-slate-400">New appearance time</span>
+              <input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:opacity-50" type="time" [(ngModel)]="manage.publish_time" (ngModelChange)="onManageFormChanged()" name="manage_publish_time" [disabled]="selectedEvent()!.status === 'cancelled'" />
+            </label>
             <label class="space-y-1 md:col-span-2">
               <span class="text-xs text-slate-400">Reschedule scope</span>
               <select class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 disabled:opacity-50" [(ngModel)]="manage.reschedule_scope" (ngModelChange)="onManageFormChanged()" name="reschedule_scope" [disabled]="selectedEvent()!.status === 'cancelled'">
@@ -584,6 +594,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     mention_role_ids: [] as string[],
     kickoff_date: todayDateInput(),
     kickoff_time: '21:45',
+    publish_time: '18:00',
     recurrence: 'none' as 'none' | 'weekly',
     repeat_count: 6,
   };
@@ -594,6 +605,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     timezone: this.defaultTimezone(),
     reschedule_date: '',
     reschedule_time: '21:45',
+    publish_time: '18:00',
     reschedule_scope: 'this_occurrence_only' as 'this_occurrence_only' | 'this_and_following',
   };
 
@@ -755,6 +767,8 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     const kickoff = this.toDateTimeInputsInTimezone(event.starts_at, this.manage.timezone || this.defaultTimezone());
     this.manage.reschedule_date = kickoff.date;
     this.manage.reschedule_time = kickoff.time;
+    const publish = this.toDateTimeInputsInTimezone(event.publish_at || event.starts_at, this.manage.timezone || this.defaultTimezone());
+    this.manage.publish_time = publish.time;
 
     const nextDraft: Record<VoteBucket, string[]> = { accepted: [], declined: [], tentative: [] };
     for (const vote of event.votes) {
@@ -1039,6 +1053,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     this.form.mention_role_ids = [];
     this.form.kickoff_date = todayDateInput();
     this.form.kickoff_time = '21:45';
+    this.form.publish_time = '18:00';
     this.form.recurrence = 'none';
     this.form.repeat_count = 6;
     this.touchPreview();
@@ -1074,19 +1089,25 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     this.loading.set(true);
     try {
       const startsAt = this.wallTimeToUtcIso(this.form.kickoff_date, this.form.kickoff_time, this.form.timezone || this.defaultTimezone());
-      await this.api.createAttendance({
+      const created = await this.api.createAttendance({
         channel_id: this.form.channel_id,
         title: this.form.title.trim(),
         description: this.form.description.trim(),
         timezone: this.form.timezone,
         mention_role_ids: this.form.mention_role_ids,
         starts_at: startsAt,
+        publish_time: this.form.publish_time || null,
         recurrence: this.form.recurrence,
         repeat_count: this.form.recurrence === 'weekly' ? this.form.repeat_count : null,
       });
       await this.load();
       this.resetCreateForm();
-      this.snackbar.success('Attendance event created and posted to Discord.');
+      const firstEvent = created.events.find(event => event.occurrence_number === 1);
+      if (firstEvent?.message_id) {
+        this.snackbar.success('Attendance event created and posted to Discord.');
+      } else {
+        this.snackbar.success('Attendance event created. First occurrence is scheduled for configured appearance time.');
+      }
     } catch {
       this.snackbar.error('Failed to create attendance event. Check selected date/time and channel.');
     } finally {
@@ -1216,6 +1237,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
         description: this.manage.description.trim(),
         timezone: this.manage.timezone,
         starts_at: startsAt,
+        publish_time: this.manage.publish_time || null,
         scope: this.manage.reschedule_scope,
         expected_updated_at: selected.updated_at,
       });
@@ -1357,6 +1379,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
         description: this.manage.description.trim(),
         timezone: this.manage.timezone,
         starts_at: startsAt,
+        publish_time: this.manage.publish_time || null,
         scope: this.manage.reschedule_scope,
         expected_updated_at: selected.updated_at,
         vote_updates: this.voteUpdatesPayload(pendingVoteDraft),
@@ -1382,6 +1405,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     this.manage.timezone = this.defaultTimezone();
     this.manage.reschedule_date = '';
     this.manage.reschedule_time = '21:45';
+    this.manage.publish_time = '18:00';
     this.manage.reschedule_scope = 'this_occurrence_only';
     this.voteDraft.set({ accepted: [], declined: [], tentative: [] });
   }

@@ -10,7 +10,7 @@ import discord
 from discord import app_commands, TextChannel
 from discord.ext import commands
 
-from app.attendance_service import cancel_event_by_message_id, close_event, create_series, remove_vote, reschedule_event, set_event_message_id, set_vote
+from app.attendance_service import cancel_event_by_message_id, close_event, create_series, mark_event_open_with_message, remove_vote, reschedule_event, set_vote
 from app.config import Settings
 from app.db import SessionLocal
 from app.lineup_formations import FORMATIONS
@@ -500,6 +500,12 @@ class RyvlBot(commands.Bot):
                 required=False,
                 max_length=32,
             )
+            publish_time_input = discord.ui.TextInput(
+                label="Publish time (HH:mm, optional)",
+                placeholder="Example: 18:00",
+                required=False,
+                max_length=5,
+            )
 
             def __init__(self):
                 super().__init__(timeout=300)
@@ -531,6 +537,12 @@ class RyvlBot(commands.Bot):
             event_id_input = discord.ui.TextInput(label="Event ID", required=True, max_length=32)
             date_input = discord.ui.TextInput(label="New date (YYYY-MM-DD)", required=True, max_length=10)
             time_input = discord.ui.TextInput(label="New time (HH:mm)", required=True, max_length=5)
+            publish_time_input = discord.ui.TextInput(
+                label="Publish time (HH:mm, optional)",
+                placeholder="Example: 18:00",
+                required=False,
+                max_length=5,
+            )
             scope_input = discord.ui.TextInput(
                 label="Scope (this_occurrence_only|this_and_following)",
                 required=False,
@@ -632,6 +644,7 @@ class RyvlBot(commands.Bot):
                 time_raw = str(modal.time_input.value or "").strip()
                 description = str(modal.description_input.value or "Respond with accept, tentative or decline.").strip() or "Respond with accept, tentative or decline."
                 recurrence_raw = str(modal.recurrence_input.value or "none").strip().lower()
+                publish_time_raw = str(modal.publish_time_input.value or "").strip()
                 recurrence = "none"
                 repeat_count: int | None = None
                 parts = recurrence_raw.split()
@@ -650,6 +663,10 @@ class RyvlBot(commands.Bot):
                     await interaction.followup.send("repeat_count must be between 2 and 52 for weekly events.", ephemeral=True)
                     return
 
+                if publish_time_raw and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", publish_time_raw):
+                    await interaction.followup.send("Publish time must use HH:mm.", ephemeral=True)
+                    return
+
                 with SessionLocal() as db:
                     payload = AttendanceCreateRequest(
                         channel_id=str(channel_target.id),
@@ -657,6 +674,7 @@ class RyvlBot(commands.Bot):
                         description=description,
                         timezone=self.bot.settings.default_timezone,
                         starts_at=starts_at,
+                        publish_time=publish_time_raw or None,
                         recurrence=recurrence,
                         repeat_count=repeat_count if recurrence == "weekly" else None,
                     )
@@ -670,17 +688,22 @@ class RyvlBot(commands.Bot):
                     if first_event is None:
                         await interaction.followup.send("Could not create first attendance occurrence.", ephemeral=True)
                         return
-                    message = await self.bot.post_attendance_message(
-                        channel_id=int(channel_target.id),
-                        series=series,
-                        event=first_event,
-                    )
-                    set_event_message_id(db, int(first_event["id"]), str(message.id))
-
-                await interaction.followup.send(
-                    f"Attendance created. Event ID `{first_event['id']}` posted in <#{channel_target.id}>.",
-                    ephemeral=True,
-                )
+                    if first_event.get("publish_at") and first_event["publish_at"] <= datetime.now(timezone.utc):
+                        message = await self.bot.post_attendance_message(
+                            channel_id=int(channel_target.id),
+                            series=series,
+                            event=first_event,
+                        )
+                        mark_event_open_with_message(db, int(first_event["id"]), str(message.id))
+                        await interaction.followup.send(
+                            f"Attendance created. Event ID `{first_event['id']}` posted in <#{channel_target.id}>.",
+                            ephemeral=True,
+                        )
+                    else:
+                        await interaction.followup.send(
+                            f"Attendance created. Event ID `{first_event['id']}` is scheduled and will publish at configured appearance time.",
+                            ephemeral=True,
+                        )
 
             @discord.ui.button(label="Vote", style=discord.ButtonStyle.primary)
             async def vote_action(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
@@ -741,10 +764,14 @@ class RyvlBot(commands.Bot):
                 date_raw = str(modal.date_input.value or "").strip()
                 time_raw = str(modal.time_input.value or "").strip()
                 scope_raw = str(modal.scope_input.value or "this_occurrence_only").strip() or "this_occurrence_only"
+                publish_time_raw = str(modal.publish_time_input.value or "").strip()
                 if scope_raw not in {"this_occurrence_only", "this_and_following"}:
                     scope_raw = "this_occurrence_only"
                 if not event_raw.isdigit():
                     await interaction.followup.send("Event ID must be numeric.", ephemeral=True)
+                    return
+                if publish_time_raw and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", publish_time_raw):
+                    await interaction.followup.send("Publish time must use HH:mm.", ephemeral=True)
                     return
                 try:
                     starts_at = _parse_datetime(date_raw, time_raw, self.bot.settings.default_timezone)
@@ -757,7 +784,11 @@ class RyvlBot(commands.Bot):
                         event = reschedule_event(
                             db,
                             int(event_raw),
-                            AttendanceRescheduleRequest(starts_at=starts_at, scope=scope_raw),
+                            AttendanceRescheduleRequest(
+                                starts_at=starts_at,
+                                publish_time=publish_time_raw or None,
+                                scope=scope_raw,
+                            ),
                         )
                     except LookupError:
                         await interaction.followup.send("Event not found.", ephemeral=True)
@@ -883,6 +914,7 @@ class RyvlBot(commands.Bot):
             title="Public title shown in Discord for this attendance event",
             date="Kickoff date in YYYY-MM-DD format",
             time="Kickoff time in HH:mm format (24h)",
+            publish_time="Optional HH:mm when event should appear (not kickoff)",
             channel="Target Discord text channel (optional if default attendance channel is configured)",
             description="Optional details shown under the attendance title",
             recurrence="Choose one time or weekly recurrence",
@@ -899,6 +931,7 @@ class RyvlBot(commands.Bot):
             title: str,
             date: str,
             time: str,
+            publish_time: Optional[str] = None,
             channel: Optional[TextChannel] = None,
             description: str = "Respond with accept, tentative or decline.",
             recurrence: str = "none",
@@ -923,6 +956,10 @@ class RyvlBot(commands.Bot):
             if recurrence == "weekly" and repeat_count is not None and (repeat_count < 2 or repeat_count > 52):
                 await interaction.followup.send("repeat_count must be between 2 and 52 for weekly events.", ephemeral=True)
                 return
+            publish_time_value = str(publish_time or "").strip() or None
+            if publish_time_value and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", publish_time_value):
+                await interaction.followup.send("Publish time must use HH:mm.", ephemeral=True)
+                return
 
             with SessionLocal() as db:
                 payload = AttendanceCreateRequest(
@@ -931,6 +968,7 @@ class RyvlBot(commands.Bot):
                     description=description,
                     timezone=self.settings.default_timezone,
                     starts_at=starts_at,
+                    publish_time=publish_time_value,
                     recurrence=recurrence,
                     repeat_count=repeat_count if recurrence == "weekly" else None,
                 )
@@ -944,18 +982,22 @@ class RyvlBot(commands.Bot):
                 if first_event is None:
                     await interaction.followup.send("Could not create first attendance occurrence.", ephemeral=True)
                     return
-
-                message = await self.post_attendance_message(
-                    channel_id=int(channel_target.id),
-                    series=series,
-                    event=first_event,
-                )
-                set_event_message_id(db, int(first_event["id"]), str(message.id))
-
-            await interaction.followup.send(
-                f"Attendance created. Event ID `{first_event['id']}` posted in <#{channel_target.id}>.",
-                ephemeral=True,
-            )
+                if first_event.get("publish_at") and first_event["publish_at"] <= datetime.now(timezone.utc):
+                    message = await self.post_attendance_message(
+                        channel_id=int(channel_target.id),
+                        series=series,
+                        event=first_event,
+                    )
+                    mark_event_open_with_message(db, int(first_event["id"]), str(message.id))
+                    await interaction.followup.send(
+                        f"Attendance created. Event ID `{first_event['id']}` posted in <#{channel_target.id}>.",
+                        ephemeral=True,
+                    )
+                else:
+                    await interaction.followup.send(
+                        f"Attendance created. Event ID `{first_event['id']}` is scheduled and will publish at configured appearance time.",
+                        ephemeral=True,
+                    )
 
         @self.tree.command(name="attendance_vote", description="Set your attendance vote for an event")
         @app_commands.describe(
@@ -1012,6 +1054,7 @@ class RyvlBot(commands.Bot):
             event_id="Attendance event ID to reschedule",
             date="New kickoff date in YYYY-MM-DD format",
             time="New kickoff time in HH:mm format (24h)",
+            publish_time="Optional HH:mm when event should appear (not kickoff)",
             scope="Apply only to this occurrence or to this and following ones",
         )
         @app_commands.choices(
@@ -1025,6 +1068,7 @@ class RyvlBot(commands.Bot):
             event_id: int,
             date: str,
             time: str,
+            publish_time: Optional[str] = None,
             scope: str = "this_occurrence_only",
         ):
             await interaction.response.defer(ephemeral=True)
@@ -1033,13 +1077,21 @@ class RyvlBot(commands.Bot):
             except ValueError:
                 await interaction.followup.send("Invalid date/time. Use date YYYY-MM-DD and time HH:mm.", ephemeral=True)
                 return
+            publish_time_value = str(publish_time or "").strip() or None
+            if publish_time_value and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", publish_time_value):
+                await interaction.followup.send("Publish time must use HH:mm.", ephemeral=True)
+                return
 
             with SessionLocal() as db:
                 try:
                     event = reschedule_event(
                         db,
                         event_id,
-                        AttendanceRescheduleRequest(starts_at=starts_at, scope=scope),
+                        AttendanceRescheduleRequest(
+                            starts_at=starts_at,
+                            publish_time=publish_time_value,
+                            scope=scope,
+                        ),
                     )
                 except LookupError:
                     await interaction.followup.send("Event not found.", ephemeral=True)

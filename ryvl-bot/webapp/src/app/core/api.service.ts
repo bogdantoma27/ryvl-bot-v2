@@ -15,6 +15,7 @@ export interface AttendanceEvent {
   id: number;
   series_id: number;
   occurrence_number: number;
+  publish_at: string;
   starts_at: string;
   closes_at: string;
   status: 'scheduled' | 'open' | 'closed' | 'cancelled';
@@ -228,6 +229,7 @@ export class ApiService {
     timezone: string;
     mention_role_ids?: string[];
     starts_at: string;
+    publish_time?: string | null;
     recurrence: 'none' | 'weekly';
     repeat_count: number | null;
   }): Promise<AttendanceSeries> {
@@ -242,7 +244,7 @@ export class ApiService {
     return firstValueFrom(this.http.delete<AttendanceEvent>(`${this.baseUrl}/api/admin/attendance/events/${eventId}/votes/${encodeURIComponent(userDiscordId)}`, this.options));
   }
 
-  rescheduleAttendanceEvent(eventId: number, payload: { starts_at: string; scope: 'this_occurrence_only' | 'this_and_following' }): Promise<AttendanceEvent> {
+  rescheduleAttendanceEvent(eventId: number, payload: { starts_at: string; publish_time?: string | null; scope: 'this_occurrence_only' | 'this_and_following' }): Promise<AttendanceEvent> {
     return firstValueFrom(this.http.post<AttendanceEvent>(`${this.baseUrl}/api/admin/attendance/events/${eventId}/reschedule`, payload, this.options));
   }
 
@@ -251,6 +253,7 @@ export class ApiService {
     description: string;
     timezone: string;
     starts_at: string;
+    publish_time?: string | null;
     scope: 'this_occurrence_only' | 'this_and_following';
     expected_updated_at?: string | null;
     vote_updates?: Array<{ user_discord_id: string; display_name: string; status: VoteStatus }>;

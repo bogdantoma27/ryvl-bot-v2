@@ -1,5 +1,6 @@
 import asyncio
 import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -13,9 +14,9 @@ from app.attendance_service import (
     edit_event,
     get_event,
     list_series,
+    mark_event_open_with_message,
     remove_vote,
     reschedule_event,
-    set_event_message_id,
     set_vote,
 )
 from app.audit import record_audit_log
@@ -77,7 +78,13 @@ async def create_attendance_series(
         runtime = get_runtime_settings(db, settings)
         first_event = next((event for event in series.get("events", []) if event.get("occurrence_number") == 1), None)
         bot = getattr(request.app.state, "discord_bot", None)
-        if first_event and bot is not None and bot.is_ready():
+        if (
+            first_event
+            and bot is not None
+            and bot.is_ready()
+            and first_event.get("publish_at") is not None
+            and first_event["publish_at"] <= datetime.now(timezone.utc)
+        ):
             if hasattr(bot, "post_attendance_message"):
                 mention_role_ids = list(payload.mention_role_ids or [])
                 if (
@@ -93,10 +100,11 @@ async def create_attendance_series(
                     event=first_event,
                     mention_role_ids=mention_role_ids,
                 )
-                set_event_message_id(db, int(first_event["id"]), str(message.id))
+                opened = mark_event_open_with_message(db, int(first_event["id"]), str(message.id))
 
                 # Keep API response aligned with the stored value.
                 first_event["message_id"] = str(message.id)
+                first_event["status"] = opened["status"]
 
             record_audit_log(
                 db,
@@ -104,7 +112,7 @@ async def create_attendance_series(
                 entity_type="attendance_series",
                 entity_id=str(series["id"]),
                 actor_discord_id=user.user_id,
-                details={"channel_id": series["channel_id"], "title": series["title"]},
+                details={"channel_id": series["channel_id"], "title": series["title"], "publish_time": payload.publish_time},
             )
 
         return series
@@ -150,7 +158,7 @@ async def reschedule_attendance_event(event_id: int, payload: AttendanceReschedu
     try:
         event = reschedule_event(db, event_id, payload)
         await _sync_discord_message(request, db, event)
-        record_audit_log(db, action="attendance.reschedule", entity_type="attendance_event", entity_id=str(event_id), actor_discord_id=user.user_id, details={"scope": payload.scope, "starts_at": payload.starts_at.isoformat()})
+        record_audit_log(db, action="attendance.reschedule", entity_type="attendance_event", entity_id=str(event_id), actor_discord_id=user.user_id, details={"scope": payload.scope, "starts_at": payload.starts_at.isoformat(), "publish_time": payload.publish_time})
         return event
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
@@ -163,7 +171,7 @@ async def edit_attendance_event(event_id: int, payload: AttendanceEditRequest, r
     try:
         event = edit_event(db, event_id, payload)
         await _sync_discord_message(request, db, event)
-        record_audit_log(db, action="attendance.edit", entity_type="attendance_event", entity_id=str(event_id), actor_discord_id=user.user_id, details={"scope": payload.scope, "starts_at": payload.starts_at.isoformat()})
+        record_audit_log(db, action="attendance.edit", entity_type="attendance_event", entity_id=str(event_id), actor_discord_id=user.user_id, details={"scope": payload.scope, "starts_at": payload.starts_at.isoformat(), "publish_time": payload.publish_time})
         if payload.vote_updates:
             record_audit_log(db, action="attendance.update_votes", entity_type="attendance_event", entity_id=str(event_id), actor_discord_id=user.user_id, details={"votes": len(payload.vote_updates)})
         return event

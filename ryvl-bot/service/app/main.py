@@ -28,8 +28,9 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     app.state.started_at = datetime.now(timezone.utc)
     app.state.scheduler = scheduler
-    scheduler.start()
     bot = await start_bot(settings)
+    scheduler.bind_bot(bot)
+    scheduler.start()
     app.state.discord_bot = bot
     try:
         yield

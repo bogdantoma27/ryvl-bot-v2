@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -25,13 +26,53 @@ def _next_week(dt: datetime) -> datetime:
     return dt + timedelta(days=7)
 
 
+def _parse_hhmm(value: str) -> tuple[int, int]:
+    try:
+        hour_raw, minute_raw = value.split(":", 1)
+        hour = int(hour_raw)
+        minute = int(minute_raw)
+    except Exception as error:
+        raise ValueError("publish_time must use HH:mm format") from error
+    if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+        raise ValueError("publish_time must use HH:mm format")
+    return hour, minute
+
+
+def _publish_at_for_kickoff(kickoff_utc: datetime, timezone_name: str, publish_time: str | None) -> datetime:
+    if not publish_time:
+        return kickoff_utc
+
+    hour, minute = _parse_hhmm(publish_time.strip())
+    try:
+        zone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        zone = ZoneInfo("UTC")
+
+    local_kickoff = _as_utc(kickoff_utc).astimezone(zone)
+    local_publish = local_kickoff.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return local_publish.astimezone(timezone.utc)
+
+
+def _publish_time_from_dt(value_utc: datetime, timezone_name: str) -> str:
+    try:
+        zone = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        zone = ZoneInfo("UTC")
+    local_value = _as_utc(value_utc).astimezone(zone)
+    return f"{local_value.hour:02d}:{local_value.minute:02d}"
+
+
 def _event_to_dict(event: AttendanceEvent) -> dict:
+    kickoff_at_utc = _as_utc(event.closes_at)
+    publish_at_utc = _as_utc(event.starts_at)
     return {
         "id": event.id,
         "series_id": event.series_id,
         "occurrence_number": event.occurrence_number,
-        "starts_at": _as_utc(event.starts_at),
-        "closes_at": _as_utc(event.closes_at),
+        "publish_at": publish_at_utc,
+        # starts_at is kept as kickoff-at for backward compatibility in API consumers.
+        "starts_at": kickoff_at_utc,
+        "closes_at": kickoff_at_utc,
         "status": event.status,
         "message_id": event.message_id,
         "updated_at": _as_utc(event.updated_at),
@@ -107,8 +148,8 @@ def _touch_revision() -> None:
 
 
 def create_series(db: Session, payload: AttendanceCreateRequest, guild_id: str, created_by_discord_id: str = "system") -> dict:
-    starts_at_utc = _as_utc(payload.starts_at)
-    if starts_at_utc <= datetime.now(timezone.utc):
+    kickoff_at_utc = _as_utc(payload.starts_at)
+    if kickoff_at_utc <= datetime.now(timezone.utc):
         raise ValueError("starts_at must be in the future")
 
     repeat_count = payload.repeat_count
@@ -130,15 +171,18 @@ def create_series(db: Session, payload: AttendanceCreateRequest, guild_id: str, 
     db.add(series)
     db.flush()
 
-    start = starts_at_utc
+    kickoff_at = kickoff_at_utc
     for occurrence_number in range(1, int(repeat_count) + 1):
         if occurrence_number > 1:
-            start = _next_week(start)
+            kickoff_at = _next_week(kickoff_at)
+        publish_at = _publish_at_for_kickoff(kickoff_at, series.timezone, payload.publish_time)
+        if publish_at > kickoff_at:
+            raise ValueError("publish_time cannot be after kickoff time")
         event = AttendanceEvent(
             series_id=series.id,
             occurrence_number=occurrence_number,
-            starts_at=start,
-            closes_at=start,
+            starts_at=publish_at,
+            closes_at=kickoff_at,
             status=EventStatus.SCHEDULED,
         )
         db.add(event)
@@ -317,17 +361,21 @@ def edit_event(db: Session, event_id: int, payload: AttendanceEditRequest) -> di
     new_start = _as_utc(payload.starts_at)
     if new_start <= datetime.now(timezone.utc):
         raise ValueError("cannot move kickoff to the past; choose a future date and time")
+    publish_time = (payload.publish_time or "").strip() or None
 
     series.title = payload.title.strip()
     series.description = payload.description.strip()
     series.timezone = payload.timezone.strip() or "Europe/Bucharest"
 
     if payload.scope == "this_occurrence_only":
-        event.starts_at = new_start
         event.closes_at = new_start
+        effective_publish_time = publish_time or _publish_time_from_dt(event.starts_at, series.timezone)
+        event.starts_at = _publish_at_for_kickoff(new_start, series.timezone, effective_publish_time)
+        if event.starts_at > event.closes_at:
+            raise ValueError("publish_time cannot be after kickoff time")
         event.updated_at = datetime.now(timezone.utc)
     else:
-        current_delta = new_start - event.starts_at
+        current_delta = new_start - event.closes_at
         following = db.execute(
             select(AttendanceEvent)
             .where(
@@ -337,8 +385,11 @@ def edit_event(db: Session, event_id: int, payload: AttendanceEditRequest) -> di
             )
         ).scalars().all()
         for row in following:
-            row.starts_at = row.starts_at + current_delta
-            row.closes_at = row.starts_at
+            row.closes_at = row.closes_at + current_delta
+            effective_publish_time = publish_time or _publish_time_from_dt(row.starts_at, series.timezone)
+            row.starts_at = _publish_at_for_kickoff(row.closes_at, series.timezone, effective_publish_time)
+            if row.starts_at > row.closes_at:
+                raise ValueError("publish_time cannot be after kickoff time")
             row.updated_at = datetime.now(timezone.utc)
 
     if payload.vote_updates:
@@ -380,9 +431,17 @@ def reschedule_event(db: Session, event_id: int, payload: AttendanceRescheduleRe
     if new_start <= datetime.now(timezone.utc):
         raise ValueError("cannot move kickoff to the past; choose a future date and time")
 
+    series = db.get(AttendanceSeries, int(event.series_id))
+    if series is None:
+        raise LookupError("series not found")
+    publish_time = (payload.publish_time or "").strip() or None
+
     if payload.scope == "this_occurrence_only":
-        event.starts_at = new_start
         event.closes_at = new_start
+        effective_publish_time = publish_time or _publish_time_from_dt(event.starts_at, series.timezone)
+        event.starts_at = _publish_at_for_kickoff(new_start, series.timezone, effective_publish_time)
+        if event.starts_at > event.closes_at:
+            raise ValueError("publish_time cannot be after kickoff time")
         db.commit()
         db.refresh(event)
         event = db.execute(
@@ -392,7 +451,7 @@ def reschedule_event(db: Session, event_id: int, payload: AttendanceRescheduleRe
         ).scalar_one()
         return _event_to_dict(event)
 
-    current_delta = new_start - event.starts_at
+    current_delta = new_start - event.closes_at
     following = db.execute(
         select(AttendanceEvent)
         .where(
@@ -403,8 +462,11 @@ def reschedule_event(db: Session, event_id: int, payload: AttendanceRescheduleRe
     ).scalars().all()
 
     for row in following:
-        row.starts_at = row.starts_at + current_delta
-        row.closes_at = row.starts_at
+        row.closes_at = row.closes_at + current_delta
+        effective_publish_time = publish_time or _publish_time_from_dt(row.starts_at, series.timezone)
+        row.starts_at = _publish_at_for_kickoff(row.closes_at, series.timezone, effective_publish_time)
+        if row.starts_at > row.closes_at:
+            raise ValueError("publish_time cannot be after kickoff time")
 
     db.commit()
     db.refresh(event)
@@ -434,6 +496,59 @@ def close_due_events(db: Session) -> list[int]:
         db.commit()
 
     return ids
+
+
+def list_due_publication_events(db: Session, *, limit: int = 20) -> list[dict]:
+    now = datetime.now(timezone.utc)
+    due = db.execute(
+        select(AttendanceEvent)
+        .where(
+            AttendanceEvent.status == EventStatus.SCHEDULED,
+            AttendanceEvent.message_id.is_(None),
+            AttendanceEvent.starts_at <= now,
+            AttendanceEvent.closes_at > now,
+        )
+        .order_by(AttendanceEvent.starts_at.asc())
+        .limit(limit)
+        .options(selectinload(AttendanceEvent.series), selectinload(AttendanceEvent.votes))
+    ).scalars().all()
+
+    rows: list[dict] = []
+    for event in due:
+        series = event.series
+        if series is None:
+            continue
+        rows.append(
+            {
+                "series": {
+                    "id": series.id,
+                    "channel_id": series.channel_id,
+                    "title": series.title,
+                    "description": series.description,
+                    "created_by_discord_id": series.created_by_discord_id,
+                },
+                "event": _event_to_dict(event),
+            }
+        )
+    return rows
+
+
+def mark_event_open_with_message(db: Session, event_id: int, message_id: str) -> dict:
+    event = db.get(AttendanceEvent, event_id)
+    if event is None:
+        raise LookupError("event not found")
+    event.message_id = message_id
+    event.status = EventStatus.OPEN
+    event.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    _touch_revision()
+
+    refreshed = db.execute(
+        select(AttendanceEvent)
+        .where(AttendanceEvent.id == event_id)
+        .options(selectinload(AttendanceEvent.votes))
+    ).scalar_one()
+    return _event_to_dict(refreshed)
 
 
 def set_event_message_id(db: Session, event_id: int, message_id: str) -> None:

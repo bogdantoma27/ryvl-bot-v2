@@ -13,6 +13,7 @@ class AttendanceCreateRequest(BaseModel):
     timezone: str = Field(default="Europe/Bucharest")
     mention_role_ids: list[str] = Field(default_factory=list)
     starts_at: datetime
+    publish_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     recurrence: RecurrenceType = RecurrenceType.NONE
     repeat_count: int | None = Field(default=None, ge=1, le=52)
 
@@ -25,6 +26,7 @@ class AttendanceVoteRequest(BaseModel):
 
 class AttendanceRescheduleRequest(BaseModel):
     starts_at: datetime
+    publish_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     scope: Literal["this_occurrence_only", "this_and_following"] = "this_occurrence_only"
 
 
@@ -33,6 +35,7 @@ class AttendanceEditRequest(BaseModel):
     description: str = Field(default="", max_length=1000)
     timezone: str = Field(default="Europe/Bucharest")
     starts_at: datetime
+    publish_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
     scope: Literal["this_occurrence_only", "this_and_following"] = "this_occurrence_only"
     expected_updated_at: datetime | None = None
     vote_updates: list[AttendanceVoteRequest] = Field(default_factory=list)
@@ -49,6 +52,7 @@ class AttendanceEventView(BaseModel):
     id: int
     series_id: int
     occurrence_number: int
+    publish_at: datetime
     starts_at: datetime
     closes_at: datetime
     status: EventStatus
