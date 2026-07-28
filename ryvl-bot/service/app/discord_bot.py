@@ -495,16 +495,10 @@ class RyvlBot(commands.Bot):
                 style=discord.TextStyle.paragraph,
             )
             recurrence_input = discord.ui.TextInput(
-                label="Recurrence and repeat_count (none|weekly)",
-                placeholder="Examples: none  OR  weekly 6",
+                label="Recurrence + optional publish (HH:mm)",
+                placeholder="Examples: none | weekly 6 | weekly 6 18:00",
                 required=False,
                 max_length=32,
-            )
-            publish_time_input = discord.ui.TextInput(
-                label="Publish time (HH:mm, optional)",
-                placeholder="Example: 18:00",
-                required=False,
-                max_length=5,
             )
 
             def __init__(self):
@@ -606,7 +600,13 @@ class RyvlBot(commands.Bot):
                     "- Vote: set your response\n"
                     "- Reschedule: move an event\n"
                     "- Close: close responses\n"
-                    "- Remove Vote: remove a user vote"
+                    "- Remove Vote: remove a user vote\n\n"
+                    "**Create format help (Recurrence field):**\n"
+                    "`none`\n"
+                    "`weekly 6`\n"
+                    "`weekly 6 18:00` (same appearance time for all occurrences)\n"
+                    "`weekly 6 -,18:00,18:00,18:00,18:00,18:00`\n"
+                    "(first `-` means occurrence #1 posts instantly)"
                 )
 
             async def _send_owner_only(self, interaction: discord.Interaction) -> bool:
@@ -644,14 +644,60 @@ class RyvlBot(commands.Bot):
                 time_raw = str(modal.time_input.value or "").strip()
                 description = str(modal.description_input.value or "Respond with accept, tentative or decline.").strip() or "Respond with accept, tentative or decline."
                 recurrence_raw = str(modal.recurrence_input.value or "none").strip().lower()
-                publish_time_raw = str(modal.publish_time_input.value or "").strip()
                 recurrence = "none"
                 repeat_count: int | None = None
+                publish_time_raw = ""
+                publish_times_raw: list[str | None] | None = None
+
+                help_text = (
+                    "Invalid recurrence format. Use one of:\n"
+                    "- `none`\n"
+                    "- `weekly 6`\n"
+                    "- `weekly 6 18:00`\n"
+                    "- `weekly 6 -,18:00,18:00,18:00,18:00,18:00`"
+                )
+
                 parts = recurrence_raw.split()
                 if parts:
                     recurrence = parts[0] if parts[0] in {"none", "weekly"} else "none"
-                    if recurrence == "weekly" and len(parts) > 1 and parts[1].isdigit():
-                        repeat_count = int(parts[1])
+
+                    if recurrence == "none" and len(parts) > 1:
+                        await interaction.followup.send(help_text, ephemeral=True)
+                        return
+
+                    if recurrence == "weekly":
+                        token_index = 1
+                        if len(parts) > token_index and parts[token_index].isdigit():
+                            repeat_count = int(parts[token_index])
+                            token_index += 1
+
+                        if len(parts) > token_index:
+                            publish_token = parts[token_index].strip()
+                            if len(parts) > token_index + 1:
+                                await interaction.followup.send(help_text, ephemeral=True)
+                                return
+
+                            if "," in publish_token:
+                                parsed_list: list[str | None] = []
+                                for item in publish_token.split(","):
+                                    token = item.strip()
+                                    if token in {"", "-", "_", "none"}:
+                                        parsed_list.append(None)
+                                        continue
+                                    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", token):
+                                        await interaction.followup.send("Publish time list must use HH:mm or '-'.", ephemeral=True)
+                                        return
+                                    parsed_list.append(token)
+                                publish_times_raw = parsed_list
+                            else:
+                                publish_time_raw = publish_token
+
+                if repeat_count is None and publish_times_raw:
+                    repeat_count = len(publish_times_raw)
+
+                if repeat_count is not None and repeat_count < 1:
+                    await interaction.followup.send(help_text, ephemeral=True)
+                    return
 
                 try:
                     starts_at = _parse_datetime(date_raw, time_raw, self.bot.settings.default_timezone)
@@ -661,6 +707,13 @@ class RyvlBot(commands.Bot):
 
                 if recurrence == "weekly" and repeat_count is not None and (repeat_count < 2 or repeat_count > 52):
                     await interaction.followup.send("repeat_count must be between 2 and 52 for weekly events.", ephemeral=True)
+                    return
+
+                if recurrence == "weekly" and publish_times_raw is not None and repeat_count is not None and len(publish_times_raw) != repeat_count:
+                    await interaction.followup.send(
+                        "For publish time lists, the number of entries must match repeat_count exactly.",
+                        ephemeral=True,
+                    )
                     return
 
                 if publish_time_raw and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", publish_time_raw):
@@ -675,6 +728,7 @@ class RyvlBot(commands.Bot):
                         timezone=self.bot.settings.default_timezone,
                         starts_at=starts_at,
                         publish_time=publish_time_raw or None,
+                        publish_times=publish_times_raw,
                         recurrence=recurrence,
                         repeat_count=repeat_count if recurrence == "weekly" else None,
                     )
