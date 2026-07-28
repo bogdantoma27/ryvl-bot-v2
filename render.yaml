@@ -46,6 +46,8 @@ services:
     buildCommand: npm ci && printf "window.__RYVL_API_BASE_URL__ = \"%s\";\n" "$NG_APP_API_BASE_URL" > public/runtime-config.js && npm run build
     staticPublishPath: dist/webapp
     envVars:
+      - key: NODE_VERSION
+        value: 24.15.0
       - key: NG_APP_API_BASE_URL
         sync: false
     routes:
