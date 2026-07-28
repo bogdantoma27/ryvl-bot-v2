@@ -495,7 +495,7 @@ class RyvlBot(commands.Bot):
                 style=discord.TextStyle.paragraph,
             )
             recurrence_input = discord.ui.TextInput(
-                label="Recurrence (none|weekly) and repeat_count (optional)",
+                label="Recurrence and repeat_count (none|weekly)",
                 placeholder="Examples: none  OR  weekly 6",
                 required=False,
                 max_length=32,
@@ -1222,7 +1222,6 @@ class RyvlBot(commands.Bot):
             if custom_id.startswith(ATTENDANCE_BUTTON_PREFIX):
                 await self._handle_attendance_vote_button(interaction, custom_id)
                 return
-        await super().on_interaction(interaction)
 
     async def _handle_attendance_vote_button(self, interaction: discord.Interaction, custom_id: str) -> None:
         raw = custom_id[len(ATTENDANCE_BUTTON_PREFIX):]
