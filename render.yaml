@@ -56,4 +56,4 @@ services:
 
 databases:
   - name: ryvl-bot-db
-    plan: starter
+    plan: free
