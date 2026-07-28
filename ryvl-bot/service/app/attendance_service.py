@@ -189,7 +189,10 @@ def create_series(db: Session, payload: AttendanceCreateRequest, guild_id: str, 
         if occurrence_publish_time is None:
             occurrence_publish_time = fallback_publish_time
 
-        if payload.recurrence == RecurrenceType.WEEKLY and occurrence_number == 1 and occurrence_publish_time is None:
+        if payload.recurrence == RecurrenceType.NONE:
+            # One-time events should appear immediately after creation.
+            publish_at = datetime.now(timezone.utc)
+        elif payload.recurrence == RecurrenceType.WEEKLY and occurrence_number == 1 and occurrence_publish_time is None:
             # First occurrence can be left without appearance time and will be posted immediately.
             publish_at = datetime.now(timezone.utc)
         else:
