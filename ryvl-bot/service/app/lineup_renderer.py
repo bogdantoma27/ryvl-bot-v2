@@ -303,7 +303,14 @@ def render_lineup_png(
     target_width = max(900, int(width or WIDTH))
     target_height = max(1400, int(height or HEIGHT))
     if target_width != WIDTH or target_height != HEIGHT:
-        image = image.resize((target_width, target_height), Image.Resampling.LANCZOS)
+        # Keep the original aspect ratio to avoid horizontal/vertical stretching.
+        ratio = min(target_width / WIDTH, target_height / HEIGHT)
+        resized = image.resize((int(WIDTH * ratio), int(HEIGHT * ratio)), Image.Resampling.LANCZOS)
+        canvas = Image.new("RGB", (target_width, target_height), "#000000")
+        offset_x = (target_width - resized.width) // 2
+        offset_y = (target_height - resized.height) // 2
+        canvas.paste(resized, (offset_x, offset_y))
+        image = canvas
 
     buf = BytesIO()
     image.save(buf, format="PNG")
