@@ -14,6 +14,7 @@ class AttendanceCreateRequest(BaseModel):
     mention_role_ids: list[str] = Field(default_factory=list)
     starts_at: datetime
     publish_time: str | None = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    publish_times: list[str | None] | None = None
     recurrence: RecurrenceType = RecurrenceType.NONE
     repeat_count: int | None = Field(default=None, ge=1, le=52)
 

@@ -112,7 +112,12 @@ async def create_attendance_series(
                 entity_type="attendance_series",
                 entity_id=str(series["id"]),
                 actor_discord_id=user.user_id,
-                details={"channel_id": series["channel_id"], "title": series["title"], "publish_time": payload.publish_time},
+                details={
+                    "channel_id": series["channel_id"],
+                    "title": series["title"],
+                    "publish_time": payload.publish_time,
+                    "publish_times": payload.publish_times,
+                },
             )
 
         return series

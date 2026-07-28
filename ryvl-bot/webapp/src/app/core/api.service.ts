@@ -230,6 +230,7 @@ export class ApiService {
     mention_role_ids?: string[];
     starts_at: string;
     publish_time?: string | null;
+    publish_times?: Array<string | null>;
     recurrence: 'none' | 'weekly';
     repeat_count: number | null;
   }): Promise<AttendanceSeries> {

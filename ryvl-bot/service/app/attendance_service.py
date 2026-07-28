@@ -171,11 +171,30 @@ def create_series(db: Session, payload: AttendanceCreateRequest, guild_id: str, 
     db.add(series)
     db.flush()
 
+    publish_times: list[str | None] = []
+    for value in payload.publish_times or []:
+        normalized = str(value or "").strip()
+        publish_times.append(normalized or None)
+
+    fallback_publish_time = str(payload.publish_time or "").strip() or None
+
     kickoff_at = kickoff_at_utc
     for occurrence_number in range(1, int(repeat_count) + 1):
         if occurrence_number > 1:
             kickoff_at = _next_week(kickoff_at)
-        publish_at = _publish_at_for_kickoff(kickoff_at, series.timezone, payload.publish_time)
+
+        occurrence_publish_time: str | None = None
+        if publish_times and occurrence_number - 1 < len(publish_times):
+            occurrence_publish_time = publish_times[occurrence_number - 1]
+        if occurrence_publish_time is None:
+            occurrence_publish_time = fallback_publish_time
+
+        if payload.recurrence == RecurrenceType.WEEKLY and occurrence_number == 1 and occurrence_publish_time is None:
+            # First occurrence can be left without appearance time and will be posted immediately.
+            publish_at = datetime.now(timezone.utc)
+        else:
+            publish_at = _publish_at_for_kickoff(kickoff_at, series.timezone, occurrence_publish_time)
+
         if publish_at > kickoff_at:
             raise ValueError("publish_time cannot be after kickoff time")
         event = AttendanceEvent(

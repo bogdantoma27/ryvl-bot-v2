@@ -78,11 +78,6 @@ function todayDateInput(): string {
               <input #kickoffTimeInput class="picker-input w-full cursor-pointer rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" type="time" [(ngModel)]="form.kickoff_time" (click)="openNativePicker(kickoffTimeInput)" (focus)="openNativePicker(kickoffTimeInput)" (ngModelChange)="touchPreview()" name="kickoff_time" required />
             </label>
 
-            <label class="space-y-1 sm:col-span-2">
-              <span class="text-xs text-slate-400">Appearance time (not kickoff)</span>
-              <input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" type="time" [(ngModel)]="form.publish_time" (ngModelChange)="touchPreview()" name="publish_time" />
-              <p class="text-[11px] text-slate-500">For recurrent events, each occurrence is published at this hour.</p>
-            </label>
           </div>
 
           <div class="grid gap-3 sm:grid-cols-2">
@@ -125,7 +120,7 @@ function todayDateInput(): string {
 
             <label class="space-y-1">
               <span class="text-xs text-slate-400">Recurrence</span>
-              <select class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" [(ngModel)]="form.recurrence" (ngModelChange)="touchPreview()" name="recurrence">
+              <select class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" [(ngModel)]="form.recurrence" (ngModelChange)="onRecurrenceChanged()" name="recurrence">
                 <option value="none">One time</option>
                 <option value="weekly">Weekly</option>
               </select>
@@ -133,8 +128,29 @@ function todayDateInput(): string {
 
             <label class="space-y-1" [class.opacity-40]="form.recurrence === 'none'">
               <span class="text-xs text-slate-400">Repeat count</span>
-              <input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" type="number" min="2" max="52" [(ngModel)]="form.repeat_count" (ngModelChange)="touchPreview()" name="repeat_count" [disabled]="form.recurrence === 'none'" />
+              <input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" type="number" min="2" max="52" [(ngModel)]="form.repeat_count" (ngModelChange)="onRepeatCountChanged()" name="repeat_count" [disabled]="form.recurrence === 'none'" />
             </label>
+
+            @if (form.recurrence === 'weekly') {
+              <div class="space-y-2 sm:col-span-2">
+                <span class="text-xs text-slate-400">Appearance time per occurrence (HH:mm)</span>
+                <p class="text-[11px] text-slate-500">Occurrence #1 is optional. If empty, it posts immediately after creation.</p>
+                <div class="grid gap-2">
+                  @for (occurrence of recurrenceOccurrenceNumbers(); track occurrence) {
+                    <label class="flex items-center gap-2">
+                      <span class="w-28 shrink-0 text-xs text-slate-400">Occurrence #{{ occurrence }}</span>
+                      <input
+                        class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                        type="time"
+                        [(ngModel)]="form.publish_times[occurrence - 1]"
+                        (ngModelChange)="touchPreview()"
+                        [name]="'publish_time_' + occurrence"
+                      />
+                    </label>
+                  }
+                </div>
+              </div>
+            }
           </div>
         </div>
 
@@ -594,7 +610,7 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     mention_role_ids: [] as string[],
     kickoff_date: todayDateInput(),
     kickoff_time: '21:45',
-    publish_time: '18:00',
+    publish_times: ['', '18:00', '18:00', '18:00', '18:00', '18:00'] as string[],
     recurrence: 'none' as 'none' | 'weekly',
     repeat_count: 6,
   };
@@ -1053,10 +1069,45 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     this.form.mention_role_ids = [];
     this.form.kickoff_date = todayDateInput();
     this.form.kickoff_time = '21:45';
-    this.form.publish_time = '18:00';
     this.form.recurrence = 'none';
     this.form.repeat_count = 6;
+    this.form.publish_times = ['', '18:00', '18:00', '18:00', '18:00', '18:00'];
     this.touchPreview();
+  }
+
+  protected recurrenceOccurrenceNumbers(): number[] {
+    if (this.form.recurrence !== 'weekly') {
+      return [];
+    }
+    const count = Math.max(2, Math.min(52, Number(this.form.repeat_count || 0)));
+    return Array.from({ length: count }, (_, index) => index + 1);
+  }
+
+  protected onRecurrenceChanged(): void {
+    this.syncPublishTimesWithRepeatCount();
+    this.touchPreview();
+  }
+
+  protected onRepeatCountChanged(): void {
+    this.syncPublishTimesWithRepeatCount();
+    this.touchPreview();
+  }
+
+  private syncPublishTimesWithRepeatCount(): void {
+    const desired = this.form.recurrence === 'weekly'
+      ? Math.max(2, Math.min(52, Number(this.form.repeat_count || 0)))
+      : 0;
+    const next: string[] = [];
+    for (let index = 0; index < desired; index += 1) {
+      if (index < this.form.publish_times.length) {
+        next.push(this.form.publish_times[index] || '');
+      } else if (index === 0) {
+        next.push('');
+      } else {
+        next.push('18:00');
+      }
+    }
+    this.form.publish_times = next;
   }
 
   async load(resetMessages = true): Promise<void> {
@@ -1089,6 +1140,14 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
     this.loading.set(true);
     try {
       const startsAt = this.wallTimeToUtcIso(this.form.kickoff_date, this.form.kickoff_time, this.form.timezone || this.defaultTimezone());
+      const publishTimes = this.form.recurrence === 'weekly'
+        ? this.form.publish_times
+          .slice(0, Math.max(2, Math.min(52, Number(this.form.repeat_count || 0))))
+          .map(value => {
+            const normalized = String(value || '').trim();
+            return normalized || null;
+          })
+        : undefined;
       const created = await this.api.createAttendance({
         channel_id: this.form.channel_id,
         title: this.form.title.trim(),
@@ -1096,7 +1155,8 @@ export class AttendancePageComponent implements OnInit, OnDestroy {
         timezone: this.form.timezone,
         mention_role_ids: this.form.mention_role_ids,
         starts_at: startsAt,
-        publish_time: this.form.publish_time || null,
+        publish_time: null,
+        publish_times: publishTimes,
         recurrence: this.form.recurrence,
         repeat_count: this.form.recurrence === 'weekly' ? this.form.repeat_count : null,
       });
