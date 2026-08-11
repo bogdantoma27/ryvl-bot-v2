@@ -28,8 +28,9 @@ vpg_scheduler = VpgScheduler()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    # Rename legacy tables before create_all, otherwise their constraint names collide with the new tables.
     run_startup_migrations(engine)
+    Base.metadata.create_all(bind=engine)
     app.state.started_at = datetime.now(timezone.utc)
     app.state.scheduler = scheduler
     app.state.vpg_scheduler = vpg_scheduler
