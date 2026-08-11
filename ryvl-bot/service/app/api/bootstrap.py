@@ -7,7 +7,24 @@ from app.db import get_db
 from app.runtime_settings import get_runtime_settings
 
 router = APIRouter(prefix="/api/admin", tags=["bootstrap"], dependencies=[Depends(require_admin_session)])
+public_router = APIRouter(prefix="/api/public", tags=["bootstrap"])
 settings = get_settings()
+
+
+@public_router.get("/guild")
+async def public_guild_info(request: Request) -> dict:
+    guild_name: str | None = None
+    guild_icon_url: str | None = None
+
+    bot = getattr(request.app.state, "discord_bot", None)
+    if bot is not None and bot.is_ready() and settings.discord_guild_id:
+        guild = bot.get_guild(int(settings.discord_guild_id))
+        if guild is None:
+            guild = await bot.fetch_guild(int(settings.discord_guild_id))
+        guild_name = guild.name
+        guild_icon_url = str(guild.icon.url) if guild.icon else None
+
+    return {"guild_name": guild_name, "guild_icon_url": guild_icon_url}
 
 
 @router.get("/bootstrap")
@@ -19,11 +36,16 @@ async def bootstrap(request: Request, db: Session = Depends(get_db)) -> dict:
     channels: list[dict[str, str]] = []
     members: list[dict[str, str | None]] = []
     roles: list[dict[str, str]] = []
+    guild_name: str | None = None
+    guild_icon_url: str | None = None
 
     if bot is not None and bot.is_ready():
         guild = bot.get_guild(int(settings.discord_guild_id))
         if guild is None:
             guild = await bot.fetch_guild(int(settings.discord_guild_id))
+
+        guild_name = guild.name
+        guild_icon_url = str(guild.icon.url) if guild.icon else None
 
         fetched_channels = await guild.fetch_channels()
         channels = [
@@ -61,10 +83,9 @@ async def bootstrap(request: Request, db: Session = Depends(get_db)) -> dict:
     runtime = get_runtime_settings(db, settings)
     return {
         "guild_id": settings.discord_guild_id,
+        "guild_name": guild_name,
+        "guild_icon_url": guild_icon_url,
         "default_timezone": runtime["default_timezone"],
-        "default_attendance_channel_id": runtime["default_attendance_channel_id"],
-        "default_lineup_channel_id": runtime["default_lineup_channel_id"],
-        "default_attendance_role_ids": runtime["default_attendance_role_ids"],
         "channels": channels,
         "members": members,
         "roles": roles,

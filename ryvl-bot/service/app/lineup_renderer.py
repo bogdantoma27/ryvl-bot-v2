@@ -1,66 +1,21 @@
 from io import BytesIO
 from pathlib import Path
-import re
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 from app.lineup_formations import FORMATIONS
+from app.render_utils import contrast_text as _contrast_text
+from app.render_utils import fit_font as _fit_font
+from app.render_utils import font as _font
+from app.render_utils import safe_color as _safe_color
 
 WIDTH = 900
 HEIGHT = 1400
 HEADER_HEIGHT = 176
 
-
-def _safe_color(value: str, fallback: str) -> str:
-    return value if re.fullmatch(r"#[0-9a-fA-F]{6}", str(value or "")) else fallback
-
-
-def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    bold_candidates = (
-        "DejaVuSans-Bold.ttf",
-        "Arial Bold.ttf",
-        "arialbd.ttf",
-        "segoeuib.ttf",
-    )
-    regular_candidates = (
-        "DejaVuSans.ttf",
-        "Arial.ttf",
-        "arial.ttf",
-        "segoeui.ttf",
-    )
-    candidates = bold_candidates if bold else regular_candidates
-    for candidate in candidates:
-        try:
-            return ImageFont.truetype(candidate, size=size)
-        except Exception:
-            continue
-    return ImageFont.load_default()
-
-
-def _fit_font(
-    draw: ImageDraw.ImageDraw,
-    text: str,
-    max_width: int,
-    start: int = 28,
-    minimum: int = 13,
-    bold: bool = True,
-) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    size = start
-    while size > minimum:
-        font = _font(size, bold=bold)
-        if draw.textlength(text, font=font) <= max_width:
-            return font
-        size -= 1
-    return _font(minimum, bold=bold)
-
-
-def _contrast_text(hex_color: str) -> str:
-    raw = _safe_color(hex_color, "#ffffff").replace("#", "")
-    r = int(raw[0:2], 16)
-    g = int(raw[2:4], 16)
-    b = int(raw[4:6], 16)
-    brightness = (r * 299 + g * 587 + b * 114) / 1000
-    return "#111111" if brightness > 150 else "#ffffff"
+# Native render dimensions, exposed so callers can request an unscaled image.
+RENDER_WIDTH = WIDTH
+RENDER_HEIGHT = HEIGHT
 
 
 def _load_logo() -> Image.Image | None:
@@ -272,6 +227,7 @@ def render_lineup_png(
     width: int = 900,
     height: int = 1400,
     show_slot_tags: bool = True,
+    native: bool = False,
 ) -> bytes:
     layout = FORMATIONS.get(formation)
     if layout is None:
@@ -302,7 +258,7 @@ def render_lineup_png(
 
     target_width = max(900, int(width or WIDTH))
     target_height = max(1400, int(height or HEIGHT))
-    if target_width != WIDTH or target_height != HEIGHT:
+    if not native and (target_width != WIDTH or target_height != HEIGHT):
         # Keep the original aspect ratio to avoid horizontal/vertical stretching.
         ratio = min(target_width / WIDTH, target_height / HEIGHT)
         resized = image.resize((int(WIDTH * ratio), int(HEIGHT * ratio)), Image.Resampling.LANCZOS)

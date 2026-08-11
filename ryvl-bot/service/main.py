@@ -18,7 +18,7 @@ def _reexec_with_venv_if_available() -> None:
         return
     if not VENV_PYTHON.exists():
         return
-    subprocess.run([str(VENV_PYTHON), str(ROOT / "start.py")], check=True)
+    subprocess.run([str(VENV_PYTHON), str(ROOT / "main.py")], check=True)
     raise SystemExit(0)
 
 

@@ -26,12 +26,13 @@ class SessionUser:
     user_id: str
     username: str
     discriminator: str
+    global_name: str | None
     avatar: str | None
     created_at: float
 
 
 def _cookie_samesite() -> str:
-    return "none" if settings.app_env == "production" else "lax"
+    return "none"
 
 
 _oauth_states: dict[str, tuple[str, float]] = {}
@@ -69,6 +70,7 @@ def _session_payload(user_payload: dict) -> dict[str, str | float | None]:
         "user_id": str(user_payload.get("id") or ""),
         "username": str(user_payload.get("username") or ""),
         "discriminator": str(user_payload.get("discriminator") or ""),
+        "global_name": user_payload.get("global_name"),
         "avatar": user_payload.get("avatar"),
         "created_at": created_at,
         "expires_at": created_at + SESSION_TTL_SECONDS,
@@ -106,6 +108,7 @@ def _decode_session_token(token: str) -> SessionUser | None:
         user_id=str(payload.get("user_id") or ""),
         username=str(payload.get("username") or ""),
         discriminator=str(payload.get("discriminator") or ""),
+        global_name=payload.get("global_name"),
         avatar=payload.get("avatar"),
         created_at=float(payload.get("created_at") or 0),
     )
@@ -220,22 +223,6 @@ def _get_session_token(request: Request) -> str:
     return ""
 
 
-def _parse_admin_roles() -> set[int]:
-    raw = str(settings.admin_role_ids or "").strip()
-    if not raw:
-        return set()
-    result: set[int] = set()
-    for value in raw.split(","):
-        value = value.strip()
-        if not value:
-            continue
-        try:
-            result.add(int(value))
-        except ValueError:
-            continue
-    return result
-
-
 async def _user_is_admin_in_guild(request: Request, user_id: str) -> bool:
     if not settings.discord_guild_id:
         return False
@@ -252,14 +239,7 @@ async def _user_is_admin_in_guild(request: Request, user_id: str) -> bool:
     if member is None:
         member = await guild.fetch_member(int(user_id))
 
-    if member.guild_permissions.administrator:
-        return True
-
-    allowed_roles = _parse_admin_roles()
-    if not allowed_roles:
-        return False
-
-    return any(int(role.id) in allowed_roles for role in member.roles)
+    return bool(member.guild_permissions.administrator)
 
 
 def _new_session(user_payload: dict) -> str:
@@ -407,7 +387,7 @@ async def discord_oauth_callback(request: Request, code: str = "", state: str = 
         key=SESSION_COOKIE,
         value=session_token,
         httponly=True,
-        secure=settings.app_env == "production",
+        secure=True,
         samesite=_cookie_samesite(),
         max_age=SESSION_TTL_SECONDS,
         path="/",
@@ -424,6 +404,7 @@ async def auth_me(user: SessionUser = Depends(require_admin_session)) -> dict:
             "id": user.user_id,
             "username": user.username,
             "discriminator": user.discriminator,
+            "global_name": user.global_name,
             "avatar": user.avatar,
         },
     }

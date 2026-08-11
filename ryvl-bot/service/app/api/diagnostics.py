@@ -33,6 +33,11 @@ async def diagnostics(request: Request) -> dict:
     scheduler_last_tick = getattr(scheduler, "last_tick_at", None)
     scheduler_last_error = getattr(scheduler, "last_error", None)
 
+    vpg_scheduler = getattr(request.app.state, "vpg_scheduler", None)
+    vpg_scheduler_running = bool(getattr(vpg_scheduler, "is_running", False))
+    vpg_scheduler_last_tick = getattr(vpg_scheduler, "last_tick_at", None)
+    vpg_scheduler_last_error = getattr(vpg_scheduler, "last_error", None)
+
     bot = getattr(request.app.state, "discord_bot", None)
     bot_connected = bool(bot and bot.is_ready())
 
@@ -58,7 +63,7 @@ async def diagnostics(request: Request) -> dict:
         "checked_at": now.isoformat(),
         "uptime_seconds": uptime_seconds,
         "app": {
-            "environment": settings.app_env,
+            "environment": "production",
             "public_api_base_url": settings.public_api_base_url,
             "guild_id_configured": bool(settings.discord_guild_id),
         },
@@ -71,6 +76,12 @@ async def diagnostics(request: Request) -> dict:
             "interval_seconds": SCHEDULER_INTERVAL_SECONDS,
             "last_tick_at": scheduler_last_tick.isoformat() if isinstance(scheduler_last_tick, datetime) else None,
             "last_error": scheduler_last_error,
+        },
+        "vpg_scheduler": {
+            "running": vpg_scheduler_running,
+            "interval_seconds": 60,
+            "last_tick_at": vpg_scheduler_last_tick.isoformat() if isinstance(vpg_scheduler_last_tick, datetime) else None,
+            "last_error": vpg_scheduler_last_error,
         },
         "discord": {
             "bot_connected": bot_connected,

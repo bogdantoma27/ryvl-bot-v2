@@ -1,10 +1,19 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnInit, computed, effect, inject, signal, viewChild } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 
 import { ApiService, ChannelOption, GuildMemberOption, RoleOption } from '../../core/api.service';
+import { DraftCountsService } from '../../core/draft-counts.service';
 import { SnackbarService } from '../../core/snackbar.service';
+import { MultiSelectComponent } from '../../shared/multi-select.component';
 
 const LINEUP_DRAFT_STORAGE_KEY = 'ryvl.lineup.draft.v1';
+// Legacy per-browser drafts list, migrated to the database on first load of the drafts page.
+export const LINEUP_DRAFTS_STORAGE_KEY = 'ryvl.lineup.drafts.v1';
+// Vertical offset (px, in the 900x1400 render space) between a formation slot's raw
+// coordinate and where the rendered PNG actually draws the shirt; keeps the empty-slot
+// markers aligned with the filled shirts drawn by lineup_renderer.py's _draw_player().
+const PLAYER_MARKER_Y_OFFSET = 108;
 
 function todayDateInput(): string {
   const now = new Date();
@@ -14,16 +23,29 @@ function todayDateInput(): string {
   return `${year}-${month}-${day}`;
 }
 
+function sanitizeDate(value: string | undefined): string {
+  return value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : todayDateInput();
+}
+
+function sanitizeTime(value: string | undefined): string {
+  return value && /^\d{2}:\d{2}$/.test(value) ? value : '21:45';
+}
+
 type LineupDraftForm = {
   channelId: string;
   formation: string;
   kickoffDate: string;
   kickoffTime: string;
+  timezone: string;
   title: string;
   mentionRoleIds: string[];
-  messagePrefix: string;
-  messageSuffix: string;
-  filename: string;
+};
+
+export type LineupDraftRecord = {
+  id: string;
+  savedAt: string;
+  form: LineupDraftForm;
+  assignedBySlot: Record<string, string>;
 };
 
 const DEFAULT_LINEUP_FORM: LineupDraftForm = {
@@ -31,271 +53,260 @@ const DEFAULT_LINEUP_FORM: LineupDraftForm = {
   formation: '4231',
   kickoffDate: todayDateInput(),
   kickoffTime: '21:45',
+  timezone: 'Europe/Bucharest',
   title: 'RYVL Match Lineup',
   mentionRoleIds: [],
-  messagePrefix: '',
-  messageSuffix: '',
-  filename: '',
 };
+
+const STEPS = [
+  { number: 1, label: 'Details' },
+  { number: 2, label: 'Fill positions' },
+  { number: 3, label: 'Connections' },
+  { number: 4, label: 'Review & publish' },
+];
+
+function wallTimeToUtcIso(dateInput: string, timeInput: string, timezoneName: string): string {
+  const [year, month, day] = dateInput.split('-').map(Number);
+  const [hour, minute] = timeInput.split(':').map(Number);
+  const wallTimeUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
+  let candidate = wallTimeUtc;
+  for (let index = 0; index < 3; index += 1) {
+    const parts = new Intl.DateTimeFormat('en-GB', { timeZone: timezoneName, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, hourCycle: 'h23' }).formatToParts(new Date(candidate));
+    const values = new Map(parts.map(part => [part.type, part.value]));
+    const zonedAsUtc = Date.UTC(Number(values.get('year')), Number(values.get('month')) - 1, Number(values.get('day')), Number(values.get('hour')), Number(values.get('minute')), Number(values.get('second')));
+    const next = wallTimeUtc - (zonedAsUtc - candidate);
+    if (next === candidate) break;
+    candidate = next;
+  }
+  return new Date(candidate).toISOString();
+}
 
 @Component({
   selector: 'app-lineup-page',
-  imports: [FormsModule],
+  imports: [FormsModule, MultiSelectComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="space-y-6">
-      <header class="space-y-2">
-        <p class="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Lineup</p>
-        <h1 class="text-2xl font-semibold text-slate-100">Lineup planning</h1>
+    <section class="collection-page space-y-6">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Workspace <span>&rsaquo;</span> Lineup</p>
+          <h1>New lineup</h1>
+          <p class="page-subtitle">Build a formation lineup and post it to Discord.</p>
+        </div>
+        <button type="button" class="secondary-action" [disabled]="posting()" (click)="saveAsDraft()">Save as draft</button>
       </header>
 
-      <form class="grid gap-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 md:grid-cols-2">
-        <div class="space-y-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-          <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Match details</p>
-
-          <label class="space-y-1">
-            <span class="text-xs text-slate-400">Post channel</span>
-            <select class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" [(ngModel)]="form.channelId" (ngModelChange)="persistDraft()" name="channelId">
-              <option value="">Select a channel</option>
-              @for (channel of channels(); track channel.id) {
-                <option [value]="channel.id">#{{ channel.name }}</option>
-              }
-            </select>
-          </label>
-
-          <label class="space-y-1">
-            <span class="text-xs text-slate-400">Formation</span>
-            <select class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" [(ngModel)]="form.formation" (ngModelChange)="onFormationChange()" name="formation">
-              @for (formation of formations(); track formation) {
-                <option [value]="formation">{{ formation }}</option>
-              }
-            </select>
-          </label>
-
-          <div class="grid gap-3 sm:grid-cols-2">
-            <label class="space-y-1">
-              <span class="text-xs text-slate-400">Kickoff date</span>
-              <input #kickoffDateInput class="picker-input w-full cursor-pointer rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" type="date" [(ngModel)]="form.kickoffDate" (click)="openNativePicker(kickoffDateInput)" (focus)="openNativePicker(kickoffDateInput)" (ngModelChange)="persistDraft()" name="kickoffDate" />
-            </label>
-
-            <label class="space-y-1">
-              <span class="text-xs text-slate-400">Kickoff time</span>
-              <input #kickoffTimeInput class="picker-input w-full cursor-pointer rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" type="time" [(ngModel)]="form.kickoffTime" (click)="openNativePicker(kickoffTimeInput)" (focus)="openNativePicker(kickoffTimeInput)" (ngModelChange)="persistDraft()" name="kickoffTime" />
-            </label>
-          </div>
-
-          <div class="space-y-1">
-            <span class="text-xs text-slate-400">Mention roles (optional)</span>
-            <button
-              type="button"
-              class="flex w-full items-center justify-between rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-              (click)="toggleRolePicker()"
-            >
-              <span class="truncate text-left">{{ selectedRolesSummary() }}</span>
-              <span class="text-xs text-slate-500">{{ rolePickerOpen() ? 'Hide' : 'Select' }}</span>
+      <div class="wizard-layout">
+        <nav class="stepper" aria-label="Lineup steps">
+          @for (step of steps; track step.number) {
+            <button type="button" class="stepper-item" [class.is-active]="currentStep() === step.number" [class.is-done]="currentStep() > step.number" (click)="goToStep(step.number)">
+              <span class="stepper-connector"></span>
+              <span class="stepper-circle">{{ currentStep() > step.number ? '✓' : step.number }}</span>
+              <span class="stepper-label">{{ step.label }}</span>
             </button>
-            @if (rolePickerOpen()) {
-              <div class="max-h-44 space-y-2 overflow-y-auto rounded-lg border border-slate-700 bg-slate-950 p-2">
-                @for (role of roles(); track role.id) {
-                  <label class="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm text-slate-100 hover:bg-slate-900">
-                    <input
-                      class="h-4 w-4 rounded border-slate-600 bg-slate-900 text-emerald-500"
-                      type="checkbox"
-                      [checked]="isRoleSelected(role.id)"
-                      (change)="toggleRoleSelection(role.id)"
-                    />
-                    <span class="truncate">@{{ role.name }}</span>
-                  </label>
-                } @empty {
-                  <p class="px-2 py-1 text-xs text-slate-500">No roles available.</p>
+          }
+        </nav>
+
+      <div class="wizard-panel space-y-5">
+          @if (currentStep() === 1) {
+            <p class="wizard-kicker">Match details</p>
+
+            <label class="field">
+              <span>Title</span>
+              <input [(ngModel)]="form.title" name="title" placeholder="RYVL Match Lineup" required />
+            </label>
+
+            <label class="field">
+              <span>Formation</span>
+              <select [(ngModel)]="form.formation" (ngModelChange)="onFormationChange()" name="formation" required>
+                @for (formation of formations(); track formation) {
+                  <option [value]="formation">{{ formation }}</option>
                 }
-              </div>
-            }
-          </div>
-        </div>
+              </select>
+            </label>
 
-        <div class="space-y-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-          <p class="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Message options</p>
+            <div class="lineup-row-2">
+              <label class="field">
+                <span>Kickoff date</span>
+                <input #kickoffDateInput class="picker-input" type="date" [(ngModel)]="form.kickoffDate" (click)="openNativePicker(kickoffDateInput)" name="kickoffDate" required />
+              </label>
 
-          <label class="space-y-1">
-            <span class="text-xs text-slate-400">Title</span>
-            <input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" [(ngModel)]="form.title" (ngModelChange)="persistDraft()" name="title" placeholder="RYVL Match Lineup" />
-          </label>
+              <label class="field">
+                <span>Kickoff time</span>
+                <input #kickoffTimeInput class="picker-input" type="time" [(ngModel)]="form.kickoffTime" (click)="openNativePicker(kickoffTimeInput)" name="kickoffTime" required />
+              </label>
+            </div>
 
-          <label class="space-y-1">
-            <span class="text-xs text-slate-400">Message prefix (optional)</span>
-            <input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" [(ngModel)]="form.messagePrefix" (ngModelChange)="persistDraft()" name="messagePrefix" placeholder="Starting XI for tonight" />
-          </label>
+            <label class="field">
+              <span>Timezone</span>
+              <select [(ngModel)]="form.timezone" name="timezone">
+                <option value="Europe/Bucharest">Europe/Bucharest</option>
+                <option value="Europe/London">Europe/London</option>
+                <option value="UTC">UTC</option>
+              </select>
+            </label>
+          }
 
-          <label class="space-y-1">
-            <span class="text-xs text-slate-400">Message suffix (optional)</span>
-            <input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" [(ngModel)]="form.messageSuffix" (ngModelChange)="persistDraft()" name="messageSuffix" placeholder="Good luck everyone" />
-          </label>
+          @if (currentStep() === 2) {
+            <p class="wizard-kicker">Fill positions</p>
+            <p class="lineup-hint">Drag a player from the roster directly onto a position on the pitch. The preview updates in real time.</p>
 
-          <label class="space-y-1">
-            <span class="text-xs text-slate-400">Image file name (optional)</span>
-            <input class="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100" [(ngModel)]="form.filename" (ngModelChange)="persistDraft()" name="filename" placeholder="lineup-matchday" />
-          </label>
-        </div>
-
-        <div class="md:col-span-2 flex justify-end gap-2">
-          <button
-            type="button"
-            class="rounded-lg border border-rose-500/40 px-4 py-2 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/10 disabled:opacity-50"
-            [disabled]="posting() || previewing()"
-            (click)="resetDraft()"
-          >
-            Reset draft
-          </button>
-          <button
-            type="button"
-            class="rounded-lg border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-100 transition hover:bg-slate-800 disabled:opacity-50"
-            [disabled]="previewing()"
-            (click)="previewLineup()"
-          >
-            {{ previewing() ? 'Rendering...' : 'Preview lineup' }}
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 disabled:opacity-50"
-            [disabled]="posting() || !form.channelId"
-            (click)="postLineup()"
-          >
-            {{ posting() ? 'Posting...' : 'Post lineup to Discord' }}
-          </button>
-        </div>
-      </form>
-
-      <section class="grid gap-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 lg:grid-cols-[1fr_2fr]">
-        <div
-          class="rounded-xl border border-slate-700 bg-slate-950/70 p-3"
-          (dragover)="allowDrop($event)"
-          (drop)="dropToPool($event)"
-        >
-          <h2 class="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Server members</h2>
-          <p class="mb-3 text-xs text-slate-500">Drag users into slots. Drop back here to remove from lineup.</p>
-          <div class="max-h-110 space-y-2 overflow-y-auto pr-1">
-            @for (member of unassignedMembers(); track member.id) {
-              <div class="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-slate-100">
-                <div class="flex items-center gap-2">
-                  <button
-                    type="button"
-                    draggable="true"
-                    (dragstart)="dragMember(member.id)"
-                    class="flex flex-1 items-center gap-2 text-left transition hover:border-slate-500"
-                  >
-                    @if (member.avatar_url) {
-                      <img [src]="member.avatar_url" [alt]="member.display_name" class="h-7 w-7 rounded-full" />
-                    } @else {
-                      <span class="inline-flex h-7 w-7 items-center justify-center rounded-full bg-slate-700 text-xs">{{ member.display_name.slice(0, 1) }}</span>
-                    }
-                    <span class="truncate">{{ member.display_name }}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    class="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[11px] font-semibold text-emerald-200 md:hidden"
-                    (click)="toggleMobileMemberPicker(member.id)"
-                  >
-                    Add
-                  </button>
-                </div>
-
-                @if (isMobileMemberPickerOpen(member.id)) {
-                  <div class="mt-2 grid gap-2 sm:grid-cols-2">
-                    @for (slot of currentSlots(); track slot) {
-                      <button
-                        type="button"
-                        class="rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300 md:hidden"
-                        (click)="assignMemberToSlot(member.id, slot)"
-                      >
-                        {{ slot }}
-                      </button>
-                    }
-                  </div>
-                }
-              </div>
-            } @empty {
-              <p class="rounded-lg border border-dashed border-slate-700 px-3 py-2 text-xs text-slate-500">All loaded members are already assigned to slots.</p>
-            }
-          </div>
-        </div>
-
-        <div class="rounded-xl border border-slate-700 bg-slate-950/70 p-3">
-          <div class="mb-3 flex items-center justify-between gap-2">
-            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Formation slots</h2>
-            <button type="button" class="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800" (click)="clearAllSlots()">Clear all</button>
-          </div>
-
-          <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            @for (slot of currentSlots(); track slot) {
-              <div
-                class="rounded-lg border border-slate-700 bg-slate-900/80 p-2"
-                (dragover)="allowDrop($event)"
-                (drop)="dropToSlot(slot, $event)"
-              >
-                <div class="mb-1 flex items-center justify-between">
-                  <span class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{{ slot }}</span>
-                  @if (assignedBySlot()[slot]) {
-                    <button type="button" class="text-[11px] text-slate-500 hover:text-slate-300" (click)="clearSlot(slot)">clear</button>
+            <div class="lineup-columns lineup-board">
+              <div class="lineup-panel" (dragover)="allowDrop($event)" (drop)="dropToPool($event)">
+                <div class="roster-list">
+                  @for (member of unassignedMembers(); track member.id) {
+                    <div class="roster-card">
+                      <div class="roster-card-row">
+                        <button type="button" draggable="true" (dragstart)="dragMember(member.id)" class="roster-drag-btn">
+                          @if (member.avatar_url) {
+                            <img [src]="member.avatar_url" [alt]="member.display_name" class="roster-avatar" />
+                          } @else {
+                            <span class="roster-avatar-fallback">{{ member.display_name.slice(0, 1) }}</span>
+                          }
+                          <span class="truncate">{{ member.display_name }}</span>
+                        </button>
+                        <button type="button" class="roster-add-btn" (click)="toggleMobileMemberPicker(member.id)">Add</button>
+                      </div>
+                      @if (isMobileMemberPickerOpen(member.id)) {
+                        <div class="roster-mobile-slots">
+                          @for (slot of currentSlots(); track slot) {
+                            <button type="button" class="roster-mobile-slot" (click)="assignMemberToSlot(member.id, slot)">{{ slot }}</button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  } @empty {
+                    <p class="lineup-empty-hint">All loaded members are already assigned to slots.</p>
                   }
                 </div>
-
-                @if (assignedMemberName(slot)) {
-                  <button
-                    type="button"
-                    draggable="true"
-                    (dragstart)="dragMember(assignedBySlot()[slot])"
-                    class="w-full rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-2 text-left text-sm text-emerald-200"
-                  >
-                    {{ assignedMemberName(slot) }}
-                  </button>
-                } @else {
-                  <div class="rounded-md border border-dashed border-slate-700 px-2 py-3 text-xs text-slate-500">Drop player here</div>
-                }
               </div>
+
+              <div class="lineup-panel">
+                <div class="lineup-board-toolbar">
+                  <p class="lineup-hint">Click a filled position to unassign it, or drag it back to the roster.</p>
+                  <button type="button" class="secondary-action compact" (click)="clearAllSlots()">Clear all</button>
+                </div>
+
+                <div class="pitch-canvas-wrap">
+                  @if (!previewUrl()) {
+                    <div class="pitch-placeholder">Rendering preview...</div>
+                  }
+                  @if (previewError()) {
+                    <div class="pitch-placeholder">
+                      <p>{{ previewError() }}</p>
+                      <button type="button" class="secondary-action compact" (click)="renderPreview()">Retry</button>
+                    </div>
+                  }
+                  <canvas
+                    #pitchCanvas
+                    class="pitch-canvas"
+                    [class.hidden]="!previewUrl()"
+                    draggable="true"
+                    (dragstart)="onCanvasDragStart($event)"
+                    (dragover)="onCanvasDragOver($event)"
+                    (dragleave)="onCanvasDragLeave()"
+                    (drop)="dropToCanvas($event)"
+                    (click)="onCanvasClick($event)"
+                  ></canvas>
+                </div>
+              </div>
+            </div>
+          }
+
+          @if (currentStep() === 3) {
+            <p class="wizard-kicker">Event connections</p>
+
+            <label class="field">
+              <span>Post channel</span>
+              <select [(ngModel)]="form.channelId" name="channelId" required>
+                <option value="">Select a channel</option>
+                @for (channel of channels(); track channel.id) {
+                  <option [value]="channel.id">#{{ channel.name }}</option>
+                }
+              </select>
+            </label>
+
+            <div class="field">
+              <span>Mention roles (optional)</span>
+              <app-multi-select
+                [options]="roleOptions()"
+                [selected]="form.mentionRoleIds"
+                placeholder="No mention roles selected"
+                emptyText="No roles available."
+                (selectedChange)="onRolesChange($event)"
+              />
+            </div>
+          }
+
+          @if (currentStep() === 4) {
+            <p class="wizard-kicker">Review & publish</p>
+
+            <div class="review-item">
+              <span>Lineup</span>
+              <strong>{{ form.title }}</strong>
+              <p>Formation {{ form.formation }} &middot; {{ filledSlotCount() }}/{{ currentSlots().length }} positions filled</p>
+            </div>
+
+            <div class="review-item">
+              <span>Kickoff</span>
+              <strong>{{ formattedKickoff() }}</strong>
+              <p>{{ form.timezone }}</p>
+            </div>
+
+            <div class="review-item">
+              <span>Destination</span>
+              <strong>#{{ channelName() }}</strong>
+              <p>{{ form.mentionRoleIds.length }} role mentions</p>
+            </div>
+
+            @if (previewUrl()) {
+              <img [src]="previewUrl()" alt="Lineup preview" class="lineup-preview-image" />
+            }
+          }
+
+          <div class="lineup-actions">
+            @if (currentStep() > 1) {
+              <button type="button" class="secondary-action" (click)="previous()">Back</button>
+            }
+            @if (currentStep() < 4) {
+              <button type="button" class="primary-action" (click)="next()">Continue</button>
+            } @else {
+              <button type="button" class="primary-action" [disabled]="posting() || !form.channelId" (click)="postLineup()">{{ posting() ? 'Posting...' : 'Post lineup to Discord' }}</button>
             }
           </div>
         </div>
-      </section>
-
-      @if (previewUrl()) {
-        <section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-          <h2 class="mb-3 text-sm font-semibold uppercase tracking-[0.2em] text-slate-400">Preview</h2>
-          <img [src]="previewUrl()" alt="Lineup preview" class="w-full rounded-lg border border-slate-700 bg-black/20" />
-        </section>
-      }
+      </div>
     </section>
   `,
-  styles: [
-    `
-      .picker-input::-webkit-calendar-picker-indicator {
-        filter: invert(1) brightness(1.25);
-        opacity: 1;
-        cursor: pointer;
-      }
-    `,
-  ],
 })
 export class LineupPageComponent implements OnInit {
   private readonly api = inject(ApiService);
   private readonly snackbar = inject(SnackbarService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly draftCounts = inject(DraftCountsService);
+  private previewTimer: ReturnType<typeof setTimeout> | undefined;
+  private draftId: number | null = null;
 
+  protected readonly steps = STEPS;
+  protected readonly currentStep = signal(1);
   protected readonly channels = signal<ChannelOption[]>([]);
   protected readonly members = signal<GuildMemberOption[]>([]);
   protected readonly roles = signal<RoleOption[]>([]);
   protected readonly formations = signal<string[]>([]);
   protected readonly slotsByFormation = signal<Record<string, string[]>>({});
+  protected readonly coordsByFormation = signal<Record<string, Record<string, [number, number]>>>({});
+  protected readonly canvasWidth = signal(900);
+  protected readonly canvasHeight = signal(1400);
   protected readonly assignedBySlot = signal<Record<string, string>>({});
   protected readonly draggedMemberId = signal<string>('');
-  protected readonly error = signal('');
-  protected readonly success = signal('');
   protected readonly posting = signal(false);
-  protected readonly previewing = signal(false);
   protected readonly previewUrl = signal('');
+  protected readonly previewError = signal('');
+  protected readonly hoverSlot = signal('');
   protected readonly defaultLineupChannelId = signal('');
-  protected readonly rolePickerOpen = signal(false);
   protected readonly selectedMobileMemberId = signal('');
+  protected readonly pitchCanvas = viewChild<ElementRef<HTMLCanvasElement>>('pitchCanvas');
+  private previewImage: HTMLImageElement | null = null;
 
   protected readonly unassignedMembers = computed(() => {
     const assigned = new Set(Object.values(this.assignedBySlot()));
@@ -304,7 +315,21 @@ export class LineupPageComponent implements OnInit {
 
   protected readonly form: LineupDraftForm = { ...DEFAULT_LINEUP_FORM };
 
+  constructor() {
+    effect(() => {
+      // Canvas is only rendered while on step 2; re-run once it appears
+      // instead of racing the queueMicrotask that used to miss it.
+      this.pitchCanvas();
+      this.assignedBySlot();
+      this.hoverSlot();
+      this.drawCanvas();
+    });
+  }
+
   async ngOnInit(): Promise<void> {
+    const draftIdParam = Number(this.route.snapshot.queryParamMap.get('draftId'));
+    const draftId = Number.isInteger(draftIdParam) && draftIdParam > 0 ? draftIdParam : null;
+
     try {
       const [bootstrap, formationResponse] = await Promise.all([
         this.api.getBootstrap(),
@@ -316,72 +341,78 @@ export class LineupPageComponent implements OnInit {
       this.roles.set(bootstrap.roles || []);
       this.formations.set(formationResponse.formations || []);
       this.slotsByFormation.set(formationResponse.slots_by_formation || {});
+      this.coordsByFormation.set(formationResponse.coords_by_formation || {});
+      this.canvasWidth.set(formationResponse.canvas_width || 900);
+      this.canvasHeight.set(formationResponse.canvas_height || 1400);
 
-      this.defaultLineupChannelId.set(bootstrap.default_lineup_channel_id || bootstrap.channels?.[0]?.id || '');
+      this.defaultLineupChannelId.set(bootstrap.channels?.[0]?.id || '');
+      this.form.timezone = bootstrap.default_timezone || this.form.timezone;
       if (this.formations().length && !this.formations().includes(this.form.formation)) {
         this.form.formation = this.formations()[0];
       }
-      this.restoreDraft();
-      this.form.channelId = this.defaultLineupChannelId();
-      this.onFormationChange();
+
+      if (draftId) {
+        await this.loadDraft(draftId);
+      } else {
+        this.restoreDraft();
+      }
+      if (!this.form.channelId) {
+        this.form.channelId = this.defaultLineupChannelId();
+      }
+      this.schedulePreview();
     } catch {
       this.snackbar.error('Failed to load channels or formations. Check API and bot permissions.');
     }
   }
 
-  protected persistDraft(): void {
-    try {
-      const payload = {
-        form: this.form,
-        assignedBySlot: this.assignedBySlot(),
-      };
-      localStorage.setItem(LINEUP_DRAFT_STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      // Ignore storage errors (private mode/quota/full).
+  protected goToStep(step: number): void {
+    if (step <= this.currentStep()) {
+      this.currentStep.set(step);
+      return;
     }
+    for (let current = this.currentStep(); current < step; current++) {
+      const error = this.validateStep(current);
+      if (error) { this.snackbar.error(error); return; }
+    }
+    this.currentStep.set(step);
   }
 
-  protected resetDraft(): void {
-    try {
-      localStorage.removeItem(LINEUP_DRAFT_STORAGE_KEY);
-    } catch {
-      // Ignore storage errors.
-    }
-
-    Object.assign(this.form, DEFAULT_LINEUP_FORM);
-    this.form.channelId = this.defaultLineupChannelId();
-    this.assignedBySlot.set({});
-
-    const previous = this.previewUrl();
-    if (previous) {
-      URL.revokeObjectURL(previous);
-    }
-    this.previewUrl.set('');
-    this.snackbar.info('Draft reset.');
+  protected next(): void {
+    const error = this.validateStep(this.currentStep());
+    if (error) { this.snackbar.error(error); return; }
+    this.currentStep.update(step => Math.min(4, step + 1));
   }
 
-  private restoreDraft(): void {
-    try {
-      const raw = localStorage.getItem(LINEUP_DRAFT_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as {
-        form?: Partial<LineupDraftForm>;
-        assignedBySlot?: Record<string, string>;
-      };
+  protected previous(): void {
+    this.currentStep.update(step => Math.max(1, step - 1));
+  }
 
-      if (parsed.form) {
-        Object.assign(this.form, parsed.form);
-      }
-      if (parsed.assignedBySlot && typeof parsed.assignedBySlot === 'object') {
-        this.assignedBySlot.set(parsed.assignedBySlot);
-      }
-    } catch {
-      // Ignore malformed storage payloads.
+  private validateStep(step: number): string | null {
+    if (step === 1) {
+      if (!this.form.title.trim()) return 'Enter a lineup title.';
+      if (!this.form.formation) return 'Choose a formation.';
+      if (!this.form.kickoffDate) return 'Choose a kickoff date.';
+      if (!this.form.kickoffTime) return 'Choose a kickoff time.';
     }
+    if (step === 2) {
+      if (!this.filledSlotCount()) return 'Assign at least one player to a position.';
+    }
+    if (step === 3) {
+      if (!this.form.channelId) return 'Select a post channel.';
+    }
+    return null;
   }
 
   protected currentSlots(): string[] {
     return this.slotsByFormation()[this.form.formation] || ['gk'];
+  }
+
+  protected filledSlotCount(): number {
+    return this.currentSlots().filter(slot => !!this.assignedBySlot()[slot]).length;
+  }
+
+  protected initials(name: string): string {
+    return name.split(/\s+/).map(part => part.slice(0, 1)).join('').slice(0, 2).toUpperCase();
   }
 
   protected onFormationChange(): void {
@@ -394,6 +425,8 @@ export class LineupPageComponent implements OnInit {
     }
     this.assignedBySlot.set(next);
     this.persistDraft();
+    this.schedulePreview();
+    this.drawCanvas();
   }
 
   protected dragMember(memberId: string): void {
@@ -412,6 +445,17 @@ export class LineupPageComponent implements OnInit {
     event.preventDefault();
   }
 
+  protected onCanvasDragStart(event: DragEvent): void {
+    const slot = this.hitTestSlot(event.clientX, event.clientY);
+    const memberId = slot ? this.assignedBySlot()[slot] : '';
+    if (!memberId) {
+      event.preventDefault();
+      return;
+    }
+    this.draggedMemberId.set(memberId);
+    event.dataTransfer?.setData('text/plain', memberId);
+  }
+
   protected dropToSlot(slot: string, event: DragEvent): void {
     event.preventDefault();
     const memberId = this.draggedMemberId();
@@ -425,6 +469,131 @@ export class LineupPageComponent implements OnInit {
     this.assignedBySlot.set(next);
     this.draggedMemberId.set('');
     this.persistDraft();
+    this.schedulePreview();
+    this.drawCanvas();
+  }
+
+  protected dropToCanvas(event: DragEvent): void {
+    event.preventDefault();
+    this.hoverSlot.set('');
+    const slot = this.hitTestSlot(event.clientX, event.clientY);
+    if (!slot) return;
+    this.dropToSlot(slot, event);
+  }
+
+  protected onCanvasDragOver(event: DragEvent): void {
+    event.preventDefault();
+    this.hoverSlot.set(this.hitTestSlot(event.clientX, event.clientY));
+  }
+
+  protected onCanvasDragLeave(): void {
+    this.hoverSlot.set('');
+  }
+
+  protected onCanvasClick(event: MouseEvent): void {
+    const slot = this.hitTestSlot(event.clientX, event.clientY);
+    if (!slot || !this.assignedBySlot()[slot]) return;
+    const next: Record<string, string> = { ...this.assignedBySlot() };
+    delete next[slot];
+    this.assignedBySlot.set(next);
+    this.persistDraft();
+    this.schedulePreview();
+    this.drawCanvas();
+  }
+
+  private hitTestSlot(clientX: number, clientY: number): string {
+    const canvasEl = this.pitchCanvas()?.nativeElement;
+    if (!canvasEl) return '';
+    const rect = canvasEl.getBoundingClientRect();
+    if (!rect.width || !rect.height) return '';
+    const scaleX = canvasEl.width / rect.width;
+    const scaleY = canvasEl.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
+    const coords = this.coordsByFormation()[this.form.formation] || {};
+    let nearestSlot = '';
+    let nearestDist = Infinity;
+    for (const slot of this.currentSlots()) {
+      const point = coords[slot];
+      if (!point) continue;
+      const dist = Math.hypot(point[0] - x, point[1] + PLAYER_MARKER_Y_OFFSET - y);
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestSlot = slot;
+      }
+    }
+    return nearestDist <= 70 ? nearestSlot : '';
+  }
+
+  private drawCanvas(): void {
+    const canvasEl = this.pitchCanvas()?.nativeElement;
+    if (!canvasEl) return;
+    const ctx = canvasEl.getContext('2d');
+    if (!ctx) return;
+
+    canvasEl.width = this.canvasWidth();
+    canvasEl.height = this.canvasHeight();
+    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+
+    if (this.previewImage) {
+      ctx.drawImage(this.previewImage, 0, 0, canvasEl.width, canvasEl.height);
+    } else {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+      ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+    }
+
+    const coords = this.coordsByFormation()[this.form.formation] || {};
+    const hovered = this.hoverSlot();
+    const radius = 46;
+    for (const slot of this.currentSlots()) {
+      const point = coords[slot];
+      if (!point) continue;
+      const x = point[0];
+      const y = point[1] + PLAYER_MARKER_Y_OFFSET;
+      const filled = !!this.assignedBySlot()[slot];
+      const isHovered = slot === hovered;
+
+      // The rendered PNG already draws a shirt + name plate for filled slots,
+      // so only mark empty ones here to avoid double markers.
+      if (filled && !isHovered) continue;
+
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = isHovered ? 'rgba(234, 233, 5, 0.35)' : 'rgba(15, 23, 42, 0.4)';
+      ctx.fill();
+      ctx.setLineDash(isHovered ? [] : [8, 6]);
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = isHovered ? '#eae905' : 'rgba(255, 255, 255, 0.75)';
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (!filled) {
+        ctx.fillStyle = '#e5e7eb';
+        ctx.font = '600 22px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(slot, x, y);
+      }
+    }
+  }
+
+  private loadPreviewImage(url: string): void {
+    if (!url) {
+      this.previewImage = null;
+      this.drawCanvas();
+      return;
+    }
+    const image = new Image();
+    const previous = this.previewImage;
+    image.onload = () => {
+      this.previewImage = image;
+      this.drawCanvas();
+      if (previous) URL.revokeObjectURL(previous.src);
+    };
+    image.onerror = () => {
+      this.previewError.set('Preview image failed to load.');
+    };
+    image.src = url;
   }
 
   protected assignMemberToSlot(memberId: string, slot: string): void {
@@ -436,6 +605,8 @@ export class LineupPageComponent implements OnInit {
     this.assignedBySlot.set(next);
     this.selectedMobileMemberId.set('');
     this.persistDraft();
+    this.schedulePreview();
+    this.drawCanvas();
   }
 
   protected dropToPool(event: DragEvent): void {
@@ -450,18 +621,15 @@ export class LineupPageComponent implements OnInit {
     this.assignedBySlot.set(next);
     this.draggedMemberId.set('');
     this.persistDraft();
-  }
-
-  protected clearSlot(slot: string): void {
-    const next: Record<string, string> = { ...this.assignedBySlot() };
-    delete next[slot];
-    this.assignedBySlot.set(next);
-    this.persistDraft();
+    this.schedulePreview();
+    this.drawCanvas();
   }
 
   protected clearAllSlots(): void {
     this.assignedBySlot.set({});
     this.persistDraft();
+    this.schedulePreview();
+    this.drawCanvas();
   }
 
   protected assignedMemberName(slot: string): string {
@@ -469,6 +637,29 @@ export class LineupPageComponent implements OnInit {
     if (!memberId) return '';
     const member = this.members().find(item => item.id === memberId);
     return member?.display_name || '';
+  }
+
+  protected channelName(): string {
+    return this.channels().find(channel => channel.id === this.form.channelId)?.name || 'No channel selected';
+  }
+
+  protected roleOptions(): { value: string; label: string }[] {
+    return this.roles().map(role => ({ value: role.id, label: `@${role.name}` }));
+  }
+
+  protected onRolesChange(next: string[]): void {
+    this.form.mentionRoleIds = next;
+    this.persistDraft();
+  }
+
+  protected openNativePicker(input: HTMLInputElement): void {
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker();
+      } catch {
+        // Ignore: showPicker requires a user gesture and can be a no-op in some browsers.
+      }
+    }
   }
 
   private lineupPlayersPayload(): Record<string, string> {
@@ -489,87 +680,128 @@ export class LineupPageComponent implements OnInit {
       .filter(value => value.length > 0);
   }
 
-  protected toggleRolePicker(): void {
-    this.rolePickerOpen.update(value => !value);
-  }
-
-  protected isRoleSelected(roleId: string): boolean {
-    return this.form.mentionRoleIds.includes(roleId);
-  }
-
-  protected toggleRoleSelection(roleId: string): void {
-    if (this.form.mentionRoleIds.includes(roleId)) {
-      this.form.mentionRoleIds = this.form.mentionRoleIds.filter(value => value !== roleId);
-    } else {
-      this.form.mentionRoleIds = [...this.form.mentionRoleIds, roleId];
-    }
-    this.persistDraft();
-  }
-
-  protected selectedRolesSummary(): string {
-    if (!this.form.mentionRoleIds.length) return 'No mention roles selected';
-    const roleNames = this.roles()
-      .filter(role => this.form.mentionRoleIds.includes(role.id))
-      .map(role => `@${role.name}`);
-    if (!roleNames.length) return `${this.form.mentionRoleIds.length} role(s) selected`;
-    return roleNames.join(', ');
-  }
-
-  protected openNativePicker(input: HTMLInputElement): void {
-    if (typeof input.showPicker === 'function') {
-      input.showPicker();
-    }
-  }
-
-  async previewLineup(): Promise<void> {
-    this.previewing.set(true);
-
+  protected formattedKickoff(): string {
+    if (!this.form.kickoffDate || !this.form.kickoffTime) return 'Not set';
     try {
-      const kickoffAt = this.form.kickoffDate && this.form.kickoffTime
-        ? new Date(`${this.form.kickoffDate}T${this.form.kickoffTime}:00`).toISOString()
-        : null;
-      const players = this.lineupPlayersPayload();
+      return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(`${this.form.kickoffDate}T${this.form.kickoffTime}:00`));
+    } catch {
+      return `${this.form.kickoffDate} ${this.form.kickoffTime}`;
+    }
+  }
 
+  private kickoffAtIso(): string | null {
+    return this.form.kickoffDate && this.form.kickoffTime
+      ? wallTimeToUtcIso(this.form.kickoffDate, this.form.kickoffTime, this.form.timezone)
+      : null;
+  }
+
+  private schedulePreview(): void {
+    if (this.previewTimer) clearTimeout(this.previewTimer);
+    this.previewTimer = setTimeout(() => void this.renderPreview(), 300);
+  }
+
+  protected async renderPreview(): Promise<void> {
+    try {
       const blob = await this.api.renderLineupPreview({
         formation: this.form.formation,
-        title: this.form.title.trim(),
-        players,
-        kickoff_at: kickoffAt,
+        title: this.form.title.trim() || 'RYVL Match Lineup',
+        players: this.lineupPlayersPayload(),
+        kickoff_at: this.kickoffAtIso(),
       });
 
-      const previous = this.previewUrl();
-      if (previous) URL.revokeObjectURL(previous);
+      this.previewError.set('');
       this.previewUrl.set(URL.createObjectURL(blob));
+      this.loadPreviewImage(this.previewUrl());
     } catch {
-      this.snackbar.error('Failed to render lineup preview. Check selected formation and players.');
-    } finally {
-      this.previewing.set(false);
+      this.previewError.set('Preview failed to render.');
+    }
+  }
+
+  protected persistDraft(): void {
+    try {
+      const payload = { form: this.form, assignedBySlot: this.assignedBySlot() };
+      localStorage.setItem(LINEUP_DRAFT_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // Ignore storage errors (private mode/quota/full).
+    }
+  }
+
+  private restoreDraft(): void {
+    try {
+      const raw = localStorage.getItem(LINEUP_DRAFT_STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as { form?: Partial<LineupDraftForm>; assignedBySlot?: Record<string, string> };
+      if (parsed.form) Object.assign(this.form, parsed.form);
+      this.form.kickoffDate = sanitizeDate(this.form.kickoffDate);
+      this.form.kickoffTime = sanitizeTime(this.form.kickoffTime);
+      if (parsed.assignedBySlot && typeof parsed.assignedBySlot === 'object') {
+        this.assignedBySlot.set(parsed.assignedBySlot);
+      }
+    } catch {
+      // Ignore malformed storage payloads.
+    }
+  }
+
+  protected async saveAsDraft(): Promise<void> {
+    const payload = {
+      title: this.form.title.trim() || 'RYVL Match Lineup',
+      channel_id: this.form.channelId,
+      formation: this.form.formation,
+      kickoff_at: this.kickoffAtIso(),
+      mention_role_ids: this.mentionRoleIds(),
+      assignments: { ...this.assignedBySlot() },
+    };
+    try {
+      const draft = this.draftId
+        ? await this.api.updateLineupDraft(this.draftId, payload)
+        : await this.api.saveLineupDraft(payload);
+      this.draftId = draft.id;
+      void this.draftCounts.refresh();
+      this.snackbar.success('Lineup saved as draft.');
+    } catch {
+      this.snackbar.error('Failed to save draft.');
+    }
+  }
+
+  private async loadDraft(id: number): Promise<void> {
+    try {
+      const drafts = await this.api.listLineupDrafts();
+      const draft = drafts.find(item => item.id === id);
+      if (!draft) return;
+      this.draftId = draft.id;
+      this.form.title = draft.title;
+      this.form.channelId = draft.channel_id;
+      this.form.formation = draft.formation;
+      this.form.mentionRoleIds = [...draft.mention_role_ids];
+      if (draft.kickoff_at) {
+        const date = new Date(draft.kickoff_at);
+        this.form.kickoffDate = sanitizeDate(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`);
+        this.form.kickoffTime = sanitizeTime(`${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`);
+      } else {
+        this.form.kickoffDate = sanitizeDate(undefined);
+        this.form.kickoffTime = sanitizeTime(undefined);
+      }
+      this.assignedBySlot.set({ ...draft.assignments });
+    } catch {
+      this.snackbar.error('Failed to load lineup draft.');
     }
   }
 
   async postLineup(): Promise<void> {
-    if (!this.form.channelId) {
-      this.snackbar.error('Select a channel before posting lineup.');
-      return;
+    for (const step of [1, 2, 3]) {
+      const error = this.validateStep(step);
+      if (error) { this.snackbar.error(error); this.currentStep.set(step); return; }
     }
 
     this.posting.set(true);
     try {
-      const kickoffAt = this.form.kickoffDate && this.form.kickoffTime
-        ? new Date(`${this.form.kickoffDate}T${this.form.kickoffTime}:00`).toISOString()
-        : null;
-      const players = this.lineupPlayersPayload();
-
       const result = await this.api.sendLineup({
         channel_id: this.form.channelId,
         title: this.form.title.trim(),
         formation: this.form.formation,
-        players,
-        kickoff_at: kickoffAt,
+        players: this.lineupPlayersPayload(),
+        kickoff_at: this.kickoffAtIso(),
         mention_role_ids: this.mentionRoleIds(),
-        message_prefix: this.form.messagePrefix || null,
-        message_suffix: this.form.messageSuffix || null,
-        filename: this.form.filename || null,
       });
 
       this.snackbar.success(`Lineup posted. Message ID: ${result.message_id}`);

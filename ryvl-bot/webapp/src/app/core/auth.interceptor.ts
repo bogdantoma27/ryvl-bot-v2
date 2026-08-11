@@ -28,15 +28,7 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
         }
         forcedLogoutInProgress = true;
         api.setSessionToken(null);
-        const runtimeValue = String((window as Window & { __RYVL_API_BASE_URL__?: string }).__RYVL_API_BASE_URL__ || '').trim();
-        let logoutUrl = '/api/auth/logout';
-        if (runtimeValue) {
-          logoutUrl = `${runtimeValue}/api/auth/logout`;
-        } else if (window.location.hostname === 'localhost' && window.location.port === '4200') {
-          logoutUrl = 'http://localhost:8000/api/auth/logout';
-        } else if (window.location.origin) {
-          logoutUrl = `${window.location.origin}/api/auth/logout`;
-        }
+        const logoutUrl = `${api.getBaseUrl()}/api/auth/logout`;
         void fetch(logoutUrl, { method: 'POST', credentials: 'include' }).catch(() => undefined).finally(() => {
           const url = new URL(window.location.href);
           url.pathname = '/';

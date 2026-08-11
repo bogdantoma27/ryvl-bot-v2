@@ -1,90 +1,85 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { ChangeDetectionStrategy, Component, HostListener, OnInit, inject, signal } from '@angular/core';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs/operators';
 
 import { ApiService, AuthState } from './core/api.service';
+import { DraftCountsService } from './core/draft-counts.service';
 import { SnackbarService } from './core/snackbar.service';
+import { ThemeService } from './core/theme.service';
 
 @Component({
   selector: 'app-root',
   imports: [RouterOutlet, RouterLink, RouterLinkActive],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="min-h-screen bg-slate-950 text-slate-100">
-      <div class="mx-auto max-w-6xl px-4 py-6">
-        <header class="mb-6 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-          <div class="flex items-start justify-between gap-3 lg:items-center">
-            <div class="min-w-0">
-              <p class="text-xs font-semibold uppercase tracking-[0.3em] text-emerald-400">RYVL BOT</p>
-              <h1 class="text-xl font-semibold">Control Panel</h1>
-              @if (authState()) {
-                <p class="mt-1 text-xs text-slate-400">Signed in as {{ displayUserLabel(authState()!.user) }}</p>
+    <div class="app-shell">
+      @if (isAuthenticated()) {
+        <aside class="app-sidebar" [class.is-open]="mobileMenuOpen()">
+          <div class="sidebar-brand">
+            <span class="brand-mark">
+              @if (guildIconUrl()) {
+                <img [src]="guildIconUrl()" alt="" />
+              } @else {
+                <img [src]="brandIconUrl" alt="RYVL" />
               }
-            </div>
-
-            @if (isAuthenticated()) {
-              <button
-                type="button"
-                class="inline-flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100 transition hover:border-emerald-400/60 hover:text-emerald-300 lg:hidden"
-                (click)="toggleMobileMenu()"
-                [attr.aria-expanded]="mobileMenuOpen()"
-                aria-label="Toggle navigation menu"
-              >
-                <span class="space-y-1.5">
-                  <span class="block h-0.5 w-5 rounded-full bg-current"></span>
-                  <span class="block h-0.5 w-5 rounded-full bg-current"></span>
-                  <span class="block h-0.5 w-5 rounded-full bg-current"></span>
-                </span>
-              </button>
-
-              <div class="hidden lg:flex lg:items-center lg:justify-end lg:gap-2">
-                <nav class="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 text-sm lg:flex-wrap lg:overflow-visible lg:pb-0">
-                  @for (tab of tabs; track tab.path) {
-                    <a
-                      class="shrink-0 snap-start rounded-lg border border-slate-700 px-3 py-1.5 whitespace-nowrap transition hover:border-emerald-400/60 hover:text-emerald-300"
-                      [routerLink]="tab.path"
-                      routerLinkActive="border-emerald-400 bg-emerald-400/10 text-emerald-300"
-                    >
-                      {{ tab.label }}
-                    </a>
-                  }
-                </nav>
-
-                <button class="shrink-0 rounded-lg border border-rose-500/60 bg-rose-500/10 px-3 py-1.5 text-sm font-semibold text-rose-200 transition hover:bg-rose-500/20" (click)="logout()">Logout</button>
-              </div>
-            }
+            </span>
+            <div><strong>{{ guildName() }}</strong></div>
+            <button type="button" class="sidebar-close" (click)="closeMobileMenu()" aria-label="Close navigation">×</button>
           </div>
 
-          @if (isAuthenticated() && mobileMenuOpen()) {
-            <div class="mt-3 rounded-2xl border border-slate-800 bg-slate-950/80 p-3 lg:hidden">
-              <nav class="grid gap-2 text-sm">
-                @for (tab of tabs; track tab.path) {
-                  <a
-                    class="rounded-lg border border-slate-700 px-3 py-2 transition hover:border-emerald-400/60 hover:text-emerald-300"
-                    [routerLink]="tab.path"
-                    (click)="closeMobileMenu()"
-                    routerLinkActive="border-emerald-400 bg-emerald-400/10 text-emerald-300"
-                  >
-                    {{ tab.label }}
-                  </a>
-                }
-                <button class="rounded-lg border border-rose-500/60 bg-rose-500/10 px-3 py-2 text-left font-semibold text-rose-200 transition hover:bg-rose-500/20" (click)="logout()">Logout</button>
-              </nav>
-            </div>
-          }
-        </header>
+          <nav class="sidebar-nav" aria-label="Primary navigation">
+            <p class="sidebar-label">Workspace</p>
+            <a class="sidebar-link sidebar-parent" routerLink="/events" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }"><span>▣</span> Events</a>
+            <a class="sidebar-link sidebar-child" routerLink="/events/drafts" routerLinkActive="is-active">Drafts @if (draftCounts.eventDrafts() > 0) { <span class="sidebar-count">{{ draftCounts.eventDrafts() }}</span> }</a>
+            <a class="sidebar-link sidebar-child" routerLink="/events/recurring" routerLinkActive="is-active">Recurring</a>
+            <a class="sidebar-link sidebar-child" routerLink="/events/scheduled" routerLinkActive="is-active">Scheduled</a>
+            <a class="sidebar-link sidebar-parent" routerLink="/lineup" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }"><span>◆</span> Lineup</a>
+            <a class="sidebar-link sidebar-child" routerLink="/lineup/drafts" routerLinkActive="is-active">Drafts @if (draftCounts.lineupDrafts() > 0) { <span class="sidebar-count">{{ draftCounts.lineupDrafts() }}</span> }</a>
+            <a class="sidebar-link sidebar-parent" routerLink="/vpg" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }"><span>⚽</span> League centre</a>
+            <a class="sidebar-link sidebar-child" routerLink="/vpg/schedules" routerLinkActive="is-active">Schedules</a>
+            <a class="sidebar-link sidebar-child" routerLink="/vpg/transfers" routerLinkActive="is-active">Transfers</a>
+            <p class="sidebar-label sidebar-label-spaced">Account</p>
+            <a class="sidebar-link" routerLink="/settings" routerLinkActive="is-active"><span>⚙</span> Account</a>
+          </nav>
 
-        <main>
+          <div class="sidebar-footer" [class.menu-open]="profileMenuOpen()">
+            @if (profileMenuOpen()) {
+              <div class="profile-menu">
+                <a class="profile-menu-item" routerLink="/settings" (click)="closeProfileMenu()"><span>⚙</span> Account</a>
+                <button type="button" class="profile-menu-item profile-menu-danger" (click)="logout()"><span>⏻</span> Sign out</button>
+              </div>
+            }
+            <button type="button" class="profile-button" (click)="toggleProfileMenu()" [attr.aria-expanded]="profileMenuOpen()">
+              @if (profileAvatarUrl()) {
+                <img class="profile-avatar profile-avatar-image" [src]="profileAvatarUrl()" alt="" />
+              } @else {
+                <span class="profile-avatar">{{ profileInitial() }}</span>
+              }
+              <span class="profile-copy"><strong>{{ profileName() }}</strong><small>{{ profileTag() }}</small></span>
+              <span>⋯</span>
+            </button>
+          </div>
+        </aside>
+        @if (profileMenuOpen()) {
+          <div class="profile-menu-backdrop" (click)="closeProfileMenu()"></div>
+        }
+        <button type="button" class="mobile-menu-button" (click)="toggleMobileMenu()" aria-label="Open navigation">☰</button>
+      }
+
+      <main class="app-main" [class.app-main-full]="!isAuthenticated()">
           @if (isAuthenticated()) {
             <div class="touch-pan-y" (touchstart)="handleSwipeStart($event)" (touchend)="handleSwipeEnd($event)">
               <router-outlet />
             </div>
           } @else {
-            <section class="rounded-2xl border border-slate-800 bg-slate-900/60 p-10 text-center">
-              <p class="mb-2 text-sm text-slate-300">Sign in to Discord to access this admin panel and manage attendance, lineup, and bot settings.</p>
-              <a class="mx-auto mt-4 inline-flex items-center justify-center rounded-xl bg-emerald-500 px-8 py-3 text-base font-semibold text-slate-950 transition hover:bg-emerald-400" [href]="loginUrl()">Sign in to Discord</a>
+            <section class="signed-out-card">
+              <img class="signed-out-mark signed-out-mark-image" [src]="guildIconUrl() || brandIconUrl" alt="RYVL" />
+              <h1>{{ guildName() }}</h1>
+              <p>Sign in with Discord to manage events, lineups, and posting settings for your server.</p>
+              <a class="primary-action" [href]="loginUrl()">Sign in with Discord</a>
             </section>
           }
-        </main>
+      </main>
 
         @if (snackbars().length) {
           <div class="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4">
@@ -111,7 +106,6 @@ import { SnackbarService } from './core/snackbar.service';
             </div>
           </div>
         }
-      </div>
     </div>
   `,
   styles: [],
@@ -120,21 +114,80 @@ export class App implements OnInit {
   private readonly api = inject(ApiService);
   private readonly router = inject(Router);
   private readonly snackbar = inject(SnackbarService);
+  protected readonly theme = inject(ThemeService);
+  protected readonly draftCounts = inject(DraftCountsService);
   private swipeStartX = 0;
   private swipeStartY = 0;
 
   protected readonly tabs = [
-    { path: '/attendance', label: 'Attendance' },
+    { path: '/events', label: 'Events' },
     { path: '/lineup', label: 'Lineup' },
-    { path: '/settings', label: 'Settings' },
-    { path: '/diagnostics', label: 'Diagnostics' },
+    { path: '/settings', label: 'Account' },
   ];
 
   protected readonly authState = signal<AuthState | null>(null);
   protected readonly isAuthenticated = signal(false);
   protected readonly loginUrl = signal('');
   protected readonly mobileMenuOpen = signal(false);
+  protected readonly profileMenuOpen = signal(false);
   protected readonly snackbars = this.snackbar.snackbars;
+  protected readonly guildIconUrl = signal<string | null>(null);
+  protected readonly guildName = signal('RYVL Esports');
+  protected readonly brandIconUrl = '/guild-icon.png';
+
+  protected profileName(): string {
+    const user = this.authState()?.user;
+    return user?.global_name?.trim() || user?.username || 'Discord user';
+  }
+
+  protected profileTag(): string {
+    const user = this.authState()?.user;
+    return `@${user?.username || 'discord-user'}`;
+  }
+
+  @HostListener('document:click', ['$event'])
+  protected onDocumentClick(event: MouseEvent): void {
+    if (!this.profileMenuOpen()) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest('.sidebar-footer')) return;
+    this.closeProfileMenu();
+  }
+
+  private async loadPublicGuildInfo(): Promise<void> {
+    try {
+      const info = await this.api.getPublicGuildInfo();
+      this.guildIconUrl.set(info.guild_icon_url);
+      this.guildName.set(info.guild_name || 'RYVL Esports');
+      this.updateFavicon(info.guild_icon_url);
+    } catch {
+      // Guild info is a nice-to-have on the sign-in screen; ignore failures.
+    }
+  }
+
+  private updateFavicon(iconUrl: string | null): void {
+    if (typeof document === 'undefined' || !iconUrl) return;
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (link) link.href = iconUrl;
+  }
+
+  protected profileInitial(): string {
+    return this.profileName().slice(0, 1).toUpperCase();
+  }
+
+  protected profileAvatarUrl(): string | null {
+    const user = this.authState()?.user;
+    if (!user?.avatar) return null;
+    const extension = user.avatar.startsWith('a_') ? 'gif' : 'png';
+    return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${extension}?size=64`;
+  }
+
+  protected toggleProfileMenu(): void {
+    this.profileMenuOpen.update(value => !value);
+  }
+
+  protected closeProfileMenu(): void {
+    this.profileMenuOpen.set(false);
+  }
 
   protected displayUserLabel(user: AuthState['user']): string {
     const discriminator = String(user.discriminator || '').trim();
@@ -194,13 +247,31 @@ export class App implements OnInit {
       const me = await this.api.authMe();
       this.authState.set(me);
       this.isAuthenticated.set(Boolean(me?.authenticated));
+      if (me?.authenticated) {
+        void this.draftCounts.refresh();
+        try {
+          const bootstrap = await this.api.getBootstrap();
+          this.guildIconUrl.set(bootstrap.guild_icon_url);
+          this.guildName.set(bootstrap.guild_name || 'RYVL Esports');
+          this.updateFavicon(bootstrap.guild_icon_url);
+        } catch {
+          this.guildIconUrl.set(null);
+        }
+      } else {
+        void this.loadPublicGuildInfo();
+      }
       if (me?.authenticated && typeof window !== 'undefined' && window.location.pathname === '/') {
-        await this.router.navigateByUrl('/attendance');
+        await this.router.navigateByUrl('/events');
       }
     } catch {
       this.authState.set(null);
       this.isAuthenticated.set(false);
+      void this.loadPublicGuildInfo();
     }
+
+    this.router.events.pipe(filter(event => event instanceof NavigationEnd)).subscribe(() => {
+      if (this.isAuthenticated()) void this.draftCounts.refresh();
+    });
   }
 
   protected async logout(): Promise<void> {
@@ -208,6 +279,7 @@ export class App implements OnInit {
       await this.api.logout();
     } finally {
       this.mobileMenuOpen.set(false);
+      this.profileMenuOpen.set(false);
       this.authState.set(null);
       this.isAuthenticated.set(false);
       const returnTo = this.buildReturnTo();

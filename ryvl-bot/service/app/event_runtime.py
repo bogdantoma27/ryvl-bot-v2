@@ -7,12 +7,12 @@ _revision = 0
 _lock = Lock()
 
 
-async def bump_attendance_revision() -> int:
+async def bump_event_revision() -> int:
     global _revision
     async with _lock:
         _revision += 1
         return _revision
 
 
-def get_attendance_revision() -> int:
+def get_event_revision() -> int:
     return _revision

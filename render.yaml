@@ -8,10 +8,6 @@ services:
     startCommand: uvicorn app.main:app --app-dir . --host 0.0.0.0 --port $PORT
     healthCheckPath: /healthz
     envVars:
-      - key: APP_ENV
-        value: production
-      - key: APP_NAME
-        value: RYVL Bot API
       - key: DATABASE_URL
         sync: false
       - key: ADMIN_APP_URL
@@ -28,28 +24,24 @@ services:
         sync: false
       - key: DISCORD_GUILD_ID
         sync: false
-      - key: ADMIN_ROLE_IDS
-        sync: false
-      - key: DEFAULT_ATTENDANCE_CHANNEL_ID
-        sync: false
-      - key: DEFAULT_LINEUP_CHANNEL_ID
-        sync: false
-      - key: SCHEDULER_INTERVAL_SECONDS
-        value: "30"
       - key: SESSION_SECRET
         generateValue: true
+      - key: VPG_API_BASE_URL
+        value: https://api.virtualprogaming.com/public
+      - key: VPG_CDN_BASE_URL
+        value: https://virtualprogaming.com/cdn-cgi/imagedelivery/cl8ocWLdmZDs72LEaQYaYw
+      - key: VPG_USER_AGENT
+        value: RYVLBot/1.0
 
   - type: web
     name: ryvl-bot-web
     runtime: static
     rootDir: ryvl-bot/webapp
-    buildCommand: npm ci && printf "window.__RYVL_API_BASE_URL__ = \"%s\";\n" "$NG_APP_API_BASE_URL" > public/runtime-config.js && npm run build
+    buildCommand: npm ci && npm run build
     staticPublishPath: dist/webapp/browser
     envVars:
       - key: NODE_VERSION
         value: 24.15.0
-      - key: NG_APP_API_BASE_URL
-        sync: false
     routes:
       - type: rewrite
         source: /*

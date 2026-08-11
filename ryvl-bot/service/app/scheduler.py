@@ -2,15 +2,17 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from app.attendance_service import close_due_events, list_due_publication_events, mark_event_open_with_message
+from app.event_service import close_due_events, generate_next_batch, list_due_publication_events, mark_event_open_with_message
 from app.db import SessionLocal
+from app.models import EventSeries, EventSeriesStatus, RecurrenceType
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
 SCHEDULER_INTERVAL_SECONDS = 60
 
 
-class AttendanceScheduler:
+class EventScheduler:
     def __init__(self):
         self._running = False
         self._task: asyncio.Task | None = None
@@ -23,10 +25,18 @@ class AttendanceScheduler:
 
     async def _publish_due(self) -> list[int]:
         bot = self._bot
-        if bot is None or not bot.is_ready() or not hasattr(bot, "post_attendance_message"):
+        if bot is None or not bot.is_ready() or not hasattr(bot, "post_event_message"):
             return []
 
         with SessionLocal() as db:
+            series_ids = db.execute(
+                select(EventSeries.id).where(
+                    EventSeries.status == EventSeriesStatus.ACTIVE.value,
+                    EventSeries.recurrence == RecurrenceType.WEEKLY,
+                )
+            ).scalars().all()
+            for series_id in series_ids:
+                generate_next_batch(db, int(series_id))
             due_rows = list_due_publication_events(db)
 
         published: list[int] = []
@@ -34,10 +44,11 @@ class AttendanceScheduler:
             series = row["series"]
             event = row["event"]
             try:
-                message = await bot.post_attendance_message(
+                message = await bot.post_event_message(
                     channel_id=int(series["channel_id"]),
                     series=series,
                     event=event,
+                    mention_role_ids=series.get("mention_role_ids"),
                 )
                 with SessionLocal() as db:
                     mark_event_open_with_message(db, int(event["id"]), str(message.id))

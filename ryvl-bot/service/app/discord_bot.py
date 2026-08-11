@@ -10,17 +10,31 @@ import discord
 from discord import app_commands, TextChannel
 from discord.ext import commands
 
-from app.attendance_service import cancel_event_by_message_id, close_event, create_series, mark_event_open_with_message, remove_vote, reschedule_event, set_vote
+from app.event_service import cancel_event_by_message_id, close_event, create_series, mark_event_open_with_message, remove_vote, reschedule_event, set_vote
 from app.config import Settings
 from app.db import SessionLocal
 from app.lineup_formations import FORMATIONS
 from app.lineup_renderer import render_lineup_png
-from app.models import AttendanceSeries, VoteStatus
-from app.schemas import AttendanceCreateRequest, AttendanceRescheduleRequest, AttendanceVoteRequest
+from app.models import EventSeries, PostTimingMode, RecurrenceEndsMode, VoteStatus
+from app.schemas import EventCreateRequest, EventRescheduleRequest, EventVoteRequest
 from app.time_utils import format_dual_kickoff_lines
 
 logger = logging.getLogger(__name__)
-ATTENDANCE_BUTTON_PREFIX = "attendance_vote:"
+EVENT_VOTE_BUTTON_PREFIX = "attendance_vote:"
+
+
+def _validate_post_timing(mode: str, value: str | None) -> None:
+    normalized = str(value or "").strip()
+    if mode in {PostTimingMode.BEFORE_EVENT_START.value, PostTimingMode.AFTER_PREVIOUS_EVENT_ENDS.value}:
+        if normalized and (not normalized.isdigit() or not 0 <= int(normalized) <= 10080):
+            raise ValueError("post_timing_value must be minutes from 0 to 10080")
+    if mode == PostTimingMode.AT_SPECIFIC_TIME.value and normalized:
+        parts = normalized.split(",", 1)
+        if len(parts) != 2:
+            raise ValueError("at_specific_time must use weekday,HH:mm")
+        _parse_weekdays(parts[0], 0)
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", parts[1].strip()):
+            raise ValueError("at_specific_time must use weekday,HH:mm")
 
 
 class LineupSetupModal(discord.ui.Modal, title="Lineup Setup"):
@@ -164,11 +178,9 @@ class LineupWizardView(discord.ui.View):
         await self._refresh_message()
 
     async def _finish(self) -> None:
-        kickoff_line = ""
         kickoff_iso = ""
         kickoff_lines: list[str] = []
         if self.kickoff_at is not None:
-            kickoff_line = f"\nKickoff: <t:{int(self.kickoff_at.timestamp())}:F>"
             kickoff_iso = self.kickoff_at.isoformat()
             kickoff_lines = format_dual_kickoff_lines(self.kickoff_at)
 
@@ -189,10 +201,7 @@ class LineupWizardView(discord.ui.View):
         if not hasattr(channel, "send"):
             raise RuntimeError("Target channel cannot send messages")
 
-        dual_block = f"\n{kickoff_lines[0]}\n{kickoff_lines[1]}" if kickoff_lines else ""
-        content = f"**{self.title}**\nFormation: `{self.formation_key}`{kickoff_line}{dual_block}"
         message = await channel.send(
-            content=content,
             file=discord.File(BytesIO(image), filename=f"lineup-{self.formation_key}.png"),
         )
         if self.message is not None:
@@ -272,7 +281,7 @@ class LineupWizardView(discord.ui.View):
     async def on_timeout(self) -> None:
         if self.message is not None:
             try:
-                await self.message.edit(content="Lineup wizard expired. Please run /lineup_post again.", view=None)
+                        await self.message.edit(content="Lineup wizard expired. Please run /lineup_post again.", view=None)
             except Exception:
                 pass
 
@@ -287,12 +296,12 @@ def _count_votes(event: dict, status: str) -> int:
     return sum(1 for vote in event.get("votes", []) if vote.get("status") == status)
 
 
-def _attendance_closed(event: dict) -> bool:
+def _event_closed(event: dict) -> bool:
     status = str(event.get("status") or "").lower()
     return "closed" in status or "cancelled" in status
 
 
-def _attendance_cancelled(event: dict) -> bool:
+def _event_cancelled(event: dict) -> bool:
     status = str(event.get("status") or "").lower()
     return "cancelled" in status
 
@@ -306,7 +315,7 @@ def _names_for_status(event: dict, status: str) -> str:
     return _truncate("\n".join(names))
 
 
-def _attendance_embed(series: dict, event: dict) -> discord.Embed:
+def _event_embed(series: dict, event: dict) -> discord.Embed:
     dual_lines = format_dual_kickoff_lines(event["starts_at"])
 
     description_parts: list[str] = []
@@ -321,20 +330,20 @@ def _attendance_embed(series: dict, event: dict) -> discord.Embed:
         description_parts.append("Created by: System")
 
     description_parts.extend(dual_lines)
-    if not _attendance_closed(event):
+    if not _event_closed(event):
         description_parts.append("Click one button below to set or change your response.")
 
-    if _attendance_closed(event):
+    if _event_closed(event):
         description_parts.append("")
-        if _attendance_cancelled(event):
+        if _event_cancelled(event):
             description_parts.append("**Responses are cancelled.**")
         else:
             description_parts.append("**Responses are closed.**")
 
     embed = discord.Embed(
-        title=str(series.get("title") or "Attendance"),
+        title=str(series.get("title") or "Event"),
         description="\n".join(description_parts),
-        color=0x6B7280 if _attendance_closed(event) else 0x2563EB,
+        color=0x6B7280 if _event_closed(event) else 0x2563EB,
     )
 
     accepted = _count_votes(event, "accepted")
@@ -349,27 +358,27 @@ def _attendance_embed(series: dict, event: dict) -> discord.Embed:
     return embed
 
 
-def _attendance_buttons(event_id: int, *, disabled: bool) -> discord.ui.View:
+def _event_buttons(event_id: int, *, disabled: bool) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
     view.add_item(discord.ui.Button(
         label="Accept",
         emoji="✅",
         style=discord.ButtonStyle.success,
-        custom_id=f"{ATTENDANCE_BUTTON_PREFIX}{event_id}:accepted",
+        custom_id=f"{EVENT_VOTE_BUTTON_PREFIX}{event_id}:accepted",
         disabled=disabled,
     ))
     view.add_item(discord.ui.Button(
         label="Decline",
         emoji="❌",
         style=discord.ButtonStyle.danger,
-        custom_id=f"{ATTENDANCE_BUTTON_PREFIX}{event_id}:declined",
+        custom_id=f"{EVENT_VOTE_BUTTON_PREFIX}{event_id}:declined",
         disabled=disabled,
     ))
     view.add_item(discord.ui.Button(
         label="Tentative",
         emoji="🟡",
         style=discord.ButtonStyle.secondary,
-        custom_id=f"{ATTENDANCE_BUTTON_PREFIX}{event_id}:tentative",
+        custom_id=f"{EVENT_VOTE_BUTTON_PREFIX}{event_id}:tentative",
         disabled=disabled,
     ))
     return view
@@ -389,7 +398,7 @@ def _role_mentions(role_ids: list[str] | None) -> tuple[str | None, discord.Allo
     return " ".join(f"<@&{role_id}>" for role_id in cleaned), discord.AllowedMentions(everyone=False, users=False, roles=True)
 
 
-def _attendance_message_content(series: dict, event: dict) -> str:
+def _event_message_content(series: dict, event: dict) -> str:
     starts_at = int(event["starts_at"].timestamp())
     dual_lines = format_dual_kickoff_lines(event["starts_at"])
     accepted = _count_votes(event, "accepted")
@@ -405,8 +414,8 @@ def _attendance_message_content(series: dict, event: dict) -> str:
     )
 
 
-async def _sync_attendance_message(bot: commands.Bot, db, event: dict) -> None:
-    series = db.get(AttendanceSeries, int(event["series_id"]))
+async def _sync_event_message(bot: commands.Bot, db, event: dict) -> None:
+    series = db.get(EventSeries, int(event["series_id"]))
     if not series or not event.get("message_id"):
         return
 
@@ -422,19 +431,19 @@ async def _sync_attendance_message(bot: commands.Bot, db, event: dict) -> None:
         return
     await message.edit(
         content=message.content or None,
-        embed=_attendance_embed({
+        embed=_event_embed({
             "title": series.title,
             "description": series.description,
             "created_by_discord_id": series.created_by_discord_id,
         }, event),
-        view=_attendance_buttons(int(event["id"]), disabled=_attendance_closed(event)),
+        view=_event_buttons(int(event["id"]), disabled=_event_closed(event)),
     )
 
 
-async def _delete_attendance_message(bot: commands.Bot, db, event: dict) -> None:
+async def _delete_event_message(bot: commands.Bot, db, event: dict) -> None:
     if not event.get("message_id"):
         return
-    series = db.get(AttendanceSeries, int(event["series_id"]))
+    series = db.get(EventSeries, int(event["series_id"]))
     if not series:
         return
 
@@ -461,6 +470,26 @@ def _parse_datetime(date_raw: str, time_raw: str, timezone_name: str) -> datetim
     return local.astimezone(ZoneInfo("UTC"))
 
 
+def _parse_weekdays(value: str | None, fallback: int) -> list[int]:
+    names = {"mon": 0, "monday": 0, "tue": 1, "tuesday": 1, "wed": 2, "wednesday": 2, "thu": 3, "thursday": 3, "fri": 4, "friday": 4, "sat": 5, "saturday": 5, "sun": 6, "sunday": 6}
+    if not value or not value.strip():
+        return [fallback]
+    result: set[int] = set()
+    for token in value.lower().replace(";", ",").split(","):
+        token = token.strip()
+        if not token:
+            continue
+        if token.isdigit() and 0 <= int(token) <= 6:
+            result.add(int(token))
+        elif token in names:
+            result.add(names[token])
+        else:
+            raise ValueError("weekdays must be comma-separated names such as mon,tue,thu")
+    if not result:
+        raise ValueError("at least one weekday is required")
+    return sorted(result)
+
+
 class RyvlBot(commands.Bot):
     def __init__(self, settings: Settings):
         intents = discord.Intents.default()
@@ -470,7 +499,7 @@ class RyvlBot(commands.Bot):
         self.settings = settings
 
     async def setup_hook(self) -> None:
-        class AttendanceCreateModal(discord.ui.Modal, title="Attendance - Create Event"):
+        class EventCreateModal(discord.ui.Modal, title="Event - Create Event"):
             title_input = discord.ui.TextInput(
                 label="Title",
                 placeholder="Example: RYVL Training",
@@ -495,10 +524,10 @@ class RyvlBot(commands.Bot):
                 style=discord.TextStyle.paragraph,
             )
             recurrence_input = discord.ui.TextInput(
-                label="Recurrence + optional publish (HH:mm)",
-                placeholder="Examples: none | weekly 6 | weekly 6 18:00",
+                label="Recurrence settings",
+                placeholder="weekly mon,tue,thu|never||at_specific_time|sun,18:00",
                 required=False,
-                max_length=32,
+                max_length=200,
             )
 
             def __init__(self):
@@ -510,7 +539,7 @@ class RyvlBot(commands.Bot):
                 await interaction.response.defer(ephemeral=True)
                 self.stop()
 
-        class AttendanceVoteModal(discord.ui.Modal, title="Attendance - Set Vote"):
+        class EventVoteModal(discord.ui.Modal, title="Event - Set Vote"):
             event_id_input = discord.ui.TextInput(label="Event ID", required=True, max_length=32)
             status_input = discord.ui.TextInput(
                 label="Status (accepted|tentative|declined)",
@@ -527,7 +556,7 @@ class RyvlBot(commands.Bot):
                 await interaction.response.defer(ephemeral=True)
                 self.stop()
 
-        class AttendanceRescheduleModal(discord.ui.Modal, title="Attendance - Reschedule"):
+        class EventRescheduleModal(discord.ui.Modal, title="Event - Reschedule"):
             event_id_input = discord.ui.TextInput(label="Event ID", required=True, max_length=32)
             date_input = discord.ui.TextInput(label="New date (YYYY-MM-DD)", required=True, max_length=10)
             time_input = discord.ui.TextInput(label="New time (HH:mm)", required=True, max_length=5)
@@ -552,7 +581,7 @@ class RyvlBot(commands.Bot):
                 await interaction.response.defer(ephemeral=True)
                 self.stop()
 
-        class AttendanceCloseModal(discord.ui.Modal, title="Attendance - Close Event"):
+        class EventCloseModal(discord.ui.Modal, title="Event - Close Event"):
             event_id_input = discord.ui.TextInput(label="Event ID", required=True, max_length=32)
 
             def __init__(self):
@@ -564,7 +593,7 @@ class RyvlBot(commands.Bot):
                 await interaction.response.defer(ephemeral=True)
                 self.stop()
 
-        class AttendanceRemoveVoteModal(discord.ui.Modal, title="Attendance - Remove Vote"):
+        class EventRemoveVoteModal(discord.ui.Modal, title="Event - Remove Vote"):
             event_id_input = discord.ui.TextInput(label="Event ID", required=True, max_length=32)
             user_input = discord.ui.TextInput(
                 label="User mention or user ID",
@@ -582,7 +611,7 @@ class RyvlBot(commands.Bot):
                 await interaction.response.defer(ephemeral=True)
                 self.stop()
 
-        class AttendanceWizardView(discord.ui.View):
+        class EventWizardView(discord.ui.View):
             def __init__(self, *, bot: "RyvlBot", owner_id: int):
                 super().__init__(timeout=900)
                 self.bot = bot
@@ -594,32 +623,28 @@ class RyvlBot(commands.Bot):
 
             def _text(self) -> str:
                 return (
-                    "**Attendance Wizard**\n"
+                    "**Event Wizard**\n"
                     "Choose an action below.\n"
-                    "- Create: new attendance event\n"
+                    "- Create: new event\n"
                     "- Vote: set your response\n"
                     "- Reschedule: move an event\n"
                     "- Close: close responses\n"
                     "- Remove Vote: remove a user vote\n\n"
                     "**Create format help (Recurrence field):**\n"
                     "`none`\n"
-                    "`weekly 6`\n"
-                    "`weekly 6 18:00` (same appearance time for all occurrences)\n"
-                    "`weekly 6 -,18:00,18:00,18:00,18:00,18:00`\n"
-                    "(first `-` means occurrence #1 posts instantly)"
+                    "`weekly mon,tue,thu|never||at_event_start`\n"
+                    "`weekly mon,tue,thu|after_count|6|before_event_start|60`\n"
+                    "`weekly mon,tue,thu|never||at_specific_time|sun,18:00`\n"
+                    "(fields: weekdays|ends mode|ends value|post mode|post value)"
                 )
 
             async def _send_owner_only(self, interaction: discord.Interaction) -> bool:
                 if self._is_owner(interaction):
                     return True
-                await interaction.response.send_message("Only the command author can use this attendance wizard.", ephemeral=True)
+                await interaction.response.send_message("Only the command author can use this event wizard.", ephemeral=True)
                 return False
 
             async def _resolve_channel(self, interaction: discord.Interaction) -> TextChannel | None:
-                if self.bot.settings.default_attendance_channel_id:
-                    fetched = self.bot.get_channel(int(self.bot.settings.default_attendance_channel_id))
-                    if isinstance(fetched, TextChannel):
-                        return fetched
                 if isinstance(interaction.channel, TextChannel):
                     return interaction.channel
                 return None
@@ -628,7 +653,7 @@ class RyvlBot(commands.Bot):
             async def create_action(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
                 if not await self._send_owner_only(interaction):
                     return
-                modal = AttendanceCreateModal()
+                modal = EventCreateModal()
                 await interaction.response.send_modal(modal)
                 timed_out = await modal.wait()
                 if timed_out or not modal.submitted:
@@ -636,7 +661,7 @@ class RyvlBot(commands.Bot):
 
                 channel_target = await self._resolve_channel(interaction)
                 if channel_target is None:
-                    await interaction.followup.send("No target channel found. Configure default attendance channel.", ephemeral=True)
+                    await interaction.followup.send("No target channel found. Configure a default event channel.", ephemeral=True)
                     return
 
                 title = str(modal.title_input.value or "").strip()
@@ -647,19 +672,40 @@ class RyvlBot(commands.Bot):
                 recurrence = "none"
                 repeat_count: int | None = None
                 publish_time_raw = ""
-                publish_times_raw: list[str | None] | None = None
+                weekdays_raw: list[int] = []
+                ends_mode_raw = RecurrenceEndsMode.NEVER.value
+                end_value_raw: str | None = None
+                post_timing_mode_raw = PostTimingMode.AT_EVENT_START.value
+                post_timing_value_raw: str | None = None
 
                 help_text = (
                     "Invalid recurrence format. Use one of:\n"
                     "- `none`\n"
                     "- `weekly 6`\n"
                     "- `weekly 6 18:00`\n"
-                    "- `weekly 6 -,18:00,18:00,18:00,18:00,18:00`"
+                    "- `weekly 6 18:00`"
                 )
 
+                if "|" in recurrence_raw:
+                    fields = [field.strip() for field in recurrence_raw.split("|")]
+                    recurrence = fields[0] if fields and fields[0] in {"none", "weekly"} else "none"
+                    if recurrence != "weekly" or len(fields) < 4 or len(fields) > 6:
+                        await interaction.followup.send(help_text, ephemeral=True)
+                        return
+                    try:
+                        weekdays_raw = _parse_weekdays(fields[1], 0)
+                    except ValueError as error:
+                        await interaction.followup.send(str(error), ephemeral=True)
+                        return
+                    ends_mode_raw = fields[2] or RecurrenceEndsMode.NEVER.value
+                    end_value_raw = fields[3] or None
+                    post_timing_mode_raw = fields[4] if len(fields) > 4 and fields[4] else PostTimingMode.AT_EVENT_START.value
+                    post_timing_value_raw = fields[5] if len(fields) > 5 and fields[5] else None
                 parts = recurrence_raw.split()
                 if parts:
-                    recurrence = parts[0] if parts[0] in {"none", "weekly"} else "none"
+                    if "|" in recurrence_raw:
+                        parts = []
+                    recurrence = parts[0] if parts and parts[0] in {"none", "weekly"} else recurrence
 
                     if recurrence == "none" and len(parts) > 1:
                         await interaction.followup.send(help_text, ephemeral=True)
@@ -678,22 +724,9 @@ class RyvlBot(commands.Bot):
                                 return
 
                             if "," in publish_token:
-                                parsed_list: list[str | None] = []
-                                for item in publish_token.split(","):
-                                    token = item.strip()
-                                    if token in {"", "-", "_", "none"}:
-                                        parsed_list.append(None)
-                                        continue
-                                    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", token):
-                                        await interaction.followup.send("Publish time list must use HH:mm or '-'.", ephemeral=True)
-                                        return
-                                    parsed_list.append(token)
-                                publish_times_raw = parsed_list
-                            else:
-                                publish_time_raw = publish_token
-
-                if repeat_count is None and publish_times_raw:
-                    repeat_count = len(publish_times_raw)
+                                await interaction.followup.send("Per-occurrence publish time lists are no longer supported. Use the posting mode fields.", ephemeral=True)
+                                return
+                            publish_time_raw = publish_token
 
                 if repeat_count is not None and repeat_count < 1:
                     await interaction.followup.send(help_text, ephemeral=True)
@@ -705,15 +738,25 @@ class RyvlBot(commands.Bot):
                     await interaction.followup.send("Invalid date/time. Use YYYY-MM-DD and HH:mm.", ephemeral=True)
                     return
 
-                if recurrence == "weekly" and repeat_count is not None and (repeat_count < 2 or repeat_count > 52):
+                if end_value_raw and ends_mode_raw == RecurrenceEndsMode.AFTER_COUNT.value:
+                    try:
+                        repeat_count = int(end_value_raw)
+                    except ValueError:
+                        repeat_count = None
+                try:
+                    end_date = _parse_datetime(end_value_raw, "23:59", self.bot.settings.default_timezone) if end_value_raw and ends_mode_raw == RecurrenceEndsMode.ON_DATE.value else None
+                except ValueError:
+                    await interaction.followup.send("The recurrence end date must use YYYY-MM-DD.", ephemeral=True)
+                    return
+
+                if recurrence == "weekly" and repeat_count is not None and (repeat_count < 1 or repeat_count > 52):
                     await interaction.followup.send("repeat_count must be between 2 and 52 for weekly events.", ephemeral=True)
                     return
 
-                if recurrence == "weekly" and publish_times_raw is not None and repeat_count is not None and len(publish_times_raw) != repeat_count:
-                    await interaction.followup.send(
-                        "For publish time lists, the number of entries must match repeat_count exactly.",
-                        ephemeral=True,
-                    )
+                try:
+                    _validate_post_timing(post_timing_mode_raw, post_timing_value_raw)
+                except ValueError as error:
+                    await interaction.followup.send(str(error), ephemeral=True)
                     return
 
                 if publish_time_raw and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", publish_time_raw):
@@ -721,16 +764,20 @@ class RyvlBot(commands.Bot):
                     return
 
                 with SessionLocal() as db:
-                    payload = AttendanceCreateRequest(
+                    payload = EventCreateRequest(
                         channel_id=str(channel_target.id),
                         title=title,
                         description=description,
                         timezone=self.bot.settings.default_timezone,
                         starts_at=starts_at,
                         publish_time=publish_time_raw or None,
-                        publish_times=publish_times_raw,
                         recurrence=recurrence,
                         repeat_count=repeat_count if recurrence == "weekly" else None,
+                        weekdays=weekdays_raw,
+                        ends_mode=ends_mode_raw,
+                        end_date=end_date,
+                        post_timing_mode=post_timing_mode_raw,
+                        post_timing_value=post_timing_value_raw,
                     )
                     series = create_series(
                         db,
@@ -738,24 +785,19 @@ class RyvlBot(commands.Bot):
                         guild_id=self.bot.settings.discord_guild_id,
                         created_by_discord_id=str(interaction.user.id),
                     )
-                    first_event = next((event for event in series.get("events", []) if event.get("occurrence_number") == 1), None)
-                    if first_event is None:
-                        await interaction.followup.send("Could not create first attendance occurrence.", ephemeral=True)
+                    first_events = [event for event in series.get("events", []) if event.get("batch_number") == 1]
+                    if not first_events:
+                        await interaction.followup.send("Could not create the first event occurrence.", ephemeral=True)
                         return
-                    if first_event.get("publish_at") and first_event["publish_at"] <= datetime.now(timezone.utc):
-                        message = await self.bot.post_attendance_message(
-                            channel_id=int(channel_target.id),
-                            series=series,
-                            event=first_event,
-                        )
-                        mark_event_open_with_message(db, int(first_event["id"]), str(message.id))
+                    posted_count = await self.bot.post_due_first_batch_events(db, series, int(channel_target.id))
+                    if posted_count:
                         await interaction.followup.send(
-                            f"Attendance created. Event ID `{first_event['id']}` posted in <#{channel_target.id}>.",
+                            f"Event created with {posted_count} polls posted in <#{channel_target.id}>.",
                             ephemeral=True,
                         )
                     else:
                         await interaction.followup.send(
-                            f"Attendance created. Event ID `{first_event['id']}` is scheduled and will publish at configured appearance time.",
+                            f"Event created with {len(first_events)} polls scheduled according to the posting rule.",
                             ephemeral=True,
                         )
 
@@ -763,7 +805,7 @@ class RyvlBot(commands.Bot):
             async def vote_action(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
                 if not await self._send_owner_only(interaction):
                     return
-                modal = AttendanceVoteModal()
+                modal = EventVoteModal()
                 await interaction.response.send_modal(modal)
                 timed_out = await modal.wait()
                 if timed_out or not modal.submitted:
@@ -785,7 +827,7 @@ class RyvlBot(commands.Bot):
                         event = set_vote(
                             db,
                             int(event_raw),
-                            AttendanceVoteRequest(
+                            EventVoteRequest(
                                 user_discord_id=str(interaction.user.id),
                                 display_name=interaction.user.display_name,
                                 status=vote_status,
@@ -798,9 +840,9 @@ class RyvlBot(commands.Bot):
                         await interaction.followup.send(str(error), ephemeral=True)
                         return
                     try:
-                        await _sync_attendance_message(self.bot, db, event)
+                        await _sync_event_message(self.bot, db, event)
                     except Exception:
-                        logger.exception("Failed to sync attendance message for event %s", event_raw)
+                        logger.exception("Failed to sync event message for event %s", event_raw)
 
                 await interaction.followup.send(f"Vote set to **{vote_status.value}** for event `{event_raw}`.", ephemeral=True)
 
@@ -808,7 +850,7 @@ class RyvlBot(commands.Bot):
             async def reschedule_action(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
                 if not await self._send_owner_only(interaction):
                     return
-                modal = AttendanceRescheduleModal()
+                modal = EventRescheduleModal()
                 await interaction.response.send_modal(modal)
                 timed_out = await modal.wait()
                 if timed_out or not modal.submitted:
@@ -838,7 +880,7 @@ class RyvlBot(commands.Bot):
                         event = reschedule_event(
                             db,
                             int(event_raw),
-                            AttendanceRescheduleRequest(
+                            EventRescheduleRequest(
                                 starts_at=starts_at,
                                 publish_time=publish_time_raw or None,
                                 scope=scope_raw,
@@ -851,9 +893,9 @@ class RyvlBot(commands.Bot):
                         await interaction.followup.send(str(error), ephemeral=True)
                         return
                     try:
-                        await _sync_attendance_message(self.bot, db, event)
+                        await _sync_event_message(self.bot, db, event)
                     except Exception:
-                        logger.exception("Failed to sync attendance message for event %s", event_raw)
+                        logger.exception("Failed to sync event message for event %s", event_raw)
 
                 await interaction.followup.send(
                     f"Event `{event_raw}` rescheduled to {date_raw} {time_raw} ({self.bot.settings.default_timezone}).",
@@ -864,7 +906,7 @@ class RyvlBot(commands.Bot):
             async def close_action(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
                 if not await self._send_owner_only(interaction):
                     return
-                modal = AttendanceCloseModal()
+                modal = EventCloseModal()
                 await interaction.response.send_modal(modal)
                 timed_out = await modal.wait()
                 if timed_out or not modal.submitted:
@@ -882,9 +924,9 @@ class RyvlBot(commands.Bot):
                         await interaction.followup.send("Event not found.", ephemeral=True)
                         return
                     try:
-                        await _sync_attendance_message(self.bot, db, event)
+                        await _sync_event_message(self.bot, db, event)
                     except Exception:
-                        logger.exception("Failed to sync attendance message for event %s", event_raw)
+                        logger.exception("Failed to sync event message for event %s", event_raw)
 
                 await interaction.followup.send(f"Event `{event_raw}` closed.", ephemeral=True)
 
@@ -892,7 +934,7 @@ class RyvlBot(commands.Bot):
             async def remove_vote_action(self, interaction: discord.Interaction, _: discord.ui.Button) -> None:
                 if not await self._send_owner_only(interaction):
                     return
-                modal = AttendanceRemoveVoteModal()
+                modal = EventRemoveVoteModal()
                 await interaction.response.send_modal(modal)
                 timed_out = await modal.wait()
                 if timed_out or not modal.submitted:
@@ -920,9 +962,9 @@ class RyvlBot(commands.Bot):
                         await interaction.followup.send(str(error), ephemeral=True)
                         return
                     try:
-                        await _sync_attendance_message(self.bot, db, event)
+                        await _sync_event_message(self.bot, db, event)
                     except Exception:
-                        logger.exception("Failed to sync attendance message for event %s", event_raw)
+                        logger.exception("Failed to sync event message for event %s", event_raw)
 
                 await interaction.followup.send(
                     f"Removed vote for <@{user_id}> from event `{event_raw}`.",
@@ -935,13 +977,13 @@ class RyvlBot(commands.Bot):
                     return
                 await interaction.response.defer(ephemeral=True)
                 if self.message is not None:
-                    await self.message.edit(content="Attendance wizard closed.", view=None)
+                        await self.message.edit(content="Event wizard closed.", view=None)
                 self.stop()
 
             async def on_timeout(self) -> None:
                 if self.message is not None:
                     try:
-                        await self.message.edit(content="Attendance wizard expired. Run /attendance_wizard again.", view=None)
+                        await self.message.edit(content="Event wizard expired. Run /event_wizard again.", view=None)
                     except Exception:
                         pass
 
@@ -962,43 +1004,57 @@ class RyvlBot(commands.Bot):
         async def ping(interaction: discord.Interaction):
             await interaction.response.send_message("pong", ephemeral=True)
 
-        @self.tree.command(name="attendance_create", description="Create attendance event")
+        @self.tree.command(name="event_create", description="Create an event or recurring event")
         @app_commands.default_permissions(administrator=True)
         @app_commands.describe(
-            title="Public title shown in Discord for this attendance event",
+            title="Public title shown in Discord for this event",
             date="Kickoff date in YYYY-MM-DD format",
             time="Kickoff time in HH:mm format (24h)",
-            publish_time="Optional HH:mm when event should appear (not kickoff)",
-            channel="Target Discord text channel (optional if default attendance channel is configured)",
-            description="Optional details shown under the attendance title",
+            weekdays="For weekly events: comma-separated weekdays, for example mon,tue,thu",
+            channel="Target Discord text channel (optional if a default event channel is configured)",
+            description="Optional details shown under the event title",
             recurrence="Choose one time or weekly recurrence",
-            repeat_count="For weekly recurrence only: how many occurrences (2-52)",
+            ends_mode="When a weekly recurrence should stop",
+            ends_value="Weeks count or YYYY-MM-DD, depending on ends_mode",
+            post_timing_mode="When polls should be posted",
+            post_timing_value="Minutes for offset modes, or weekday,HH:mm for a fixed time",
         )
         @app_commands.choices(
             recurrence=[
                 app_commands.Choice(name="One time", value="none"),
                 app_commands.Choice(name="Weekly", value="weekly"),
-            ]
+            ],
+            ends_mode=[
+                app_commands.Choice(name="Never", value="never"),
+                app_commands.Choice(name="After a number of weeks", value="after_count"),
+                app_commands.Choice(name="On a date", value="on_date"),
+            ],
+            post_timing_mode=[
+                app_commands.Choice(name="When the event starts", value="at_event_start"),
+                app_commands.Choice(name="Before the event starts", value="before_event_start"),
+                app_commands.Choice(name="When the previous event ends", value="when_previous_event_ends"),
+                app_commands.Choice(name="After the previous event ends", value="after_previous_event_ends"),
+                app_commands.Choice(name="At a specific time", value="at_specific_time"),
+            ],
         )
-        async def attendance_create(
+        async def event_create(
             interaction: discord.Interaction,
             title: str,
             date: str,
             time: str,
-            publish_time: Optional[str] = None,
+            weekdays: Optional[str] = None,
             channel: Optional[TextChannel] = None,
             description: str = "Respond with accept, tentative or decline.",
             recurrence: str = "none",
-            repeat_count: Optional[int] = None,
+            ends_mode: str = "never",
+            ends_value: Optional[str] = None,
+            post_timing_mode: str = "at_event_start",
+            post_timing_value: Optional[str] = None,
         ):
             await interaction.response.defer(ephemeral=True)
             channel_target = channel
-            if channel_target is None and self.settings.default_attendance_channel_id:
-                fetched = self.get_channel(int(self.settings.default_attendance_channel_id))
-                if isinstance(fetched, TextChannel):
-                    channel_target = fetched
             if channel_target is None:
-                await interaction.followup.send("No channel provided and no default attendance channel configured.", ephemeral=True)
+                await interaction.followup.send("No channel provided. Specify a channel for this event.", ephemeral=True)
                 return
 
             try:
@@ -1007,24 +1063,33 @@ class RyvlBot(commands.Bot):
                 await interaction.followup.send("Invalid date/time. Use date YYYY-MM-DD and time HH:mm.", ephemeral=True)
                 return
 
-            if recurrence == "weekly" and repeat_count is not None and (repeat_count < 2 or repeat_count > 52):
-                await interaction.followup.send("repeat_count must be between 2 and 52 for weekly events.", ephemeral=True)
-                return
-            publish_time_value = str(publish_time or "").strip() or None
-            if publish_time_value and not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", publish_time_value):
-                await interaction.followup.send("Publish time must use HH:mm.", ephemeral=True)
+            try:
+                weekday_values = _parse_weekdays(weekdays, starts_at.astimezone(ZoneInfo(self.settings.default_timezone)).weekday()) if recurrence == "weekly" else []
+                repeat_count = int(ends_value) if recurrence == "weekly" and ends_mode == RecurrenceEndsMode.AFTER_COUNT.value and ends_value else None
+                end_date = _parse_datetime(ends_value, "23:59", self.settings.default_timezone) if recurrence == "weekly" and ends_mode == RecurrenceEndsMode.ON_DATE.value and ends_value else None
+                if ends_mode == RecurrenceEndsMode.AFTER_COUNT.value and (repeat_count is None or repeat_count < 1 or repeat_count > 52):
+                    raise ValueError("ends_value must be a number of weeks between 1 and 52")
+                if ends_mode == RecurrenceEndsMode.ON_DATE.value and end_date is None:
+                    raise ValueError("ends_value must use YYYY-MM-DD for an on-date recurrence")
+                _validate_post_timing(post_timing_mode, post_timing_value)
+            except ValueError as error:
+                await interaction.followup.send(str(error), ephemeral=True)
                 return
 
             with SessionLocal() as db:
-                payload = AttendanceCreateRequest(
+                payload = EventCreateRequest(
                     channel_id=str(channel_target.id),
                     title=title,
                     description=description,
                     timezone=self.settings.default_timezone,
                     starts_at=starts_at,
-                    publish_time=publish_time_value,
+                    post_timing_mode=post_timing_mode,
+                    post_timing_value=str(post_timing_value or "").strip() or None,
                     recurrence=recurrence,
                     repeat_count=repeat_count if recurrence == "weekly" else None,
+                    weekdays=weekday_values,
+                    ends_mode=ends_mode,
+                    end_date=end_date,
                 )
                 series = create_series(
                     db,
@@ -1032,31 +1097,26 @@ class RyvlBot(commands.Bot):
                     guild_id=self.settings.discord_guild_id,
                     created_by_discord_id=str(interaction.user.id),
                 )
-                first_event = next((event for event in series.get("events", []) if event.get("occurrence_number") == 1), None)
-                if first_event is None:
-                    await interaction.followup.send("Could not create first attendance occurrence.", ephemeral=True)
+                first_events = [event for event in series.get("events", []) if event.get("batch_number") == 1]
+                if not first_events:
+                    await interaction.followup.send("Could not create first event occurrence.", ephemeral=True)
                     return
-                if first_event.get("publish_at") and first_event["publish_at"] <= datetime.now(timezone.utc):
-                    message = await self.post_attendance_message(
-                        channel_id=int(channel_target.id),
-                        series=series,
-                        event=first_event,
-                    )
-                    mark_event_open_with_message(db, int(first_event["id"]), str(message.id))
+                posted_count = await self.post_due_first_batch_events(db, series, int(channel_target.id))
+                if posted_count:
                     await interaction.followup.send(
-                        f"Attendance created. Event ID `{first_event['id']}` posted in <#{channel_target.id}>.",
+                        f"Event created with {posted_count} polls posted in <#{channel_target.id}>.",
                         ephemeral=True,
                     )
                 else:
                     await interaction.followup.send(
-                        f"Attendance created. Event ID `{first_event['id']}` is scheduled and will publish at configured appearance time.",
+                        f"Event created with {len(first_events)} polls scheduled according to the posting rule.",
                         ephemeral=True,
                     )
 
-        @self.tree.command(name="attendance_vote", description="Set your attendance vote for an event")
+        @self.tree.command(name="event_vote", description="Set your event response")
         @app_commands.describe(
-            event_id="Attendance event ID visible in the attendance message footer",
-            status="Your response for the selected attendance event",
+            event_id="Event ID visible in the event message footer",
+            status="Your response for the selected event",
         )
         @app_commands.choices(
             status=[
@@ -1065,7 +1125,7 @@ class RyvlBot(commands.Bot):
                 app_commands.Choice(name="Declined", value="declined"),
             ]
         )
-        async def attendance_vote(
+        async def event_vote(
             interaction: discord.Interaction,
             event_id: int,
             status: str,
@@ -1082,7 +1142,7 @@ class RyvlBot(commands.Bot):
                     event = set_vote(
                         db,
                         event_id,
-                        AttendanceVoteRequest(
+                        EventVoteRequest(
                             user_discord_id=str(interaction.user.id),
                             display_name=interaction.user.display_name,
                             status=vote_status,
@@ -1096,16 +1156,16 @@ class RyvlBot(commands.Bot):
                     return
 
                 try:
-                    await _sync_attendance_message(self, db, event)
+                    await _sync_event_message(self, db, event)
                 except Exception:
-                    logger.exception("Failed to sync attendance message for event %s", event_id)
+                    logger.exception("Failed to sync event message for event %s", event_id)
 
             await interaction.followup.send(f"Vote set to **{vote_status.value}** for event `{event_id}`.", ephemeral=True)
 
-        @self.tree.command(name="attendance_reschedule", description="Reschedule an attendance event")
+        @self.tree.command(name="event_reschedule", description="Reschedule an event")
         @app_commands.default_permissions(administrator=True)
         @app_commands.describe(
-            event_id="Attendance event ID to reschedule",
+            event_id="Event ID to reschedule",
             date="New kickoff date in YYYY-MM-DD format",
             time="New kickoff time in HH:mm format (24h)",
             publish_time="Optional HH:mm when event should appear (not kickoff)",
@@ -1117,7 +1177,7 @@ class RyvlBot(commands.Bot):
                 app_commands.Choice(name="This and following", value="this_and_following"),
             ]
         )
-        async def attendance_reschedule(
+        async def event_reschedule(
             interaction: discord.Interaction,
             event_id: int,
             date: str,
@@ -1141,7 +1201,7 @@ class RyvlBot(commands.Bot):
                     event = reschedule_event(
                         db,
                         event_id,
-                        AttendanceRescheduleRequest(
+                        EventRescheduleRequest(
                             starts_at=starts_at,
                             publish_time=publish_time_value,
                             scope=scope,
@@ -1155,19 +1215,19 @@ class RyvlBot(commands.Bot):
                     return
 
                 try:
-                    await _sync_attendance_message(self, db, event)
+                    await _sync_event_message(self, db, event)
                 except Exception:
-                    logger.exception("Failed to sync attendance message for event %s", event_id)
+                    logger.exception("Failed to sync event message for event %s", event_id)
 
             await interaction.followup.send(
                 f"Event `{event_id}` rescheduled to {date} {time} ({self.settings.default_timezone}).",
                 ephemeral=True,
             )
 
-        @self.tree.command(name="attendance_close", description="Close an attendance event")
+        @self.tree.command(name="event_close", description="Close an event")
         @app_commands.default_permissions(administrator=True)
-        @app_commands.describe(event_id="Attendance event ID to close")
-        async def attendance_close(interaction: discord.Interaction, event_id: int):
+        @app_commands.describe(event_id="Event ID to close")
+        async def event_close(interaction: discord.Interaction, event_id: int):
             await interaction.response.defer(ephemeral=True)
             with SessionLocal() as db:
                 try:
@@ -1177,19 +1237,19 @@ class RyvlBot(commands.Bot):
                     return
 
                 try:
-                    await _sync_attendance_message(self, db, event)
+                    await _sync_event_message(self, db, event)
                 except Exception:
-                    logger.exception("Failed to sync attendance message for event %s", event_id)
+                    logger.exception("Failed to sync event message for event %s", event_id)
 
             await interaction.followup.send(f"Event `{event_id}` closed.", ephemeral=True)
 
-        @self.tree.command(name="attendance_remove_vote", description="Remove a user's attendance vote")
+        @self.tree.command(name="event_remove_vote", description="Remove a user's event response")
         @app_commands.default_permissions(administrator=True)
         @app_commands.describe(
-            event_id="Attendance event ID from which to remove a vote",
+            event_id="Event ID from which to remove a vote",
             user="Server member whose vote will be removed",
         )
-        async def attendance_remove_vote(
+        async def event_remove_vote(
             interaction: discord.Interaction,
             event_id: int,
             user: discord.Member,
@@ -1206,9 +1266,9 @@ class RyvlBot(commands.Bot):
                     return
 
                 try:
-                    await _sync_attendance_message(self, db, event)
+                    await _sync_event_message(self, db, event)
                 except Exception:
-                    logger.exception("Failed to sync attendance message for event %s", event_id)
+                    logger.exception("Failed to sync event message for event %s", event_id)
 
             await interaction.followup.send(
                 f"Removed vote for <@{user.id}> from event `{event_id}`.",
@@ -1234,12 +1294,8 @@ class RyvlBot(commands.Bot):
             time: Optional[str] = None,
         ):
             channel_target = channel
-            if channel_target is None and self.settings.default_lineup_channel_id:
-                fetched = self.get_channel(int(self.settings.default_lineup_channel_id))
-                if isinstance(fetched, TextChannel):
-                    channel_target = fetched
             if channel_target is None:
-                await interaction.response.send_message("No channel provided and no default lineup channel configured.", ephemeral=True)
+                await interaction.response.send_message("No channel provided. Specify a channel for this lineup.", ephemeral=True)
                 return
 
             formation_value = str(formation or "").strip().lower()
@@ -1300,11 +1356,11 @@ class RyvlBot(commands.Bot):
             )
             wizard.message = message
 
-        @self.tree.command(name="attendance_wizard", description="Open step-by-step attendance wizard for create/vote/reschedule/close/remove")
+        @self.tree.command(name="event_wizard", description="Open the event management wizard")
         @app_commands.default_permissions(administrator=True)
-        async def attendance_wizard(interaction: discord.Interaction):
+        async def event_wizard(interaction: discord.Interaction):
             await interaction.response.defer(ephemeral=True)
-            wizard = AttendanceWizardView(bot=self, owner_id=interaction.user.id)
+            wizard = EventWizardView(bot=self, owner_id=interaction.user.id)
             message = await interaction.followup.send(
                 wizard._text(),
                 view=wizard,
@@ -1325,15 +1381,15 @@ class RyvlBot(commands.Bot):
     async def on_interaction(self, interaction: discord.Interaction) -> None:
         if interaction.type == discord.InteractionType.component:
             custom_id = str((interaction.data or {}).get("custom_id") or "")
-            if custom_id.startswith(ATTENDANCE_BUTTON_PREFIX):
-                await self._handle_attendance_vote_button(interaction, custom_id)
+            if custom_id.startswith(EVENT_VOTE_BUTTON_PREFIX):
+                await self._handle_event_vote_button(interaction, custom_id)
                 return
 
-    async def _handle_attendance_vote_button(self, interaction: discord.Interaction, custom_id: str) -> None:
-        raw = custom_id[len(ATTENDANCE_BUTTON_PREFIX):]
+    async def _handle_event_vote_button(self, interaction: discord.Interaction, custom_id: str) -> None:
+        raw = custom_id[len(EVENT_VOTE_BUTTON_PREFIX):]
         event_id_raw, _, status_raw = raw.partition(":")
         if not event_id_raw.isdigit() or status_raw not in {"accepted", "declined", "tentative"}:
-            await interaction.response.send_message("Invalid attendance button payload.", ephemeral=True)
+            await interaction.response.send_message("Invalid event button payload.", ephemeral=True)
             return
 
         await interaction.response.defer()
@@ -1342,7 +1398,7 @@ class RyvlBot(commands.Bot):
                 event = set_vote(
                     db,
                     int(event_id_raw),
-                    AttendanceVoteRequest(
+                    EventVoteRequest(
                         user_discord_id=str(interaction.user.id),
                         display_name=interaction.user.display_name,
                         status=VoteStatus(status_raw),
@@ -1356,11 +1412,11 @@ class RyvlBot(commands.Bot):
                 return
 
             try:
-                await _sync_attendance_message(self, db, event)
+                await _sync_event_message(self, db, event)
             except Exception:
-                logger.exception("Failed to sync attendance message for event %s", event_id_raw)
+                logger.exception("Failed to sync event message for event %s", event_id_raw)
 
-    async def post_attendance_message(
+    async def post_event_message(
         self,
         *,
         channel_id: int,
@@ -1377,22 +1433,31 @@ class RyvlBot(commands.Bot):
         content, allowed_mentions = _role_mentions(mention_role_ids)
         return await channel.send(
             content=content,
-            embed=_attendance_embed(series, event),
-            view=_attendance_buttons(int(event["id"]), disabled=_attendance_closed(event)),
+            embed=_event_embed(series, event),
+            view=_event_buttons(int(event["id"]), disabled=_event_closed(event)),
             allowed_mentions=allowed_mentions,
         )
 
-    async def sync_attendance_event(self, db, event: dict) -> None:
-        await _sync_attendance_message(self, db, event)
+    async def post_due_first_batch_events(self, db, series: dict, channel_id: int) -> int:
+        events = [event for event in series.get("events", []) if event.get("batch_number") == 1]
+        if not events or not all(event.get("publish_at") and event["publish_at"] <= datetime.now(timezone.utc) for event in events):
+            return 0
+        for event in events:
+            message = await self.post_event_message(channel_id=channel_id, series=series, event=event)
+            mark_event_open_with_message(db, int(event["id"]), str(message.id))
+        return len(events)
 
-    async def delete_attendance_message(self, db, event: dict) -> None:
-        await _delete_attendance_message(self, db, event)
+    async def sync_event(self, db, event: dict) -> None:
+        await _sync_event_message(self, db, event)
+
+    async def delete_event_message(self, db, event: dict) -> None:
+        await _delete_event_message(self, db, event)
 
     async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent) -> None:
         with SessionLocal() as db:
             cancelled = cancel_event_by_message_id(db, str(payload.message_id))
             if cancelled:
-                logger.info("Attendance event %s cancelled because Discord message %s was deleted", cancelled["id"], payload.message_id)
+                logger.info("Event %s cancelled because Discord message %s was deleted", cancelled["id"], payload.message_id)
 
 
 async def start_bot(settings: Settings) -> RyvlBot | None:
