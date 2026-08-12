@@ -20,9 +20,11 @@ import { SnackbarService } from '../../core/snackbar.service';
     .schedule-error { color: #c94b4b; font-size: 12px; }
     .schedule-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: auto; padding-top: 4px; border-top: 1px solid var(--app-border); }
     .repeat-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
+    .page-viewport > .wizard-panel:first-of-type { flex: none; overflow: visible; }
+    .page-viewport > .wizard-panel:last-of-type { flex: 1; min-height: 0; overflow-y: auto; }
   `],
   template: `
-    <section class="collection-page space-y-6">
+    <section class="collection-page page-viewport space-y-6">
       <header class="page-header">
         <div>
           <p class="eyebrow">Workspace <span>&rsaquo;</span> League centre</p>
@@ -56,7 +58,7 @@ import { SnackbarService } from '../../core/snackbar.service';
       <div class="wizard-panel">
         <h2>Active schedules</h2>
         @if (!schedules().length) {
-          <div class="empty-state">
+          <div class="empty-state card-empty">
             <div class="empty-icon">
               <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="9"></circle>

@@ -17,8 +17,22 @@ type WizardStep = 1 | 2 | 3 | 4;
   selector: 'app-event-wizard-page',
   imports: [FormsModule, MultiSelectComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
+  styles: [`
+    .wizard-layout { min-height: 0; }
+    .wizard-layout > form { display: flex; flex-direction: column; height: auto; min-height: 0; }
+    .wizard-layout > form > .wizard-panel { flex: none; height: auto; min-height: 0; overflow: visible; }
+    .wizard-layout > form > .wizard-panel .grid { align-items: start; }
+    .wizard-layout .stepper-circle { width: 40px; height: 40px; font-size: 16px; }
+    .wizard-layout .stepper-item { gap: 16px; padding-bottom: 36px; }
+    .wizard-layout .stepper-connector { left: 19px; top: 40px; }
+    .wizard-layout .stepper-label { padding-top: 7px; font-size: 16px; }
+    @media (max-width: 900px) {
+      .wizard-layout > form > .wizard-panel { height: auto; min-height: 0; overflow: visible; }
+      .wizard-layout .stepper-item { padding-bottom: 0; }
+    }
+  `],
   template: `
-    <section class="collection-page space-y-6">
+    <section class="collection-page page-viewport space-y-6">
       <header class="page-header">
         <div>
           <p class="eyebrow">Workspace <span>&rsaquo;</span> Events <span>&rsaquo;</span> Create</p>
@@ -41,7 +55,6 @@ type WizardStep = 1 | 2 | 3 | 4;
       <form class="space-y-5" (ngSubmit)="submit()">
         @if (step() === 1) {
           <section class="wizard-panel">
-            <p class="wizard-kicker">Step 1</p>
             <h2>Event details</h2>
             <div class="grid gap-4 md:grid-cols-2">
               <label class="field md:col-span-2"><span>Post channel</span><select [(ngModel)]="form.channel_id" name="channel_id" required><option value="">Select a channel</option>@for (channel of channels(); track channel.id) { <option [value]="channel.id">#{{ channel.name }}</option> }</select></label>
@@ -54,7 +67,6 @@ type WizardStep = 1 | 2 | 3 | 4;
 
         @if (step() === 2) {
           <section class="wizard-panel">
-            <p class="wizard-kicker">Step 2</p>
             <h2>Schedule and recurrence</h2>
             <div class="grid gap-4 md:grid-cols-2">
               <label class="field"><span>Kickoff date</span><input #kickoffDateInput type="date" [(ngModel)]="form.kickoff_date" name="kickoff_date" required (click)="openNativePicker(kickoffDateInput)" /></label>
@@ -83,7 +95,6 @@ type WizardStep = 1 | 2 | 3 | 4;
 
         @if (step() === 3) {
           <section class="wizard-panel">
-            <p class="wizard-kicker">Step 3</p>
             <h2>Connections and posting</h2>
             <div class="grid gap-4 md:grid-cols-2">
               <label class="field md:col-span-2"><span>Post timing</span><select [(ngModel)]="form.post_timing_mode" name="post_timing_mode"><option value="at_event_start">When the event starts</option><option value="before_event_start">Before the event starts</option><option value="when_previous_event_ends">When the previous event ends</option><option value="after_previous_event_ends">After the previous event ends</option><option value="at_specific_time">At a specific time</option></select></label>
@@ -105,7 +116,6 @@ type WizardStep = 1 | 2 | 3 | 4;
 
         @if (step() === 4) {
           <section class="wizard-panel">
-            <p class="wizard-kicker">Step 4</p>
             <h2>Review and publish</h2>
             <div class="grid gap-3 md:grid-cols-2">
               <div class="review-item"><span>Event</span><strong>{{ form.title || 'Untitled event' }}</strong><p>{{ form.description || 'No description' }}</p></div>

@@ -10,7 +10,7 @@ import { LINEUP_DRAFTS_STORAGE_KEY, LineupDraftRecord } from './lineup-page.comp
   selector: 'app-lineup-drafts-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="collection-page space-y-6">
+    <section class="collection-page page-viewport space-y-6">
       <header class="page-header">
         <div>
           <p class="eyebrow">Lineup <span>&rsaquo;</span> Drafts</p>
@@ -21,7 +21,7 @@ import { LINEUP_DRAFTS_STORAGE_KEY, LineupDraftRecord } from './lineup-page.comp
       </header>
 
       @if (!drafts().length) {
-        <div class="empty-state">
+        <div class="empty-state card-empty">
           <div class="empty-icon">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="5" width="18" height="16" rx="2"></rect>

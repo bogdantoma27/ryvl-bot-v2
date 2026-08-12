@@ -189,6 +189,18 @@ def update_transfer_feed(payload: VpgTransferFeedPayload, user: SessionUser = De
     return _feed_view(row)
 
 
+@router.delete("/transfers/feed")
+def delete_transfer_feed(user: SessionUser = Depends(require_admin_session), db: Session = Depends(get_db)) -> dict:
+    row = db.query(VpgTransferFeed).filter(VpgTransferFeed.guild_id == settings.discord_guild_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Transfer feed is not configured")
+    feed_id = row.id
+    db.delete(row)
+    db.commit()
+    record_audit_log(db, action="vpg.delete_transfer_feed", entity_type="vpg_transfer_feed", entity_id=str(feed_id), actor_discord_id=user.user_id, details={})
+    return {"ok": True}
+
+
 @router.get("/transfers/recent")
 def recent_transfers(limit: int = 25, db: Session = Depends(get_db)) -> list[dict]:
     rows = db.query(VpgTransferRecord).order_by(VpgTransferRecord.occurred_at.desc(), VpgTransferRecord.id.desc()).limit(max(1, min(limit, 100))).all()

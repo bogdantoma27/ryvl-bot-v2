@@ -314,6 +314,7 @@ export class ApiService {
   deleteVpgSchedule(id: number): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/api/admin/vpg/schedules/${id}`, this.options)); }
   getVpgTransferFeed(): Promise<VpgTransferFeed | null> { return firstValueFrom(this.http.get<VpgTransferFeed | null>(`${this.baseUrl}/api/admin/vpg/transfers/feed`, this.options)); }
   updateVpgTransferFeed(payload: Omit<VpgTransferFeed, 'id' | 'last_polled_at' | 'last_error'>): Promise<VpgTransferFeed> { return firstValueFrom(this.http.put<VpgTransferFeed>(`${this.baseUrl}/api/admin/vpg/transfers/feed`, payload, this.options)); }
+  deleteVpgTransferFeed(): Promise<void> { return firstValueFrom(this.http.delete<void>(`${this.baseUrl}/api/admin/vpg/transfers/feed`, this.options)); }
   pollVpgTransfers(): Promise<{ posted: number }> { return firstValueFrom(this.http.post<{ posted: number }>(`${this.baseUrl}/api/admin/vpg/transfers/poll-now`, {}, this.options)); }
   previewVpgTransfer(communitySlug?: string): Promise<Blob> { return firstValueFrom(this.http.post(`${this.baseUrl}/api/admin/vpg/transfers/preview`, {}, { ...this.options, responseType: 'blob', params: communitySlug ? { community_slug: communitySlug } : {} })); }
   listVpgTransfers(): Promise<VpgTransferRecord[]> { return firstValueFrom(this.http.get<VpgTransferRecord[]>(`${this.baseUrl}/api/admin/vpg/transfers/recent`, this.options)); }

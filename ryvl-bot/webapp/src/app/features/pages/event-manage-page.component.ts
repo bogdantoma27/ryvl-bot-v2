@@ -30,7 +30,7 @@ type VoteBucket = 'accepted' | 'declined' | 'tentative';
   imports: [FormsModule, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="collection-page space-y-6">
+    <section class="collection-page page-viewport space-y-6">
       <header class="page-header">
         <div>
           <p class="eyebrow">Workspace <span>&rsaquo;</span> Events <span>&rsaquo;</span> Manage</p>

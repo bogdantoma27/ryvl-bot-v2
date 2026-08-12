@@ -14,16 +14,19 @@ type ViewMode = 'fixtures' | 'results' | 'standings';
   styles: [`
     .vpg-preview { display: grid; gap: 12px; margin-top: 16px; }
     .vpg-preview img { max-width: 100%; max-height: 640px; object-fit: contain; border: 1px solid var(--app-border); border-radius: 8px; background: #07090e; margin: 0 auto; }
-    .vpg-preview-empty { display: grid; place-items: center; text-align: center; min-height: 200px; gap: 10px; }
+    .vpg-preview-empty { display: grid; justify-items: center; align-content: center; text-align: center; min-height: 200px; gap: 10px; }
     .vpg-spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--app-border); border-top-color: #dba51d; animation: vpg-spin 0.8s linear infinite; margin: 0 auto; }
     @keyframes vpg-spin { to { transform: rotate(360deg); } }
     .channel-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
     .channel-row > .field { flex: 0 1 360px; min-width: 220px; }
     .channel-row > .action-row { flex: 0 0 auto; }
     .channel-row .secondary-action { min-height: 34px; }
+    .page-viewport > .wizard-panel:first-of-type { flex: none; overflow: visible; }
+    .page-viewport > .wizard-panel:last-of-type { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow-y: auto; }
+    .page-viewport > .wizard-panel:last-of-type .vpg-preview-empty { flex: 1; min-height: 0; }
   `],
   template: `
-    <section class="collection-page space-y-6">
+    <section class="collection-page page-viewport space-y-6">
       <header class="page-header">
         <div>
           <p class="eyebrow">Workspace <span>&rsaquo;</span> League centre</p>
@@ -51,13 +54,28 @@ type ViewMode = 'fixtures' | 'results' | 'standings';
             <button class="primary-action" type="button" (click)="postNow()" [disabled]="previewLoading() || posting() || !selectedSlug || !postChannelId">{{ posting() ? 'Posting...' : 'Post now' }}</button>
           </div>
         </div>
+      </div>
 
+      <div class="wizard-panel">
+        <p class="wizard-kicker">Preview</p>
         @if (previewLoading()) {
           <div class="empty-state vpg-preview-empty"><div class="vpg-spinner" aria-hidden="true"></div><h2>Rendering preview</h2><p>Generating the {{ mode() }} image for this league.</p></div>
         } @else if (previewError()) {
           <div class="empty-state vpg-preview-empty"><h2>Unable to render preview</h2><p>{{ previewError() }}</p></div>
         } @else if (previewUrl()) {
           <div class="vpg-preview"><img [src]="previewUrl()" alt="VPG Discord post preview" /></div>
+        } @else {
+          <div class="empty-state card-empty vpg-preview-empty">
+            <div class="empty-icon">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+                <circle cx="8.5" cy="9" r="1.5"></circle>
+                <path d="m21 15-4.5-4.5L8 19"></path>
+              </svg>
+            </div>
+            <h2>No preview yet</h2>
+            <p>Select a league and choose Preview to render the image.</p>
+          </div>
         }
       </div>
     </section>

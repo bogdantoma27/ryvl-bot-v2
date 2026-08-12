@@ -86,7 +86,7 @@ function wallTimeToUtcIso(dateInput: string, timeInput: string, timezoneName: st
   imports: [FormsModule, MultiSelectComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="collection-page space-y-6">
+    <section class="collection-page page-viewport space-y-6">
       <header class="page-header">
         <div>
           <p class="eyebrow">Workspace <span>&rsaquo;</span> Lineup</p>
@@ -309,6 +309,7 @@ export class LineupPageComponent implements OnInit {
   protected readonly selectedMobileMemberId = signal('');
   protected readonly pitchCanvas = viewChild<ElementRef<HTMLCanvasElement>>('pitchCanvas');
   private previewImage: HTMLImageElement | null = null;
+  private previewRequestId = 0;
 
   protected readonly unassignedMembers = computed(() => {
     const assigned = new Set(Object.values(this.assignedBySlot()));
@@ -369,6 +370,7 @@ export class LineupPageComponent implements OnInit {
   protected goToStep(step: number): void {
     if (step <= this.currentStep()) {
       this.currentStep.set(step);
+      this.refreshStepTwoPreview();
       return;
     }
     for (let current = this.currentStep(); current < step; current++) {
@@ -376,12 +378,14 @@ export class LineupPageComponent implements OnInit {
       if (error) { this.snackbar.error(error); return; }
     }
     this.currentStep.set(step);
+    this.refreshStepTwoPreview();
   }
 
   protected next(): void {
     const error = this.validateStep(this.currentStep());
     if (error) { this.snackbar.error(error); return; }
     this.currentStep.update(step => Math.min(4, step + 1));
+    this.refreshStepTwoPreview();
   }
 
   protected previous(): void {
@@ -427,6 +431,7 @@ export class LineupPageComponent implements OnInit {
     this.assignedBySlot.set(next);
     this.persistDraft();
     this.drawCanvas();
+    this.refreshStepTwoPreview();
   }
 
   protected dragMember(memberId: string): void {
@@ -470,6 +475,7 @@ export class LineupPageComponent implements OnInit {
     this.draggedMemberId.set('');
     this.persistDraft();
     this.drawCanvas();
+    this.refreshStepTwoPreview();
   }
 
   protected dropToCanvas(event: DragEvent): void {
@@ -497,6 +503,7 @@ export class LineupPageComponent implements OnInit {
     this.assignedBySlot.set(next);
     this.persistDraft();
     this.drawCanvas();
+    this.refreshStepTwoPreview();
   }
 
   private hitTestSlot(clientX: number, clientY: number): string {
@@ -604,6 +611,7 @@ export class LineupPageComponent implements OnInit {
     this.selectedMobileMemberId.set('');
     this.persistDraft();
     this.drawCanvas();
+    this.refreshStepTwoPreview();
   }
 
   protected dropToPool(event: DragEvent): void {
@@ -619,12 +627,14 @@ export class LineupPageComponent implements OnInit {
     this.draggedMemberId.set('');
     this.persistDraft();
     this.drawCanvas();
+    this.refreshStepTwoPreview();
   }
 
   protected clearAllSlots(): void {
     this.assignedBySlot.set({});
     this.persistDraft();
     this.drawCanvas();
+    this.refreshStepTwoPreview();
   }
 
   protected assignedMemberName(slot: string): string {
@@ -691,6 +701,7 @@ export class LineupPageComponent implements OnInit {
   }
 
   protected async renderPreview(): Promise<void> {
+    const requestId = ++this.previewRequestId;
     try {
       const blob = await this.api.renderLineupPreview({
         formation: this.form.formation,
@@ -699,12 +710,21 @@ export class LineupPageComponent implements OnInit {
         kickoff_at: this.kickoffAtIso(),
       });
 
+      if (requestId !== this.previewRequestId) return;
       this.previewError.set('');
-      this.previewUrl.set(URL.createObjectURL(blob));
-      this.loadPreviewImage(this.previewUrl());
+      const previous = this.previewUrl();
+      const next = URL.createObjectURL(blob);
+      this.previewUrl.set(next);
+      if (previous) URL.revokeObjectURL(previous);
+      this.loadPreviewImage(next);
     } catch {
+      if (requestId !== this.previewRequestId) return;
       this.previewError.set('Preview failed to render.');
     }
+  }
+
+  private refreshStepTwoPreview(): void {
+    if (this.currentStep() === 2) void this.renderPreview();
   }
 
   protected persistDraft(): void {

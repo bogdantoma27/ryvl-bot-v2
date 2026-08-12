@@ -11,7 +11,7 @@ type CollectionMode = 'drafts' | 'recurring' | 'scheduled';
   imports: [RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="collection-page">
+    <section class="collection-page page-viewport">
       <header class="page-header">
         <div>
           <p class="eyebrow">Workspace <span>›</span> Events</p>

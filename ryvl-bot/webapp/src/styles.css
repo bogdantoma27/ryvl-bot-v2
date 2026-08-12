@@ -38,7 +38,7 @@
 
 * { box-sizing: border-box; }
 
-html, body { min-height: 100%; }
+html, body { min-height: 100%; overflow-x: hidden; }
 
 body {
 	margin: 0;
@@ -113,7 +113,17 @@ select:focus, input:focus, textarea:focus { border-color: var(--app-accent) !imp
 .signed-out-card .primary-action { margin-top: 8px; }
 .mobile-menu-button { display: none; }
 .collection-page { max-width: none; }
+.page-viewport { min-height: calc(100vh - 60px); display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.page-viewport > .event-list { flex: 1; min-height: 0; overflow-y: auto; }
+.page-viewport > .empty-state { flex: 1; min-height: 0; }
+.page-viewport > .wizard-panel:first-of-type { min-height: 300px; }
+.page-viewport > .wizard-panel { display: flex; flex-direction: column; }
+.page-viewport > .wizard-panel > .empty-state { flex: 1; }
+.panel-body:has(> .empty-state) { display: flex; flex-direction: column; }
+.panel-body > .empty-state { flex: 1; }
 .page-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--app-border); }
+.empty-state { display: grid; width: 100%; place-items: center; justify-content: center; align-content: center; gap: 8px; min-height: 220px; box-sizing: border-box; margin-inline: auto; padding: 32px 20px; text-align: center; }
+.empty-state.card-empty { min-height: 0; padding: 20px; }
 .eyebrow { margin: 0 0 7px; color: var(--app-accent-strong); font-size: 13px; }
 .eyebrow span { color: var(--app-text-muted); padding: 0 3px; }
 .page-header h1 { margin: 0; color: var(--app-text); font-size: 24px; line-height: 1.2; }
@@ -125,7 +135,8 @@ select:focus, input:focus, textarea:focus { border-color: var(--app-accent) !imp
 .secondary-action:hover { border-color: var(--app-accent); }
 .secondary-action.compact { min-height: 28px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
-.manage-form-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); }
+.manage-form-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, 1fr); min-width: 0; }
+.manage-form-grid > * { min-width: 0; }
 .manage-form-grid .span-2 { grid-column: span 2; }
 .action-row { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
 .field-inline { min-width: 220px; }
@@ -150,6 +161,7 @@ select:focus, input:focus, textarea:focus { border-color: var(--app-accent) !imp
 .fixture-meta { color: var(--app-text-muted); font-size: 11px; white-space: nowrap; }
 .weekday-row { display: flex; gap: 6px; flex-wrap: wrap; }
 @media (max-width: 640px) { .manage-form-grid { grid-template-columns: 1fr; } .manage-form-grid .span-2 { grid-column: span 1; } .fixture-row { grid-template-columns: 1fr; text-align: center; } .fixture-team.is-away { justify-content: center; text-align: center; } }
+@media (max-width: 900px) { .page-viewport { min-height: 0; overflow: visible; } .page-viewport > .event-list { flex: none; min-height: auto; overflow: visible; } }
 .event-list { display: grid; gap: 8px; margin-top: 18px; }
 .event-date-heading { margin: 18px 0 2px; color: var(--app-text-muted); font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .event-date-heading:first-child { margin-top: 0; }
@@ -165,12 +177,14 @@ select:focus, input:focus, textarea:focus { border-color: var(--app-accent) !imp
 .event-meta { margin-left: auto; padding: 0 14px; white-space: nowrap; }
 .event-status { padding: 0 14px 0 0; color: var(--app-text-muted); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .event-status-open { color: #2f9e63; }
-.empty-state { display: grid; justify-items: center; gap: 8px; padding: 112px 20px 80px; text-align: center; }
 .empty-icon { display: grid; width: 40px; height: 40px; place-items: center; border-radius: 50%; background: var(--app-surface-muted); color: var(--app-text-muted); font-size: 22px; }
-.empty-state h2 { margin: 5px 0 0; color: var(--app-text); font-size: 18px; }
-.empty-state p { margin: 0 0 10px; color: var(--app-text-muted); font-size: 13px; }
+.empty-state h2 { margin: 0; color: var(--app-text); font-size: 20px; }
+.empty-state p { margin: 0; color: var(--app-text-muted); font-size: 14px; }
 .wizard-panel { border: 1px solid var(--app-border); border-radius: 14px; background: var(--app-surface); padding: 20px; }
 .wizard-panel h2 { margin: 0 0 20px; color: var(--app-text); font-size: 24px; }
+.wizard-panel .empty-state h2 { margin: 0; font-size: 20px; }
+.wizard-panel .empty-state p { margin: 0; font-size: 14px; }
+.wizard-panel > h2 { margin: 0 0 5px; color: var(--app-accent-strong); font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
 .wizard-kicker { margin: 0 0 5px; color: var(--app-accent-strong); font-size: 12px; font-weight: 700; letter-spacing: .18em; text-transform: uppercase; }
 .wizard-layout { display: grid; grid-template-columns: 210px 1fr; gap: 24px; align-items: start; }
 .stepper { display: flex; flex-direction: column; width: fit-content; margin: 0 auto; padding-top: 20px; }
@@ -190,8 +204,8 @@ select:focus, input:focus, textarea:focus { border-color: var(--app-accent) !imp
 	.stepper-connector { display: none; }
 	.stepper-label { padding-top: 0; font-size: 12px; }
 }
-.field { display: flex; flex-direction: column; gap: 6px; color: var(--app-text-muted); font-size: 14px; font-weight: 600; }
-.field input, .field select, .field textarea { width: 100%; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface-muted); padding: 10px 11px; color: var(--app-text); font-weight: 400; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; color: var(--app-text-muted); font-size: 14px; font-weight: 600; }
+.field input, .field select, .field textarea { width: 100%; min-width: 0; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface-muted); padding: 10px 11px; color: var(--app-text); font-weight: 400; }
 .field textarea { resize: vertical; }
 .day-choice { display: flex; align-items: center; gap: 7px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface-muted); padding: 9px 8px; color: var(--app-text); font-size: 13px; }
 .switch { display: flex; align-items: center; gap: 10px; color: var(--app-text); font-size: 14px; font-weight: 600; cursor: pointer; }
