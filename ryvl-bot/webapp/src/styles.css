@@ -239,7 +239,9 @@ select:focus, input:focus, textarea:focus { border-color: var(--app-accent) !imp
 .lineup-role-toggle, .multi-select-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-surface-muted); padding: 10px 11px; color: var(--app-text); font-size: 14px; cursor: pointer; }
 .lineup-role-toggle:hover, .multi-select-toggle:hover { border-color: var(--app-accent); }
 .lineup-role-list, .multi-select-list { display: flex; flex-direction: column; gap: 4px; max-height: 190px; overflow-y: auto; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface-muted); padding: 8px; margin-top: 8px; }
-.lineup-role-item, .multi-select-item { display: flex; align-items: center; gap: 8px; border-radius: 6px; padding: 6px 8px; color: var(--app-text); font-size: 13px; cursor: pointer; }
+.lineup-role-item, .multi-select-item { display: flex; flex: 0 0 auto; flex-direction: row; align-items: center; justify-content: flex-start; width: 100%; gap: 8px; border-radius: 6px; padding: 6px 8px; color: var(--app-text); font-size: 13px; text-align: left; cursor: pointer; }
+.multi-select-item input { flex: 0 0 auto; width: auto; }
+.multi-select-item .truncate { min-width: 0; flex: 1; text-align: left; }
 .lineup-role-item:hover, .multi-select-item:hover { background: var(--app-surface); }
 .lineup-empty-hint { padding: 8px; color: var(--app-text-muted); font-size: 12px; }
 .lineup-actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }

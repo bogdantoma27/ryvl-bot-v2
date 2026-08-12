@@ -149,7 +149,7 @@ function wallTimeToUtcIso(dateInput: string, timeInput: string, timezoneName: st
 
           @if (currentStep() === 2) {
             <p class="wizard-kicker">Fill positions</p>
-            <p class="lineup-hint">Drag a player from the roster directly onto a position on the pitch. The preview updates in real time.</p>
+            <p class="lineup-hint">Drag a player from the roster directly onto a position on the pitch. Render the preview when ready.</p>
 
             <div class="lineup-columns lineup-board">
               <div class="lineup-panel" (dragover)="allowDrop($event)" (drop)="dropToPool($event)">
@@ -188,8 +188,11 @@ function wallTimeToUtcIso(dateInput: string, timeInput: string, timezoneName: st
                 </div>
 
                 <div class="pitch-canvas-wrap">
-                  @if (!previewUrl()) {
-                    <div class="pitch-placeholder">Rendering preview...</div>
+                  @if (!previewUrl() && !previewError()) {
+                    <div class="pitch-placeholder">
+                      <p>Preview has not been rendered yet.</p>
+                      <button type="button" class="secondary-action compact" (click)="renderPreview()">Render preview</button>
+                    </div>
                   }
                   @if (previewError()) {
                     <div class="pitch-placeholder">
@@ -284,7 +287,6 @@ export class LineupPageComponent implements OnInit {
   private readonly snackbar = inject(SnackbarService);
   private readonly route = inject(ActivatedRoute);
   private readonly draftCounts = inject(DraftCountsService);
-  private previewTimer: ReturnType<typeof setTimeout> | undefined;
   private draftId: number | null = null;
 
   protected readonly steps = STEPS;
@@ -359,7 +361,6 @@ export class LineupPageComponent implements OnInit {
       if (!this.form.channelId) {
         this.form.channelId = this.defaultLineupChannelId();
       }
-      this.schedulePreview();
     } catch {
       this.snackbar.error('Failed to load channels or formations. Check API and bot permissions.');
     }
@@ -425,7 +426,6 @@ export class LineupPageComponent implements OnInit {
     }
     this.assignedBySlot.set(next);
     this.persistDraft();
-    this.schedulePreview();
     this.drawCanvas();
   }
 
@@ -469,7 +469,6 @@ export class LineupPageComponent implements OnInit {
     this.assignedBySlot.set(next);
     this.draggedMemberId.set('');
     this.persistDraft();
-    this.schedulePreview();
     this.drawCanvas();
   }
 
@@ -497,7 +496,6 @@ export class LineupPageComponent implements OnInit {
     delete next[slot];
     this.assignedBySlot.set(next);
     this.persistDraft();
-    this.schedulePreview();
     this.drawCanvas();
   }
 
@@ -605,7 +603,6 @@ export class LineupPageComponent implements OnInit {
     this.assignedBySlot.set(next);
     this.selectedMobileMemberId.set('');
     this.persistDraft();
-    this.schedulePreview();
     this.drawCanvas();
   }
 
@@ -621,14 +618,12 @@ export class LineupPageComponent implements OnInit {
     this.assignedBySlot.set(next);
     this.draggedMemberId.set('');
     this.persistDraft();
-    this.schedulePreview();
     this.drawCanvas();
   }
 
   protected clearAllSlots(): void {
     this.assignedBySlot.set({});
     this.persistDraft();
-    this.schedulePreview();
     this.drawCanvas();
   }
 
@@ -693,11 +688,6 @@ export class LineupPageComponent implements OnInit {
     return this.form.kickoffDate && this.form.kickoffTime
       ? wallTimeToUtcIso(this.form.kickoffDate, this.form.kickoffTime, this.form.timezone)
       : null;
-  }
-
-  private schedulePreview(): void {
-    if (this.previewTimer) clearTimeout(this.previewTimer);
-    this.previewTimer = setTimeout(() => void this.renderPreview(), 300);
   }
 
   protected async renderPreview(): Promise<void> {

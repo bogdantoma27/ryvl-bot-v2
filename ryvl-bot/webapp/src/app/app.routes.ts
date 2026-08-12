@@ -80,6 +80,5 @@ export const routes: Routes = [
 	{ path: 'attendance/drafts', redirectTo: 'events/drafts' },
 	{ path: 'attendance/recurring', redirectTo: 'events/recurring' },
 	{ path: 'attendance/scheduled', redirectTo: 'events/scheduled' },
-	{ path: 'diagnostics', redirectTo: 'events' },
 	{ path: '**', redirectTo: '' },
 ];
