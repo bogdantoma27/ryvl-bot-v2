@@ -13,9 +13,19 @@ import { SnackbarService } from '../../core/snackbar.service';
   styles: [`
     .transfer-preview { display: block; width: 100%; max-height: 320px; object-fit: contain; margin-top: 16px; border-radius: 8px; border: 1px solid var(--app-border); background: #07090e; }
     .transfer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); padding: 12px 14px; flex-wrap: wrap; min-width: 0; }
-    .transfer-move { color: var(--app-text-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .transfer-row > * { min-width: 0; max-width: 100%; }
+    .transfer-row > strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .transfer-move { color: var(--app-text-muted); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .transfer-move strong { color: var(--app-text); }
-    .polling-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 16px; }
+    .polling-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; min-width: 0; margin-top: 16px; }
+    .polling-row > .field { min-width: 0; }
+    .polling-row > .action-row { min-width: 0; max-width: 100%; }
+    .polling-row .action-row button { flex: 0 1 auto; }
+    @media (max-width: 640px) {
+      .polling-row { align-items: stretch; }
+      .polling-row > .field, .polling-row > .action-row { width: 100%; }
+      .polling-row > .action-row { justify-content: flex-end; }
+    }
   `],
   template: `
     <section class="collection-page space-y-6">
@@ -43,7 +53,7 @@ import { SnackbarService } from '../../core/snackbar.service';
           </div>
           <div class="action-row" style="margin-top: 0;">
             <button class="primary-action" type="button" (click)="save()" [disabled]="busy() || !form.community_slug || !form.channel_id">{{ busy() ? 'Saving...' : 'Save feed' }}</button>
-            <button class="secondary-action" type="button" (click)="poll()" [disabled]="busy()">Poll now</button>
+            <button class="secondary-action" type="button" (click)="poll()" [disabled]="busy() || !form.community_slug || !form.channel_id">Poll now</button>
             <button class="secondary-action" type="button" (click)="preview()" [disabled]="busy()">Preview banner</button>
           </div>
         </div>
@@ -112,7 +122,20 @@ export class VpgTransfersPageComponent implements OnInit {
     Promise.all([this.api.updateVpgTransferFeed(this.form), this.api.updateVpgSettings({ community_slug: this.form.community_slug, community_slugs: this.communitySlugs, timezone: this.timezone })]).then(([feed]) => { this.feed.set(feed); this.snackbar.success('VPG transfer feed saved.'); }).catch(() => this.snackbar.error('Unable to save VPG transfer feed.')).finally(() => this.busy.set(false));
   }
 
-  poll(): void { this.busy.set(true); this.api.pollVpgTransfers().then(result => { this.snackbar.success(`${result.posted} transfer(s) posted.`); this.refresh(); }).catch(() => this.snackbar.error('Polling failed. Check the backend status.')).finally(() => this.busy.set(false)); }
+  poll(): void {
+    if (!this.form.community_slug || !this.form.channel_id) return;
+    this.busy.set(true);
+    Promise.all([
+      this.api.updateVpgTransferFeed(this.form),
+      this.api.updateVpgSettings({ community_slug: this.form.community_slug, community_slugs: this.communitySlugs, timezone: this.timezone }),
+    ]).then(([feed]) => {
+      this.feed.set(feed);
+      return this.api.pollVpgTransfers();
+    }).then(result => {
+      this.snackbar.success(`${result.posted} transfer(s) posted.`);
+      this.refresh();
+    }).catch(() => this.snackbar.error('Polling failed. Check the backend status.')).finally(() => this.busy.set(false));
+  }
 
   preview(): void { this.busy.set(true); this.api.previewVpgTransfer(this.form.community_slug).then(blob => { const previous = this.previewUrl(); this.previewUrl.set(URL.createObjectURL(blob)); if (previous) URL.revokeObjectURL(previous); }).catch(() => this.snackbar.error('No transfer preview is available.')).finally(() => this.busy.set(false)); }
 }
