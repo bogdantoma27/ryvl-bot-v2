@@ -98,11 +98,11 @@ def render_matches_png(
         center = top + (ROW_HEIGHT - 6) // 2
         draw.rounded_rectangle((34, top, WIDTH - 34, top + ROW_HEIGHT - 6), radius=8, fill="#0e1118", outline="#1c2235")
         _text(draw, _round_label(match.match_day), (58, top + 16), 14, fill="#7f8ba1", anchor="la")
-        _text(draw, _format_datetime(match.datetime), (1342, top + 16), 14, fill="#7f8ba1", anchor="ra")
+        _text(draw, _format_datetime(match.datetime), (58, top + 36), 12, fill="#7f8ba1", anchor="la")
         _logo(image, (logo_urls or {}).get(match.home_name), (205, top + 8, 253, top + 62))
         _text(draw, match.home_name, (265, center), 23, bold=True, anchor="lm")
         score = f"{match.home_score} : {match.away_score}" if mode == "results" and match.home_score is not None and match.away_score is not None else "VS"
         _text(draw, score, (700, center), 24, bold=True, fill="#dba51d", anchor="mm")
-        _text(draw, match.away_name, (1110, center), 23, bold=True, anchor="rm")
-        _logo(image, (logo_urls or {}).get(match.away_name), (1120, top + 8, 1172, top + 62))
+        _text(draw, match.away_name, (1230, center), 23, bold=True, anchor="rm")
+        _logo(image, (logo_urls or {}).get(match.away_name), (1240, top + 8, 1292, top + 62))
     return _finish(image)
