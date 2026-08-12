@@ -11,6 +11,7 @@ import { SnackbarService } from '../../core/snackbar.service';
   imports: [DatePipe, FormsModule, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   styles: [`
+    :host { display: block; min-width: 0; max-width: 100%; overflow-x: clip; }
     .transfer-preview { display: block; width: 100%; max-height: 320px; object-fit: contain; margin-top: 16px; border-radius: 8px; border: 1px solid var(--app-border); background: #07090e; }
     .transfer-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); padding: 12px 14px; flex-wrap: wrap; min-width: 0; }
     .transfer-row > * { min-width: 0; max-width: 100%; }
@@ -40,6 +41,7 @@ import { SnackbarService } from '../../core/snackbar.service';
 
       <div class="wizard-panel">
         <p class="wizard-kicker">Feed settings</p>
+        <p class="page-subtitle">Choose a channel, set the polling interval, enable automatic polling, then select Save feed. The bot will check for new transfers at that interval.</p>
         <div class="manage-form-grid">
           <label class="field"><span>Community</span><select [(ngModel)]="form.community_slug"><option value="">Select a community</option>@for (community of communities(); track community.slug) {<option [value]="community.slug">{{ community.name }}</option>}</select></label>
           <label class="field"><span>Channel</span><select [(ngModel)]="form.channel_id"><option value="">Select a channel</option>@for (channel of channels(); track channel.id) {<option [value]="channel.id">#{{ channel.name }}</option>}</select></label>
