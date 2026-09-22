@@ -21,6 +21,8 @@ model Guild {
   defaultRyvlResultsChannelId     String?  @map("default_ryvl_results_channel_id")
   defaultRyvlFixturesChannelId    String?  @map("default_ryvl_fixtures_channel_id")
   defaultRyvlLeaderboardChannelId String?  @map("default_ryvl_leaderboard_channel_id")
+  defaultContactChannelId         String?  @map("default_contact_channel_id")
+  defaultRecruitmentChannelId     String?  @map("default_recruitment_channel_id")
   ryvlTeamName                    String   @default("RYVL Esports") @map("ryvl_team_name")
   joinedAt           DateTime            @default(now()) @map("joined_at")
   events             Event[]

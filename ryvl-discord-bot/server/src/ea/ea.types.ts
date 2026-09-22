@@ -145,3 +145,23 @@ export interface ClubTrackerConfigDto {
   lastPolledAt?: Date | null;
   lastMatchId?: string | null;
 }
+
+export interface PublicRosterMember {
+  name: string;
+  proName: string;
+  proOverall: number;
+  position: string;
+  positionGroup: 'forward' | 'midfielder' | 'defender' | 'goalkeeper';
+  gamesPlayed: number;
+  goals: number;
+  assists: number;
+  ratingAve: number;
+  cleanSheets: number;
+  manOfTheMatch: number;
+  passSuccessRate: number;
+  tackleSuccessRate: number;
+  shotSuccessRate: number;
+  nationality?: string;
+  height?: number;
+}
+

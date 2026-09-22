@@ -58,6 +58,35 @@ import {
         </div>
       </div>
 
+      <!-- Navigation Sub-Tabs: Performance & Detailed Feeds -->
+      <div class="flex flex-wrap items-center gap-2 border-b border-white/10 pb-4">
+        <span class="px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-[#EAE905] text-black shadow-md shadow-[#EAE905]/15 flex items-center gap-1.5 cursor-default">
+          <span>📊</span>
+          <span>RYVL Telemetry</span>
+        </span>
+        <a
+          routerLink="/results"
+          class="px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#121214] text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition flex items-center gap-1.5 cursor-pointer"
+        >
+          <span>📋</span>
+          <span>Match Results</span>
+        </a>
+        <a
+          routerLink="/fixtures"
+          class="px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#121214] text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition flex items-center gap-1.5 cursor-pointer"
+        >
+          <span>📅</span>
+          <span>Fixtures Schedule</span>
+        </a>
+        <a
+          routerLink="/standings"
+          class="px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#121214] text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition flex items-center gap-1.5 cursor-pointer"
+        >
+          <span>🏆</span>
+          <span>League Table & Standings</span>
+        </a>
+      </div>
+
       @if (isLoading()) {
         <div class="p-16 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-4">
           <div class="w-10 h-10 border-2 border-[#EAE905] border-t-transparent rounded-full animate-spin mx-auto"></div>
@@ -214,7 +243,7 @@ import {
                 </div>
                 @if (stats()?.standingsPosition) {
                   <div class="text-[#EAE905] font-bold">
-                    Ranked #{{ stats()?.standingsPosition }} in Superliga
+                    Ranked #{{ stats()?.standingsPosition }} in {{ stats()?.competitionName || 'Active Competition' }}
                   </div>
                 }
               </div>

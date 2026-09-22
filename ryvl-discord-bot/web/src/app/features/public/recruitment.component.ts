@@ -245,7 +245,11 @@ export class RecruitmentComponent {
     this.isSubmitting.set(true);
     this.error.set(null);
     try {
-      await this.api.submitRecruitment(this.form);
+      const res = await this.api.submitRecruitment(this.form);
+      if (res && res.success === false) {
+        this.error.set(res.message || res.error || 'Failed to submit application to management.');
+        return;
+      }
       this.submitted.set(true);
     } catch (err: any) {
       console.error('Failed to submit recruitment application:', err);

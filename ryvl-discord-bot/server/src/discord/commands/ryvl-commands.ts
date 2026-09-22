@@ -35,6 +35,8 @@ export class RyvlCommands {
       const resultsChan = interaction.options.getChannel('results_channel');
       const fixturesChan = interaction.options.getChannel('fixtures_channel');
       const lbChan = interaction.options.getChannel('leaderboard_channel');
+      const contactChan = interaction.options.getChannel('contact_channel');
+      const recruitChan = interaction.options.getChannel('recruitment_channel');
 
       await interaction.deferReply({ ephemeral: true });
 
@@ -44,6 +46,8 @@ export class RyvlCommands {
           ...(resultsChan ? { defaultRyvlResultsChannelId: resultsChan.id } : {}),
           ...(fixturesChan ? { defaultRyvlFixturesChannelId: fixturesChan.id } : {}),
           ...(lbChan ? { defaultRyvlLeaderboardChannelId: lbChan.id } : {}),
+          ...(contactChan ? { defaultContactChannelId: contactChan.id } : {}),
+          ...(recruitChan ? { defaultRecruitmentChannelId: recruitChan.id } : {}),
         },
         create: {
           id: guildId,
@@ -51,6 +55,8 @@ export class RyvlCommands {
           defaultRyvlResultsChannelId: resultsChan?.id || null,
           defaultRyvlFixturesChannelId: fixturesChan?.id || null,
           defaultRyvlLeaderboardChannelId: lbChan?.id || null,
+          defaultContactChannelId: contactChan?.id || null,
+          defaultRecruitmentChannelId: recruitChan?.id || null,
         },
       });
 
@@ -59,6 +65,8 @@ export class RyvlCommands {
         resultsChan ? `• Results: <#${resultsChan.id}>` : null,
         fixturesChan ? `• Fixtures: <#${fixturesChan.id}>` : null,
         lbChan ? `• Leaderboards: <#${lbChan.id}>` : null,
+        contactChan ? `• Contact Management: <#${contactChan.id}>` : null,
+        recruitChan ? `• Recruitment Applications: <#${recruitChan.id}>` : null,
       ]
         .filter(Boolean)
         .join('\n');
@@ -86,6 +94,9 @@ export class RyvlCommands {
           performance.upcomingFixtures,
           performance.stats.competitionName,
         );
+        await interaction.editReply({ embeds: [embed] });
+      } else if (subcommand === 'leaderboard' || subcommand === 'standings') {
+        const embed = RyvlEmbedBuilder.buildPerformanceOverviewEmbed(performance);
         await interaction.editReply({ embeds: [embed] });
       }
     } catch (err: any) {
@@ -138,30 +149,52 @@ export class RyvlCommands {
     return { success: true, message: `Posted RYVL fixtures to #${channel.name}` };
   }
 
-  async dispatchContactNotification(payload: ContactFormPayload): Promise<{ success: boolean }> {
+  async postRyvlLeaderboardToChannel(guildId: string, channelId?: string): Promise<{ success: boolean; message: string }> {
+    const targetChannelId =
+      channelId ||
+      (await this.prisma.guild.findUnique({ where: { id: guildId } }))?.defaultRyvlLeaderboardChannelId;
+
+    if (!targetChannelId) {
+      return { success: false, message: 'No target ryvl-leaderboard channel configured.' };
+    }
+
+    const channel = (await this.discordService.client.channels.fetch(targetChannelId).catch(() => null)) as TextChannel;
+    if (!channel || channel.type !== ChannelType.GuildText) {
+      return { success: false, message: `Could not access text channel ${targetChannelId}` };
+    }
+
+    const performance = await this.vpgService.getRyvlPerformance(guildId);
+    const embed = RyvlEmbedBuilder.buildPerformanceOverviewEmbed(performance);
+
+    await channel.send({ embeds: [embed] });
+    return { success: true, message: `Posted RYVL performance & leaderboard overview to #${channel.name}` };
+  }
+
+  async dispatchContactNotification(payload: ContactFormPayload): Promise<{ success: boolean; message?: string }> {
     try {
       const guilds = await this.prisma.guild.findMany();
-      if (!guilds || guilds.length === 0) return { success: false };
+      if (!guilds || guilds.length === 0) {
+        return { success: false, message: 'No registered Discord server found.' };
+      }
 
       const targetGuild =
         (payload.guildId && guilds.find((g) => g.id === payload.guildId)) ||
-        guilds.find((g) => g.defaultChannelId || g.defaultRyvlResultsChannelId || g.defaultLiveResultsChannelId) ||
+        guilds.find((g) => g.defaultContactChannelId) ||
         guilds[0];
 
-      let channelId =
-        targetGuild.defaultChannelId ||
-        targetGuild.defaultRyvlResultsChannelId ||
-        targetGuild.defaultLiveResultsChannelId;
-
+      const channelId = targetGuild?.defaultContactChannelId;
       if (!channelId) {
-        const chans = await this.discordService.getGuildChannels(targetGuild.id).catch(() => []);
-        channelId = chans[0]?.id || null;
+        this.logger.warn('Contact submission received but no defaultContactChannelId is configured in server settings.');
+        return {
+          success: false,
+          message: 'Contact management channel is not configured in Admin Settings. Please configure it under Settings.',
+        };
       }
 
-      if (!channelId) return { success: false };
-
       const channel = (await this.discordService.client.channels.fetch(channelId).catch(() => null)) as TextChannel;
-      if (!channel) return { success: false };
+      if (!channel || channel.type !== ChannelType.GuildText) {
+        return { success: false, message: `Could not access configured contact channel ${channelId}` };
+      }
 
       const embed = RyvlEmbedBuilder.buildContactSubmissionEmbed(payload);
       await channel.send({ embeds: [embed] });
@@ -169,34 +202,35 @@ export class RyvlCommands {
       return { success: true };
     } catch (err: any) {
       this.logger.error(`Failed to dispatch contact notification: ${err.message}`);
-      return { success: false };
+      return { success: false, message: err.message };
     }
   }
 
-  async dispatchRecruitmentNotification(payload: RecruitmentFormPayload): Promise<{ success: boolean }> {
+  async dispatchRecruitmentNotification(payload: RecruitmentFormPayload): Promise<{ success: boolean; message?: string }> {
     try {
       const guilds = await this.prisma.guild.findMany();
-      if (!guilds || guilds.length === 0) return { success: false };
+      if (!guilds || guilds.length === 0) {
+        return { success: false, message: 'No registered Discord server found.' };
+      }
 
       const targetGuild =
         (payload.guildId && guilds.find((g) => g.id === payload.guildId)) ||
-        guilds.find((g) => g.defaultChannelId || g.defaultRyvlResultsChannelId || g.defaultLiveResultsChannelId) ||
+        guilds.find((g) => g.defaultRecruitmentChannelId || g.defaultContactChannelId) ||
         guilds[0];
 
-      let channelId =
-        targetGuild.defaultChannelId ||
-        targetGuild.defaultRyvlResultsChannelId ||
-        targetGuild.defaultLiveResultsChannelId;
-
+      const channelId = targetGuild?.defaultRecruitmentChannelId || targetGuild?.defaultContactChannelId;
       if (!channelId) {
-        const chans = await this.discordService.getGuildChannels(targetGuild.id).catch(() => []);
-        channelId = chans[0]?.id || null;
+        this.logger.warn('Recruitment submission received but no defaultRecruitmentChannelId is configured in server settings.');
+        return {
+          success: false,
+          message: 'Recruitment channel is not configured in Admin Settings. Please configure it under Settings.',
+        };
       }
 
-      if (!channelId) return { success: false };
-
       const channel = (await this.discordService.client.channels.fetch(channelId).catch(() => null)) as TextChannel;
-      if (!channel) return { success: false };
+      if (!channel || channel.type !== ChannelType.GuildText) {
+        return { success: false, message: `Could not access configured recruitment channel ${channelId}` };
+      }
 
       const embed = RyvlEmbedBuilder.buildRecruitmentSubmissionEmbed(payload);
       await channel.send({ embeds: [embed] });
@@ -204,7 +238,7 @@ export class RyvlCommands {
       return { success: true };
     } catch (err: any) {
       this.logger.error(`Failed to dispatch recruitment notification: ${err.message}`);
-      return { success: false };
+      return { success: false, message: err.message };
     }
   }
 }

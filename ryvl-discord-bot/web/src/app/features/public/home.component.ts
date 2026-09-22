@@ -87,13 +87,6 @@ import { VpgMatchItem } from '../../core/models';
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
             </a>
-
-            <a
-              routerLink="/results"
-              class="px-6 py-4 rounded-xl bg-[#0f172a]/80 hover:bg-[#1e293b] border border-slate-700 text-slate-300 hover:text-white font-semibold text-sm uppercase tracking-wider transition"
-            >
-              VPG Results
-            </a>
           </div>
         </div>
       </section>
@@ -103,8 +96,8 @@ import { VpgMatchItem } from '../../core/models';
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
           <div class="p-6 rounded-2xl bg-[#0d0d0e] border border-white/10 shadow-lg relative overflow-hidden group hover:border-[#EAE905]/40 transition">
             <div class="text-[11px] font-mono text-slate-400 uppercase tracking-widest">Division</div>
-            <div class="text-3xl sm:text-4xl font-black text-[#EAE905] mt-1">SUPERLIGA 1</div>
-            <div class="text-xs text-slate-400 mt-1">Virtual Pro Gaming România</div>
+            <div class="text-3xl sm:text-4xl font-black text-[#EAE905] mt-1">VPG TIER 1</div>
+            <div class="text-xs text-slate-400 mt-1">Virtual Pro Gaming</div>
           </div>
 
           <div class="p-6 rounded-2xl bg-[#0d0d0e] border border-white/10 shadow-lg relative overflow-hidden group hover:border-[#EAE905]/40 transition">
@@ -127,12 +120,12 @@ import { VpgMatchItem } from '../../core/models';
         </div>
       </section>
 
-      <!-- Latest Superliga Matches Teaser (Live API Data) -->
+      <!-- Latest Matches Teaser (Live API Data) -->
       <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/10 pb-4">
           <div>
             <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest">Official VPG Feed</div>
-            <h2 class="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">Recent Superliga Results</h2>
+            <h2 class="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">Recent Match Results</h2>
           </div>
           <a routerLink="/results" class="text-xs font-bold text-[#EAE905] hover:underline flex items-center gap-1">
             <span>View All Match Results</span>

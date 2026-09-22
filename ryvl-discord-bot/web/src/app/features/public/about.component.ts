@@ -38,7 +38,7 @@ import { RouterLink } from '@angular/router';
           </p>
 
           <p class="text-xs sm:text-sm text-slate-400 leading-relaxed">
-            Competing in the highest tier of European EA FC 11v11 Pro Clubs and VPG Superliga România, our squad represents modern digital athletics. Every formation, pressing trigger, and set piece is rehearsed to automatic perfection.
+            Competing in the highest tier of European EA FC 11v11 Pro Clubs and VPG competitions, our squad represents modern digital athletics. Every formation, pressing trigger, and set piece is rehearsed to automatic perfection.
           </p>
 
           <div class="flex items-center gap-6 pt-2">
@@ -49,7 +49,7 @@ import { RouterLink } from '@angular/router';
             <div class="h-8 w-px bg-white/10"></div>
             <div>
               <div class="text-2xl font-black text-[#EAE905]">VPG</div>
-              <div class="text-[10px] text-slate-400 uppercase font-mono">Superliga Tier 1</div>
+              <div class="text-[10px] text-slate-400 uppercase font-mono">Tier 1 Circuit</div>
             </div>
             <div class="h-8 w-px bg-white/10"></div>
             <div>
@@ -80,7 +80,7 @@ import { RouterLink } from '@angular/router';
           <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest">Innovation & Engineering</div>
           <h3 class="text-2xl sm:text-3xl font-black text-white uppercase">The Technology Behind RYVL</h3>
           <p class="text-xs sm:text-sm text-slate-400">
-            Unlike traditional clubs, RYVL operates a proprietary software suite integrating automated Discord management, real-time match telemetry, tactical pitch graphic generators, and VPG Superliga API synchronizers.
+            Unlike traditional clubs, RYVL operates a proprietary software suite integrating automated Discord management, real-time match telemetry, tactical pitch graphic generators, and VPG API synchronizers.
           </p>
         </div>
 

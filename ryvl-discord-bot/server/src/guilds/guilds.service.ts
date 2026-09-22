@@ -112,6 +112,8 @@ export class GuildsService {
         defaultRyvlResultsChannelId: guild.defaultRyvlResultsChannelId || null,
         defaultRyvlFixturesChannelId: guild.defaultRyvlFixturesChannelId || null,
         defaultRyvlLeaderboardChannelId: guild.defaultRyvlLeaderboardChannelId || null,
+        defaultContactChannelId: guild.defaultContactChannelId || null,
+        defaultRecruitmentChannelId: guild.defaultRecruitmentChannelId || null,
         ryvlTeamName: guild.ryvlTeamName || 'RYVL Esports',
       },
       channels,
@@ -128,6 +130,8 @@ export class GuildsService {
         defaultRyvlResultsChannelId: guild.defaultRyvlResultsChannelId || null,
         defaultRyvlFixturesChannelId: guild.defaultRyvlFixturesChannelId || null,
         defaultRyvlLeaderboardChannelId: guild.defaultRyvlLeaderboardChannelId || null,
+        defaultContactChannelId: guild.defaultContactChannelId || null,
+        defaultRecruitmentChannelId: guild.defaultRecruitmentChannelId || null,
         ryvlTeamName: guild.ryvlTeamName || 'RYVL Esports',
         botActive: true,
       },
@@ -155,6 +159,8 @@ export class GuildsService {
       defaultRyvlResultsChannelId: guild.defaultRyvlResultsChannelId || null,
       defaultRyvlFixturesChannelId: guild.defaultRyvlFixturesChannelId || null,
       defaultRyvlLeaderboardChannelId: guild.defaultRyvlLeaderboardChannelId || null,
+      defaultContactChannelId: guild.defaultContactChannelId || null,
+      defaultRecruitmentChannelId: guild.defaultRecruitmentChannelId || null,
       ryvlTeamName: guild.ryvlTeamName || 'RYVL Esports',
       botStatus: 'online',
     };
@@ -174,6 +180,8 @@ export class GuildsService {
       defaultRyvlResultsChannelId?: string | null;
       defaultRyvlFixturesChannelId?: string | null;
       defaultRyvlLeaderboardChannelId?: string | null;
+      defaultContactChannelId?: string | null;
+      defaultRecruitmentChannelId?: string | null;
       ryvlTeamName?: string;
     },
   ): Promise<any> {
@@ -191,6 +199,8 @@ export class GuildsService {
         ...(data.defaultRyvlResultsChannelId !== undefined ? { defaultRyvlResultsChannelId: data.defaultRyvlResultsChannelId } : {}),
         ...(data.defaultRyvlFixturesChannelId !== undefined ? { defaultRyvlFixturesChannelId: data.defaultRyvlFixturesChannelId } : {}),
         ...(data.defaultRyvlLeaderboardChannelId !== undefined ? { defaultRyvlLeaderboardChannelId: data.defaultRyvlLeaderboardChannelId } : {}),
+        ...(data.defaultContactChannelId !== undefined ? { defaultContactChannelId: data.defaultContactChannelId } : {}),
+        ...(data.defaultRecruitmentChannelId !== undefined ? { defaultRecruitmentChannelId: data.defaultRecruitmentChannelId } : {}),
         ...(data.ryvlTeamName !== undefined ? { ryvlTeamName: data.ryvlTeamName } : {}),
       },
       create: {
@@ -206,6 +216,8 @@ export class GuildsService {
         defaultRyvlResultsChannelId: data.defaultRyvlResultsChannelId || null,
         defaultRyvlFixturesChannelId: data.defaultRyvlFixturesChannelId || null,
         defaultRyvlLeaderboardChannelId: data.defaultRyvlLeaderboardChannelId || null,
+        defaultContactChannelId: data.defaultContactChannelId || null,
+        defaultRecruitmentChannelId: data.defaultRecruitmentChannelId || null,
         ryvlTeamName: data.ryvlTeamName || 'RYVL Esports',
       },
     });

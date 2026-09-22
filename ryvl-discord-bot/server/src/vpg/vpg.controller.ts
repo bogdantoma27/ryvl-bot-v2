@@ -294,6 +294,15 @@ export class VpgController {
     return this.ryvlCommands.postRyvlFixturesToChannel(guildId, body.channelId);
   }
 
+  @Post('api/guilds/:guildId/vpg/performance/post-leaderboard')
+  @UseGuards(AuthGuard)
+  async postRyvlLeaderboard(
+    @Param('guildId') guildId: string,
+    @Body() body: { channelId?: string },
+  ) {
+    return this.ryvlCommands.postRyvlLeaderboardToChannel(guildId, body.channelId);
+  }
+
   // ----------------------------------------------------
   // Public Form Submissions (Dispatches to Discord)
   // ----------------------------------------------------
@@ -304,7 +313,10 @@ export class VpgController {
       return { success: false, error: 'Please provide name, contact information, and message.' };
     }
     const result = await this.ryvlCommands.dispatchContactNotification(body);
-    return { success: result.success, message: result.success ? 'Message delivered to RYVL management.' : 'Failed to deliver notification.' };
+    return {
+      success: result.success,
+      message: result.success ? 'Message delivered to RYVL management.' : (result.message || 'Failed to deliver notification.'),
+    };
   }
 
   @Post('api/public/recruitment')
@@ -322,6 +334,9 @@ export class VpgController {
       return { success: false, error: 'Gamertag, Discord tag, and primary position are required.' };
     }
     const result = await this.ryvlCommands.dispatchRecruitmentNotification(body);
-    return { success: result.success, message: result.success ? 'Trial application submitted to RYVL recruitment staff.' : 'Failed to deliver application.' };
+    return {
+      success: result.success,
+      message: result.success ? 'Trial application submitted to RYVL recruitment staff.' : (result.message || 'Failed to deliver application.'),
+    };
   }
 }

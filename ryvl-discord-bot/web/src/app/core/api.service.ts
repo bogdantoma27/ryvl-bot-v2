@@ -21,6 +21,7 @@ import {
   RyvlCompetition,
   ContactSubmission,
   RecruitmentSubmission,
+  RosterPlayer,
 } from './models';
 
 const DEFAULT_PRODUCTION_API_BASE_URL = 'https://ryvl-bot-api.onrender.com';
@@ -606,6 +607,19 @@ export class ApiService {
     );
   }
 
+  postRyvlLeaderboard(
+    guildId: string,
+    channelId?: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; message: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/performance/post-leaderboard`,
+        { channelId },
+        { headers: this.headers() },
+      ),
+    );
+  }
+
   // ----------------------------------------------------
   // Public Form Submissions
   // ----------------------------------------------------
@@ -631,5 +645,12 @@ export class ApiService {
       ),
     );
   }
+
+  getPublicRoster(): Promise<RosterPlayer[]> {
+    return firstValueFrom(
+      this.http.get<RosterPlayer[]>(`${this.baseUrl}/api/public/roster?t=${Date.now()}`),
+    );
+  }
 }
+
 

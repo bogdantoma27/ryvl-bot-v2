@@ -46,7 +46,7 @@ import { VpgMatchItem } from '../../core/models';
               <span class="text-xs text-slate-400 font-mono">{{ todayFormatted() }}</span>
             </div>
             <h2 class="text-2xl font-black text-white uppercase">
-              {{ isGameNight() ? 'Official Superliga Matchday Active' : 'Next Game Night: Monday / Tuesday / Thursday (22:00)' }}
+              {{ isGameNight() ? 'Official VPG Matchday Active' : 'Next Game Night: Monday / Tuesday / Thursday (22:00)' }}
             </h2>
             <p class="text-xs text-slate-400">
               Matches kickoff in Bucharest Time (Europe/Bucharest). Results update automatically.
@@ -120,7 +120,7 @@ import { VpgMatchItem } from '../../core/models';
           <div class="p-12 rounded-2xl bg-[#0c0c0e] border border-white/10 text-center space-y-2">
             <p class="text-sm font-semibold text-white">No confirmed matches recorded today yet.</p>
             <p class="text-xs text-slate-400">
-              When Superliga matches conclude tonight, results will be published here in real time.
+              When tournament matches conclude tonight, results will be published here in real time.
             </p>
           </div>
         } @else {

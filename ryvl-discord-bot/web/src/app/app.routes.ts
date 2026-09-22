@@ -165,6 +165,14 @@ export const routes: Routes = [
       import('./features/vpg-transfers/vpg-transfers.component').then((m) => m.VpgTransfersComponent),
   },
   {
+    path: 'admin/performance',
+    canMatch: [authGuard],
+    loadComponent: () =>
+      import('./features/performance/admin-performance.component').then(
+        (m) => m.AdminPerformanceComponent,
+      ),
+  },
+  {
     path: 'admin/settings',
     canMatch: [authGuard],
     loadComponent: () =>

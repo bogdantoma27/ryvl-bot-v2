@@ -21,10 +21,10 @@ import { VpgMatchItem } from '../../core/models';
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#EAE905]/15 pb-6">
         <div>
-          <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">Virtual Pro Gaming România</div>
-          <h1 class="text-4xl font-black text-white uppercase tracking-tight">Superliga Match Results</h1>
+          <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">Official VPG Feed</div>
+          <h1 class="text-4xl font-black text-white uppercase tracking-tight">Match Results Feed</h1>
           <p class="text-xs sm:text-sm text-slate-400 mt-2">
-            Official confirmed match results pulled directly from the VPG Superliga API feed.
+            Official confirmed match results pulled directly from the VPG competitive API feed.
           </p>
         </div>
 
@@ -35,20 +35,16 @@ import { VpgMatchItem } from '../../core/models';
             <button
               type="button"
               (click)="onlyRyvl.set(false)"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase transition cursor-pointer"
-              [class.bg-[#EAE905]]="!onlyRyvl()"
-              [class.text-black]="!onlyRyvl()"
-              [class.text-slate-300]="onlyRyvl()"
+              class="px-3.5 py-1.5 rounded-lg text-xs uppercase transition cursor-pointer"
+              [ngClass]="!onlyRyvl() ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'text-slate-300 hover:text-white font-bold'"
             >
               All Matches
             </button>
             <button
               type="button"
               (click)="onlyRyvl.set(true)"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase transition cursor-pointer flex items-center gap-1.5"
-              [class.bg-[#EAE905]]="onlyRyvl()"
-              [class.text-black]="onlyRyvl()"
-              [class.text-slate-300]="!onlyRyvl()"
+              class="px-3.5 py-1.5 rounded-lg text-xs uppercase transition cursor-pointer flex items-center gap-1.5"
+              [ngClass]="onlyRyvl() ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'text-slate-300 hover:text-white font-bold'"
             >
               <span class="text-xs">⭐</span>
               <span>RYVL Only</span>

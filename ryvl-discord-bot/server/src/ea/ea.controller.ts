@@ -44,6 +44,14 @@ export class EaController {
     return this.getMembers(config.guildId);
   }
 
+  @Get('api/public/roster')
+  async getPublicRoster(
+    @Query('clubId') clubId?: string,
+    @Query('platform') platform = 'common-gen5',
+  ) {
+    return this.eaService.getPublicRoster(platform, clubId);
+  }
+
   @Get('api/guilds/:guildId/ea/config')
   async getConfig(@Param('guildId') guildId: string) {
     const config =

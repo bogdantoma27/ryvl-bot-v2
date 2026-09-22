@@ -182,7 +182,11 @@ export class ContactComponent {
     this.isSubmitting.set(true);
     this.error.set(null);
     try {
-      await this.api.submitContact(this.form);
+      const res = await this.api.submitContact(this.form);
+      if (res && res.success === false) {
+        this.error.set(res.message || res.error || 'Failed to dispatch message to management.');
+        return;
+      }
       this.sent.set(true);
     } catch (err: any) {
       console.error('Failed to dispatch contact transmission:', err);

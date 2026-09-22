@@ -44,6 +44,26 @@ export interface GuildSummary {
   memberCount?: number;
 }
 
+export interface GuildSettings {
+  guildId?: string;
+  name?: string;
+  iconUrl?: string | null;
+  timezone?: string;
+  defaultChannelId?: string | null;
+  defaultLineupChannelId?: string | null;
+  defaultTransfersChannelId?: string | null;
+  defaultFixturesChannelId?: string | null;
+  defaultStandingsChannelId?: string | null;
+  defaultLiveResultsChannelId?: string | null;
+  defaultRyvlResultsChannelId?: string | null;
+  defaultRyvlFixturesChannelId?: string | null;
+  defaultRyvlLeaderboardChannelId?: string | null;
+  defaultContactChannelId?: string | null;
+  defaultRecruitmentChannelId?: string | null;
+  ryvlTeamName?: string;
+  botStatus?: 'online' | 'offline' | 'idle';
+}
+
 export interface GuildBootstrap {
   id: string;
   name: string;
@@ -57,6 +77,8 @@ export interface GuildBootstrap {
   defaultRyvlResultsChannelId?: string | null;
   defaultRyvlFixturesChannelId?: string | null;
   defaultRyvlLeaderboardChannelId?: string | null;
+  defaultContactChannelId?: string | null;
+  defaultRecruitmentChannelId?: string | null;
   ryvlTeamName?: string;
   channels: ChannelOption[];
   roles: RoleOption[];
@@ -72,6 +94,8 @@ export interface GuildBootstrap {
     defaultRyvlResultsChannelId?: string | null;
     defaultRyvlFixturesChannelId?: string | null;
     defaultRyvlLeaderboardChannelId?: string | null;
+    defaultContactChannelId?: string | null;
+    defaultRecruitmentChannelId?: string | null;
     ryvlTeamName?: string;
     botActive: boolean;
   };
@@ -150,23 +174,6 @@ export interface EventCreatePayload {
   roleMentionIds: string[];
 }
 
-export interface GuildSettings {
-  guildId: string;
-  name: string;
-  iconUrl: string | null;
-  timezone: string;
-  defaultChannelId: string | null;
-  defaultLineupChannelId?: string | null;
-  defaultTransfersChannelId?: string | null;
-  defaultFixturesChannelId?: string | null;
-  defaultStandingsChannelId?: string | null;
-  defaultLiveResultsChannelId?: string | null;
-  defaultRyvlResultsChannelId?: string | null;
-  defaultRyvlFixturesChannelId?: string | null;
-  defaultRyvlLeaderboardChannelId?: string | null;
-  ryvlTeamName?: string;
-  botStatus: 'online' | 'offline' | 'idle';
-}
 
 export interface VpgStandingsRow {
   position: number;
@@ -327,4 +334,24 @@ export interface LineupPostPayload extends LineupRenderPayload {
   channel_id: string;
   mention_role_ids?: string[];
 }
+
+export interface RosterPlayer {
+  name: string;
+  proName: string;
+  proOverall: number;
+  position: string;
+  positionGroup: 'forward' | 'midfielder' | 'defender' | 'goalkeeper';
+  gamesPlayed: number;
+  goals: number;
+  assists: number;
+  ratingAve: number;
+  cleanSheets: number;
+  manOfTheMatch: number;
+  passSuccessRate: number;
+  tackleSuccessRate: number;
+  shotSuccessRate: number;
+  nationality?: string;
+  height?: number;
+}
+
 

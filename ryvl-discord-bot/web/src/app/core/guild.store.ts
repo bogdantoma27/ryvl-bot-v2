@@ -163,6 +163,36 @@ export class GuildStore {
         raw.settings?.defaultLiveResultsChannelId ||
         raw.guild?.defaultLiveResultsChannelId ||
         null;
+      const defaultRyvlResultsChannelId =
+        raw.settings?.defaultRyvlResultsChannelId ||
+        raw.defaultRyvlResultsChannelId ||
+        raw.guild?.defaultRyvlResultsChannelId ||
+        null;
+      const defaultRyvlFixturesChannelId =
+        raw.settings?.defaultRyvlFixturesChannelId ||
+        raw.defaultRyvlFixturesChannelId ||
+        raw.guild?.defaultRyvlFixturesChannelId ||
+        null;
+      const defaultRyvlLeaderboardChannelId =
+        raw.settings?.defaultRyvlLeaderboardChannelId ||
+        raw.defaultRyvlLeaderboardChannelId ||
+        raw.guild?.defaultRyvlLeaderboardChannelId ||
+        null;
+      const defaultContactChannelId =
+        raw.settings?.defaultContactChannelId ||
+        raw.defaultContactChannelId ||
+        raw.guild?.defaultContactChannelId ||
+        null;
+      const defaultRecruitmentChannelId =
+        raw.settings?.defaultRecruitmentChannelId ||
+        raw.defaultRecruitmentChannelId ||
+        raw.guild?.defaultRecruitmentChannelId ||
+        null;
+      const ryvlTeamName =
+        raw.settings?.ryvlTeamName ||
+        raw.ryvlTeamName ||
+        raw.guild?.ryvlTeamName ||
+        'RYVL Esports';
 
       const data: GuildBootstrap = {
         id: raw.id || raw.guild?.id || guildId,
@@ -174,6 +204,12 @@ export class GuildStore {
         defaultFixturesChannelId,
         defaultStandingsChannelId,
         defaultLiveResultsChannelId,
+        defaultRyvlResultsChannelId,
+        defaultRyvlFixturesChannelId,
+        defaultRyvlLeaderboardChannelId,
+        defaultContactChannelId,
+        defaultRecruitmentChannelId,
+        ryvlTeamName,
         channels: raw.channels || [],
         roles: raw.roles || [],
         members: raw.members || [],
@@ -185,6 +221,12 @@ export class GuildStore {
           defaultFixturesChannelId,
           defaultStandingsChannelId,
           defaultLiveResultsChannelId,
+          defaultRyvlResultsChannelId,
+          defaultRyvlFixturesChannelId,
+          defaultRyvlLeaderboardChannelId,
+          defaultContactChannelId,
+          defaultRecruitmentChannelId,
+          ryvlTeamName,
           botActive: raw.settings?.botActive ?? true,
         },
       };
@@ -248,6 +290,8 @@ export class GuildStore {
     defaultRyvlResultsChannelId?: string | null;
     defaultRyvlFixturesChannelId?: string | null;
     defaultRyvlLeaderboardChannelId?: string | null;
+    defaultContactChannelId?: string | null;
+    defaultRecruitmentChannelId?: string | null;
     ryvlTeamName?: string;
     timezone?: string;
     name?: string;
@@ -291,6 +335,14 @@ export class GuildStore {
         updated.defaultRyvlLeaderboardChannelId !== undefined
           ? updated.defaultRyvlLeaderboardChannelId
           : current.defaultRyvlLeaderboardChannelId,
+      defaultContactChannelId:
+        updated.defaultContactChannelId !== undefined
+          ? updated.defaultContactChannelId
+          : current.defaultContactChannelId,
+      defaultRecruitmentChannelId:
+        updated.defaultRecruitmentChannelId !== undefined
+          ? updated.defaultRecruitmentChannelId
+          : current.defaultRecruitmentChannelId,
       ryvlTeamName: updated.ryvlTeamName ?? current.ryvlTeamName,
       settings: current.settings
         ? {
@@ -331,6 +383,14 @@ export class GuildStore {
               updated.defaultRyvlLeaderboardChannelId !== undefined
                 ? updated.defaultRyvlLeaderboardChannelId
                 : current.settings.defaultRyvlLeaderboardChannelId,
+            defaultContactChannelId:
+              updated.defaultContactChannelId !== undefined
+                ? updated.defaultContactChannelId
+                : current.settings.defaultContactChannelId,
+            defaultRecruitmentChannelId:
+              updated.defaultRecruitmentChannelId !== undefined
+                ? updated.defaultRecruitmentChannelId
+                : current.settings.defaultRecruitmentChannelId,
             ryvlTeamName: updated.ryvlTeamName ?? current.settings.ryvlTeamName,
             timezone: updated.timezone ?? current.settings.timezone,
           }
@@ -345,6 +405,8 @@ export class GuildStore {
             defaultRyvlResultsChannelId: updated.defaultRyvlResultsChannelId || null,
             defaultRyvlFixturesChannelId: updated.defaultRyvlFixturesChannelId || null,
             defaultRyvlLeaderboardChannelId: updated.defaultRyvlLeaderboardChannelId || null,
+            defaultContactChannelId: updated.defaultContactChannelId || null,
+            defaultRecruitmentChannelId: updated.defaultRecruitmentChannelId || null,
             ryvlTeamName: updated.ryvlTeamName || 'RYVL Esports',
             botActive: true,
           },

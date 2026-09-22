@@ -269,6 +269,17 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     )
     .addSubcommand((sub) =>
       sub
+        .setName('leaderboard')
+        .setDescription('Show current performance metrics and leaderboard standing for RYVL Esports')
+        .addStringOption((opt) =>
+          opt
+            .setName('competition')
+            .setDescription('Competition slug (optional)')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
         .setName('setup')
         .setDescription('Configure dedicated RYVL channels (ryvl-results, ryvl-fixtures, ryvl-leaderboard)')
         .addChannelOption((opt) =>
@@ -279,6 +290,12 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         )
         .addChannelOption((opt) =>
           opt.setName('leaderboard_channel').setDescription('Channel for ryvl-leaderboard').setRequired(false),
+        )
+        .addChannelOption((opt) =>
+          opt.setName('contact_channel').setDescription('Channel where website contact messages are received').setRequired(false),
+        )
+        .addChannelOption((opt) =>
+          opt.setName('recruitment_channel').setDescription('Channel where trial applications are received').setRequired(false),
         ),
     );
 

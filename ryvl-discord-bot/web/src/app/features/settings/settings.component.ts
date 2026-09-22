@@ -374,6 +374,61 @@ const TIMEZONES = [
           </div>
         </div>
 
+        <!-- Card 4b: Website Public Form Channels -->
+        <div class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-5">
+          <div class="border-b border-slate-700/50 pb-3">
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="text-[#5865F2]">📬</span>
+              <span>Website Form Submissions & Channel Routing</span>
+            </h2>
+            <p class="text-xs text-slate-400">
+              Configure the specific Discord channels where public transmissions from the website contact and trial recruitment forms are posted.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <!-- Contact Inquiries Channel -->
+            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
+              <div class="flex items-center gap-2 text-xs font-bold text-white">
+                <span class="text-indigo-400">💬</span>
+                <span>Contact Management Channel</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Target channel where messages from <code>/contact</code> are dispatched to management.</p>
+              <select
+                [ngModel]="defaultContactChannelId()"
+                (ngModelChange)="defaultContactChannelId.set($event)"
+                name="defaultContactChannelId"
+                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#5865F2] transition"
+              >
+                <option value="">None (disabled / rejected)</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- Recruitment Applications Channel -->
+            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
+              <div class="flex items-center gap-2 text-xs font-bold text-white">
+                <span class="text-[#EAE905]">⚡</span>
+                <span>Recruitment Applications Channel</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Target channel where trial applications from <code>/recruitment</code> are delivered.</p>
+              <select
+                [ngModel]="defaultRecruitmentChannelId()"
+                (ngModelChange)="defaultRecruitmentChannelId.set($event)"
+                name="defaultRecruitmentChannelId"
+                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
+              >
+                <option value="">None (disabled / rejected)</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+            </div>
+          </div>
+        </div>
+
         <!-- Card 5: Competition Slots Manager -->
         <div class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-5">
           <div class="border-b border-slate-700/50 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -506,6 +561,8 @@ export class SettingsComponent implements OnInit {
   readonly defaultRyvlResultsChannelId = signal<string>('');
   readonly defaultRyvlFixturesChannelId = signal<string>('');
   readonly defaultRyvlLeaderboardChannelId = signal<string>('');
+  readonly defaultContactChannelId = signal<string>('');
+  readonly defaultRecruitmentChannelId = signal<string>('');
   readonly ryvlTeamName = signal<string>('RYVL Esports');
   readonly competitions = signal<RyvlCompetition[]>([]);
 
@@ -587,6 +644,18 @@ export class SettingsComponent implements OnInit {
           '';
         this.defaultRyvlLeaderboardChannelId.set(ryvlLdCh);
 
+        const contactCh =
+          active.settings?.defaultContactChannelId ||
+          active.defaultContactChannelId ||
+          '';
+        this.defaultContactChannelId.set(contactCh);
+
+        const recruitCh =
+          active.settings?.defaultRecruitmentChannelId ||
+          active.defaultRecruitmentChannelId ||
+          '';
+        this.defaultRecruitmentChannelId.set(recruitCh);
+
         const teamName =
           active.settings?.ryvlTeamName ||
           active.ryvlTeamName ||
@@ -609,9 +678,9 @@ export class SettingsComponent implements OnInit {
   async loadSettings(guildId: string): Promise<void> {
     try {
       const s = await this.api.getSettings(guildId);
-      this.guildName.set(s.name);
-      this.guildIconUrl.set(s.iconUrl);
-      this.timezone.set(s.timezone);
+      if (s.name) this.guildName.set(s.name);
+      if (s.iconUrl !== undefined) this.guildIconUrl.set(s.iconUrl);
+      if (s.timezone) this.timezone.set(s.timezone);
       this.defaultChannelId.set(s.defaultChannelId || '');
       this.defaultLineupChannelId.set(s.defaultLineupChannelId || '');
       this.defaultTransfersChannelId.set(s.defaultTransfersChannelId || '');
@@ -621,8 +690,10 @@ export class SettingsComponent implements OnInit {
       this.defaultRyvlResultsChannelId.set(s.defaultRyvlResultsChannelId || '');
       this.defaultRyvlFixturesChannelId.set(s.defaultRyvlFixturesChannelId || '');
       this.defaultRyvlLeaderboardChannelId.set(s.defaultRyvlLeaderboardChannelId || '');
+      this.defaultContactChannelId.set(s.defaultContactChannelId || '');
+      this.defaultRecruitmentChannelId.set(s.defaultRecruitmentChannelId || '');
       this.ryvlTeamName.set(s.ryvlTeamName || 'RYVL Esports');
-      this.botStatus.set(s.botStatus);
+      if (s.botStatus) this.botStatus.set(s.botStatus);
     } catch {
       // Keep loaded bootstrap values as fallback
     }
@@ -680,6 +751,8 @@ export class SettingsComponent implements OnInit {
       defaultRyvlResultsChannelId: this.defaultRyvlResultsChannelId() || null,
       defaultRyvlFixturesChannelId: this.defaultRyvlFixturesChannelId() || null,
       defaultRyvlLeaderboardChannelId: this.defaultRyvlLeaderboardChannelId() || null,
+      defaultContactChannelId: this.defaultContactChannelId() || null,
+      defaultRecruitmentChannelId: this.defaultRecruitmentChannelId() || null,
       ryvlTeamName: this.ryvlTeamName() || 'RYVL Esports',
     };
 
@@ -697,6 +770,8 @@ export class SettingsComponent implements OnInit {
         defaultRyvlResultsChannelId: this.defaultRyvlResultsChannelId() || null,
         defaultRyvlFixturesChannelId: this.defaultRyvlFixturesChannelId() || null,
         defaultRyvlLeaderboardChannelId: this.defaultRyvlLeaderboardChannelId() || null,
+        defaultContactChannelId: this.defaultContactChannelId() || null,
+        defaultRecruitmentChannelId: this.defaultRecruitmentChannelId() || null,
         ryvlTeamName: this.ryvlTeamName() || 'RYVL Esports',
       });
       this.successMessage.set('Settings saved successfully!');

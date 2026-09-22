@@ -22,9 +22,9 @@ import { VpgMatchItem } from '../../core/models';
       <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#EAE905]/15 pb-6">
         <div>
           <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">Schedule & Calendar</div>
-          <h1 class="text-4xl font-black text-white uppercase tracking-tight">Superliga Fixtures</h1>
+          <h1 class="text-4xl font-black text-white uppercase tracking-tight">Match Fixtures & Schedule</h1>
           <p class="text-xs sm:text-sm text-slate-400 mt-2">
-            Upcoming matches scheduled in VPG Superliga România (all kickoff times in Bucharest timezone).
+            Upcoming official VPG competitive fixtures (all kickoff times in Bucharest timezone).
           </p>
         </div>
 
@@ -35,20 +35,16 @@ import { VpgMatchItem } from '../../core/models';
             <button
               type="button"
               (click)="onlyRyvl.set(false)"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase transition cursor-pointer"
-              [class.bg-[#EAE905]]="!onlyRyvl()"
-              [class.text-black]="!onlyRyvl()"
-              [class.text-slate-300]="onlyRyvl()"
+              class="px-3.5 py-1.5 rounded-lg text-xs uppercase transition cursor-pointer"
+              [ngClass]="!onlyRyvl() ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'text-slate-300 hover:text-white font-bold'"
             >
               All Matches
             </button>
             <button
               type="button"
               (click)="onlyRyvl.set(true)"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase transition cursor-pointer flex items-center gap-1.5"
-              [class.bg-[#EAE905]]="onlyRyvl()"
-              [class.text-black]="onlyRyvl()"
-              [class.text-slate-300]="!onlyRyvl()"
+              class="px-3.5 py-1.5 rounded-lg text-xs uppercase transition cursor-pointer flex items-center gap-1.5"
+              [ngClass]="onlyRyvl() ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'text-slate-300 hover:text-white font-bold'"
             >
               <span class="text-xs">⭐</span>
               <span>RYVL Only</span>

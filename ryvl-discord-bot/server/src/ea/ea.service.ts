@@ -9,6 +9,7 @@ import {
   ParsedEaMatch,
   ParsedEaPlayer,
   EaMatchPlayerStat,
+  PublicRosterMember,
 } from './ea.types';
 
 import { existsSync, mkdirSync, copyFileSync } from 'fs';
@@ -93,6 +94,106 @@ export class EaService {
 
   async fetchMemberStats(clubId: string, platform = 'common-gen5'): Promise<any> {
     return this.runBridge('member_stats', [platform, String(clubId)]);
+  }
+
+  private mapPosition(proPos: any, favoritePosition?: string): { position: string; positionGroup: 'forward' | 'midfielder' | 'defender' | 'goalkeeper' } {
+    const code = parseInt(String(proPos), 10);
+    switch (code) {
+      case 0:
+        return { position: 'GK', positionGroup: 'goalkeeper' };
+      case 1:
+        return { position: 'SW', positionGroup: 'defender' };
+      case 2:
+        return { position: 'RWB', positionGroup: 'defender' };
+      case 3:
+        return { position: 'RB', positionGroup: 'defender' };
+      case 4:
+      case 5:
+      case 6:
+        return { position: 'CB', positionGroup: 'defender' };
+      case 7:
+        return { position: 'LB', positionGroup: 'defender' };
+      case 8:
+        return { position: 'LWB', positionGroup: 'defender' };
+      case 9:
+      case 10:
+      case 11:
+        return { position: 'CDM', positionGroup: 'midfielder' };
+      case 12:
+        return { position: 'RM', positionGroup: 'midfielder' };
+      case 13:
+      case 14:
+      case 15:
+        return { position: 'CM', positionGroup: 'midfielder' };
+      case 16:
+        return { position: 'LM', positionGroup: 'midfielder' };
+      case 17:
+      case 18:
+      case 19:
+        return { position: 'CAM', positionGroup: 'midfielder' };
+      case 20:
+      case 21:
+      case 22:
+        return { position: 'CF', positionGroup: 'forward' };
+      case 23:
+        return { position: 'RW', positionGroup: 'forward' };
+      case 24:
+      case 25:
+      case 26:
+        return { position: 'ST', positionGroup: 'forward' };
+      case 27:
+        return { position: 'LW', positionGroup: 'forward' };
+      default: {
+        const fav = (favoritePosition || '').toLowerCase();
+        if (fav.includes('forward')) return { position: 'FW', positionGroup: 'forward' };
+        if (fav.includes('midfield')) return { position: 'MID', positionGroup: 'midfielder' };
+        if (fav.includes('defen')) return { position: 'DEF', positionGroup: 'defender' };
+        if (fav.includes('goal') || fav.includes('keeper')) return { position: 'GK', positionGroup: 'goalkeeper' };
+        return { position: 'PRO', positionGroup: 'midfielder' };
+      }
+    }
+  }
+
+  async getPublicRoster(platform = 'common-gen5', clubId?: string): Promise<PublicRosterMember[]> {
+    let targetClubId = clubId;
+    if (!targetClubId) {
+      const config = await this.prisma.clubTrackerConfig.findFirst();
+      if (config?.clubId) {
+        targetClubId = config.clubId;
+      } else {
+        targetClubId = '128199'; // Default RYVL Esports club ID
+      }
+    }
+
+    try {
+      const data = await this.fetchMemberStats(targetClubId, platform);
+      const members = Array.isArray(data?.members) ? data.members : [];
+
+      return members.map((m: any) => {
+        const posInfo = this.mapPosition(m.proPos, m.favoritePosition);
+        return {
+          name: m.name || 'Unknown',
+          proName: m.proName || m.name || 'Virtual Pro',
+          proOverall: parseInt(String(m.proOverall || 80), 10) || 80,
+          position: posInfo.position,
+          positionGroup: posInfo.positionGroup,
+          gamesPlayed: parseInt(String(m.gamesPlayed || 0), 10) || 0,
+          goals: parseInt(String(m.goals || 0), 10) || 0,
+          assists: parseInt(String(m.assists || 0), 10) || 0,
+          ratingAve: parseFloat(String(m.ratingAve || 0.0)) || 0.0,
+          cleanSheets: parseInt(String(m.cleanSheetsGK || m.cleanSheetsDef || 0), 10) || 0,
+          manOfTheMatch: parseInt(String(m.manOfTheMatch || 0), 10) || 0,
+          passSuccessRate: parseInt(String(m.passSuccessRate || 0), 10) || 0,
+          tackleSuccessRate: parseInt(String(m.tackleSuccessRate || 0), 10) || 0,
+          shotSuccessRate: parseInt(String(m.shotSuccessRate || 0), 10) || 0,
+          nationality: String(m.proNationality || '39'),
+          height: parseInt(String(m.proHeight || 180), 10) || 180,
+        };
+      });
+    } catch (err: any) {
+      this.logger.error(`Failed to get public roster for club ${targetClubId}: ${err.message}`);
+      return [];
+    }
   }
 
   parsePlayer(stat: EaMatchPlayerStat): ParsedEaPlayer {

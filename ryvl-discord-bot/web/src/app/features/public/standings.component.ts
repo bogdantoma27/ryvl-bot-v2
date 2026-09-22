@@ -21,9 +21,9 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
       <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#EAE905]/15 pb-6">
         <div>
           <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">Official Standings</div>
-          <h1 class="text-4xl font-black text-white uppercase tracking-tight">Superliga Standings & Stats</h1>
+          <h1 class="text-4xl font-black text-white uppercase tracking-tight">League Standings & Statistics</h1>
           <p class="text-xs sm:text-sm text-slate-400 mt-2">
-            Official table standings and player leaderboards for Virtual Pro Gaming România.
+            Official table standings and player leaderboards for Virtual Pro Gaming competitions.
           </p>
         </div>
 
@@ -143,7 +143,7 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
               <span class="text-[#EAE905]">⭐</span>
               <span>Individual Leaderboards</span>
             </h2>
-            <p class="text-xs text-slate-400 mt-1">Top players in VPG Superliga across scoring, playmaking, and defense.</p>
+            <p class="text-xs text-slate-400 mt-1">Top players across official VPG competitions in scoring, playmaking, and defense.</p>
           </div>
 
           <!-- Category Buttons -->
@@ -152,10 +152,8 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
               <button
                 type="button"
                 (click)="onCategoryChange(cat.key)"
-                class="px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition cursor-pointer"
-                [class.bg-[#EAE905]]="selectedCategory() === cat.key"
-                [class.text-black]="selectedCategory() === cat.key"
-                [class.text-slate-300]="selectedCategory() !== cat.key"
+                class="px-3 py-1.5 rounded-lg text-xs uppercase transition cursor-pointer"
+                [ngClass]="selectedCategory() === cat.key ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'text-slate-300 hover:text-white font-bold'"
               >
                 {{ cat.label }}
               </button>
