@@ -1,10 +1,12 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  inject,
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ApiService } from '../../core/api.service';
 
 @Component({
   selector: 'app-public-recruitment',
@@ -193,13 +195,25 @@ import { FormsModule } from '@angular/forms';
                 ></textarea>
               </div>
 
+              @if (error()) {
+                <div class="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs">
+                  {{ error() }}
+                </div>
+              }
+
               <!-- Submit -->
               <div class="flex items-center justify-end pt-2">
                 <button
                   type="submit"
-                  class="px-8 py-3.5 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-[#EAE905]/15 transition transform hover:scale-105 cursor-pointer"
+                  [disabled]="isSubmitting()"
+                  class="px-8 py-3.5 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] disabled:opacity-50 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-[#EAE905]/15 transition transform hover:scale-105 cursor-pointer flex items-center gap-2"
                 >
-                  Submit Trial Request
+                  @if (isSubmitting()) {
+                    <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                    <span>Submitting Application...</span>
+                  } @else {
+                    <span>Submit Trial Request</span>
+                  }
                 </button>
               </div>
             </form>
@@ -210,7 +224,11 @@ import { FormsModule } from '@angular/forms';
   `,
 })
 export class RecruitmentComponent {
+  private readonly api = inject(ApiService);
+
   readonly submitted = signal<boolean>(false);
+  readonly isSubmitting = signal<boolean>(false);
+  readonly error = signal<string | null>(null);
 
   form = {
     gamertag: '',
@@ -222,13 +240,24 @@ export class RecruitmentComponent {
     experience: '',
   };
 
-  submitApplication(): void {
+  async submitApplication(): Promise<void> {
     if (!this.form.gamertag || !this.form.discordTag) return;
-    this.submitted.set(true);
+    this.isSubmitting.set(true);
+    this.error.set(null);
+    try {
+      await this.api.submitRecruitment(this.form);
+      this.submitted.set(true);
+    } catch (err: any) {
+      console.error('Failed to submit recruitment application:', err);
+      this.error.set(err.message || 'Failed to submit application. Please join our Discord server directly.');
+    } finally {
+      this.isSubmitting.set(false);
+    }
   }
 
   resetForm(): void {
     this.submitted.set(false);
+    this.error.set(null);
     this.form = {
       gamertag: '',
       discordTag: '',

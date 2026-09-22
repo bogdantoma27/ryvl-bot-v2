@@ -54,6 +54,10 @@ export interface GuildBootstrap {
   defaultFixturesChannelId?: string | null;
   defaultStandingsChannelId?: string | null;
   defaultLiveResultsChannelId?: string | null;
+  defaultRyvlResultsChannelId?: string | null;
+  defaultRyvlFixturesChannelId?: string | null;
+  defaultRyvlLeaderboardChannelId?: string | null;
+  ryvlTeamName?: string;
   channels: ChannelOption[];
   roles: RoleOption[];
   members?: GuildMemberOption[];
@@ -65,6 +69,10 @@ export interface GuildBootstrap {
     defaultFixturesChannelId?: string | null;
     defaultStandingsChannelId?: string | null;
     defaultLiveResultsChannelId?: string | null;
+    defaultRyvlResultsChannelId?: string | null;
+    defaultRyvlFixturesChannelId?: string | null;
+    defaultRyvlLeaderboardChannelId?: string | null;
+    ryvlTeamName?: string;
     botActive: boolean;
   };
 }
@@ -153,6 +161,10 @@ export interface GuildSettings {
   defaultFixturesChannelId?: string | null;
   defaultStandingsChannelId?: string | null;
   defaultLiveResultsChannelId?: string | null;
+  defaultRyvlResultsChannelId?: string | null;
+  defaultRyvlFixturesChannelId?: string | null;
+  defaultRyvlLeaderboardChannelId?: string | null;
+  ryvlTeamName?: string;
   botStatus: 'online' | 'offline' | 'idle';
 }
 
@@ -176,6 +188,7 @@ export interface VpgMatchItem {
   id: number;
   datetime: string;
   dateFormattedRo: string;
+  dateFormattedEn?: string;
   status: 'complete' | 'scheduled' | string;
   matchDay: number;
   homeName: string;
@@ -200,6 +213,80 @@ export interface VpgLeaderboardEntry {
   matchesPlayed: number;
   rating?: number | null;
   points?: number | null;
+}
+
+export interface RyvlPerformanceStats {
+  competitionName: string;
+  competitionSlug: string;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  points: number;
+  winRate: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  goalsPerMatch: number;
+  concededPerMatch: number;
+  cleanSheets: number;
+  currentStreak: ('W' | 'D' | 'L')[];
+  homeRecord: {
+    played: number;
+    wins: number;
+    draws: number;
+    losses: number;
+    goalsFor: number;
+    goalsAgainst: number;
+  };
+  awayRecord: {
+    played: number;
+    wins: number;
+    draws: number;
+    losses: number;
+    goalsFor: number;
+    goalsAgainst: number;
+  };
+  standingsPosition?: number | null;
+  totalTeams?: number | null;
+}
+
+export interface RyvlCompetition {
+  id?: string;
+  name: string;
+  slug: string;
+  communitySlug?: string;
+  season?: number;
+  active: boolean;
+  displayOrder?: number;
+}
+
+export interface RyvlPerformanceResponse {
+  teamName: string;
+  activeCompetition: string;
+  competitions: RyvlCompetition[];
+  stats: RyvlPerformanceStats;
+  recentResults: VpgMatchItem[];
+  upcomingFixtures: VpgMatchItem[];
+}
+
+export interface ContactSubmission {
+  name: string;
+  contact: string;
+  topic: string;
+  message: string;
+  guildId?: string;
+}
+
+export interface RecruitmentSubmission {
+  gamertag: string;
+  discordTag: string;
+  primaryPosition: string;
+  secondaryPosition?: string;
+  platform: string;
+  age: number;
+  experience?: string;
+  guildId?: string;
 }
 
 export interface LineupFormationsResponse {

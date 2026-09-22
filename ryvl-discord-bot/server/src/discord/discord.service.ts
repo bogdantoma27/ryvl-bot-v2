@@ -36,6 +36,7 @@ import {
 import { EaCommands } from './commands/ea-commands';
 import { VpgCommands } from './commands/vpg-commands';
 import { SuperligaCommands } from './commands/superliga-commands';
+import { RyvlCommands } from './commands/ryvl-commands';
 import { RsvpButtonHandler } from './interactions/rsvp-button.handler';
 
 
@@ -83,6 +84,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     private readonly vpgCommands: VpgCommands,
     @Inject(forwardRef(() => SuperligaCommands))
     private readonly superligaCommands: SuperligaCommands,
+    @Inject(forwardRef(() => RyvlCommands))
+    private readonly ryvlCommands: RyvlCommands,
   ) {
     this.client = new Client({
       intents: [
@@ -199,6 +202,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             await this.superligaCommands.handleSuperliga(interaction);
           } else if (interaction.commandName === 'live_results') {
             await this.superligaCommands.handleLiveResults(interaction);
+          } else if (interaction.commandName === 'ryvl') {
+            await this.ryvlCommands.handleRyvl(interaction);
           }
         } else if (interaction.isAutocomplete()) {
 

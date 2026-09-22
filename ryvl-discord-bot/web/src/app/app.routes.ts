@@ -50,6 +50,11 @@ export const routes: Routes = [
           import('./features/public/team.component').then((m) => m.TeamComponent),
       },
       {
+        path: 'performance',
+        loadComponent: () =>
+          import('./features/public/performance.component').then((m) => m.PerformanceComponent),
+      },
+      {
         path: 'competitions',
         loadComponent: () =>
           import('./features/public/competitions.component').then((m) => m.CompetitionsComponent),

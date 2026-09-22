@@ -18,6 +18,10 @@ model Guild {
   defaultFixturesChannelId    String?  @map("default_fixtures_channel_id")
   defaultStandingsChannelId   String?  @map("default_standings_channel_id")
   defaultLiveResultsChannelId String?  @map("default_live_results_channel_id")
+  defaultRyvlResultsChannelId     String?  @map("default_ryvl_results_channel_id")
+  defaultRyvlFixturesChannelId    String?  @map("default_ryvl_fixtures_channel_id")
+  defaultRyvlLeaderboardChannelId String?  @map("default_ryvl_leaderboard_channel_id")
+  ryvlTeamName                    String   @default("RYVL Esports") @map("ryvl_team_name")
   joinedAt           DateTime            @default(now()) @map("joined_at")
   events             Event[]
   lineupDrafts       LineupDraft[]
@@ -26,8 +30,26 @@ model Guild {
   vpgTransferConfig      VpgTransferConfig?
   processedVpgTransfers  ProcessedVpgTransfer[]
   processedVpgMatches    ProcessedVpgMatch[]
+  ryvlCompetitions       RyvlCompetition[]
 
   @@map("guilds")
+}
+
+model RyvlCompetition {
+  id            String   @id @default(uuid())
+  guildId       String   @map("guild_id")
+  guild         Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  name          String
+  slug          String
+  communitySlug String   @default("VPGRoPS5") @map("community_slug")
+  season        Int?
+  active        Boolean  @default(true)
+  displayOrder  Int      @default(1) @map("display_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([guildId, slug])
+  @@map("ryvl_competitions")
 }
 
 model LineupDraft {

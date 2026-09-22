@@ -198,13 +198,7 @@ const ROSTER_DATA: PlayerProfile[] = [
             type="button"
             (click)="selectedFilter.set(f.key)"
             class="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer"
-            [class.bg-[#EAE905]]="selectedFilter() === f.key"
-            [class.text-black]="selectedFilter() === f.key"
-            [class.bg-[#121214]]="selectedFilter() !== f.key"
-            [class.text-slate-300]="selectedFilter() !== f.key"
-            [class.border]="selectedFilter() !== f.key"
-            [class.border-white-10]="selectedFilter() !== f.key"
-            [class.hover:bg-white-5]="selectedFilter() !== f.key"
+            [ngClass]="selectedFilter() === f.key ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
           >
             {{ f.label }}
           </button>

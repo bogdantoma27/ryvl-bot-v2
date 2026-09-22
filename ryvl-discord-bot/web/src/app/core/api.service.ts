@@ -17,6 +17,10 @@ import {
   VpgStandingsRow,
   VpgMatchItem,
   VpgLeaderboardEntry,
+  RyvlPerformanceResponse,
+  RyvlCompetition,
+  ContactSubmission,
+  RecruitmentSubmission,
 } from './models';
 
 const DEFAULT_PRODUCTION_API_BASE_URL = 'https://ryvl-bot-api.onrender.com';
@@ -529,6 +533,101 @@ export class ApiService {
         `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/post-results`,
         { channelId, season },
         { headers: this.headers() },
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // RYVL Team Performance & Multi-Competition Methods
+  // ----------------------------------------------------
+
+  getRyvlPerformance(
+    competitionSlug?: string,
+    guildId?: string,
+  ): Promise<RyvlPerformanceResponse> {
+    const params = new URLSearchParams();
+    if (competitionSlug) params.set('competition', competitionSlug);
+    if (guildId) params.set('guildId', guildId);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+
+    return firstValueFrom(
+      this.http.get<RyvlPerformanceResponse>(
+        `${this.baseUrl}/api/vpg/performance${qs}`,
+      ),
+    );
+  }
+
+  getCompetitions(guildId: string): Promise<{ competitions: RyvlCompetition[] }> {
+    return firstValueFrom(
+      this.http.get<{ competitions: RyvlCompetition[] }>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/competitions`,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  updateCompetition(
+    guildId: string,
+    compId: string,
+    data: Partial<RyvlCompetition>,
+  ): Promise<{ success: boolean; competition: RyvlCompetition }> {
+    return firstValueFrom(
+      this.http.patch<{ success: boolean; competition: RyvlCompetition }>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/competitions/${compId}`,
+        data,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  postRyvlResults(
+    guildId: string,
+    channelId?: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; message: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/performance/post-results`,
+        { channelId },
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  postRyvlFixtures(
+    guildId: string,
+    channelId?: string,
+  ): Promise<{ success: boolean; message: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; message: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/performance/post-fixtures`,
+        { channelId },
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // Public Form Submissions
+  // ----------------------------------------------------
+
+  submitContact(
+    payload: ContactSubmission,
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; message?: string; error?: string }>(
+        `${this.baseUrl}/api/public/contact`,
+        payload,
+      ),
+    );
+  }
+
+  submitRecruitment(
+    payload: RecruitmentSubmission,
+  ): Promise<{ success: boolean; message?: string; error?: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; message?: string; error?: string }>(
+        `${this.baseUrl}/api/public/recruitment`,
+        payload,
       ),
     );
   }

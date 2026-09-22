@@ -144,6 +144,14 @@ export class VpgSuperligaPollerService implements OnModuleInit, OnModuleDestroy 
           `Posted Superliga result #${m.id} (${m.homeName} ${m.homeScore}-${m.awayScore} ${m.awayName}) to ${channelId}`,
         );
         postedCount++;
+
+        // Also post to dedicated ryvl-results channel if this is a RYVL match
+        if (/ryvl|rival/i.test(m.homeName) || /ryvl|rival/i.test(m.awayName)) {
+          const g = await this.prisma.guild.findUnique({ where: { id: guildId } });
+          if (g?.defaultRyvlResultsChannelId && g.defaultRyvlResultsChannelId !== channelId) {
+            await this.discordService.sendMessageToChannel(g.defaultRyvlResultsChannelId, embed).catch(() => null);
+          }
+        }
       } catch (err: any) {
         this.logger.error(
           `Failed to post Superliga match #${m.id} to channel ${channelId}: ${err.message}`,

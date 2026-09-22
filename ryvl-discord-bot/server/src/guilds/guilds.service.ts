@@ -109,6 +109,10 @@ export class GuildsService {
         defaultFixturesChannelId: guild.defaultFixturesChannelId || null,
         defaultStandingsChannelId: guild.defaultStandingsChannelId || null,
         defaultLiveResultsChannelId: guild.defaultLiveResultsChannelId || null,
+        defaultRyvlResultsChannelId: guild.defaultRyvlResultsChannelId || null,
+        defaultRyvlFixturesChannelId: guild.defaultRyvlFixturesChannelId || null,
+        defaultRyvlLeaderboardChannelId: guild.defaultRyvlLeaderboardChannelId || null,
+        ryvlTeamName: guild.ryvlTeamName || 'RYVL Esports',
       },
       channels,
       roles,
@@ -121,6 +125,10 @@ export class GuildsService {
         defaultFixturesChannelId: guild.defaultFixturesChannelId || null,
         defaultStandingsChannelId: guild.defaultStandingsChannelId || null,
         defaultLiveResultsChannelId: guild.defaultLiveResultsChannelId || null,
+        defaultRyvlResultsChannelId: guild.defaultRyvlResultsChannelId || null,
+        defaultRyvlFixturesChannelId: guild.defaultRyvlFixturesChannelId || null,
+        defaultRyvlLeaderboardChannelId: guild.defaultRyvlLeaderboardChannelId || null,
+        ryvlTeamName: guild.ryvlTeamName || 'RYVL Esports',
         botActive: true,
       },
     };
@@ -144,6 +152,10 @@ export class GuildsService {
       defaultFixturesChannelId: guild.defaultFixturesChannelId || null,
       defaultStandingsChannelId: guild.defaultStandingsChannelId || null,
       defaultLiveResultsChannelId: guild.defaultLiveResultsChannelId || null,
+      defaultRyvlResultsChannelId: guild.defaultRyvlResultsChannelId || null,
+      defaultRyvlFixturesChannelId: guild.defaultRyvlFixturesChannelId || null,
+      defaultRyvlLeaderboardChannelId: guild.defaultRyvlLeaderboardChannelId || null,
+      ryvlTeamName: guild.ryvlTeamName || 'RYVL Esports',
       botStatus: 'online',
     };
   }
@@ -159,6 +171,10 @@ export class GuildsService {
       defaultFixturesChannelId?: string | null;
       defaultStandingsChannelId?: string | null;
       defaultLiveResultsChannelId?: string | null;
+      defaultRyvlResultsChannelId?: string | null;
+      defaultRyvlFixturesChannelId?: string | null;
+      defaultRyvlLeaderboardChannelId?: string | null;
+      ryvlTeamName?: string;
     },
   ): Promise<any> {
     const guild = await this.prisma.guild.upsert({
@@ -172,6 +188,10 @@ export class GuildsService {
         ...(data.defaultFixturesChannelId !== undefined ? { defaultFixturesChannelId: data.defaultFixturesChannelId } : {}),
         ...(data.defaultStandingsChannelId !== undefined ? { defaultStandingsChannelId: data.defaultStandingsChannelId } : {}),
         ...(data.defaultLiveResultsChannelId !== undefined ? { defaultLiveResultsChannelId: data.defaultLiveResultsChannelId } : {}),
+        ...(data.defaultRyvlResultsChannelId !== undefined ? { defaultRyvlResultsChannelId: data.defaultRyvlResultsChannelId } : {}),
+        ...(data.defaultRyvlFixturesChannelId !== undefined ? { defaultRyvlFixturesChannelId: data.defaultRyvlFixturesChannelId } : {}),
+        ...(data.defaultRyvlLeaderboardChannelId !== undefined ? { defaultRyvlLeaderboardChannelId: data.defaultRyvlLeaderboardChannelId } : {}),
+        ...(data.ryvlTeamName !== undefined ? { ryvlTeamName: data.ryvlTeamName } : {}),
       },
       create: {
         id: guildId,
@@ -183,6 +203,10 @@ export class GuildsService {
         defaultFixturesChannelId: data.defaultFixturesChannelId || null,
         defaultStandingsChannelId: data.defaultStandingsChannelId || null,
         defaultLiveResultsChannelId: data.defaultLiveResultsChannelId || null,
+        defaultRyvlResultsChannelId: data.defaultRyvlResultsChannelId || null,
+        defaultRyvlFixturesChannelId: data.defaultRyvlFixturesChannelId || null,
+        defaultRyvlLeaderboardChannelId: data.defaultRyvlLeaderboardChannelId || null,
+        ryvlTeamName: data.ryvlTeamName || 'RYVL Esports',
       },
     });
 

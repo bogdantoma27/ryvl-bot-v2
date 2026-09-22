@@ -42,8 +42,8 @@ import { RouterLink } from '@angular/router';
             <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-2">
               <div class="p-4 rounded-xl bg-black/50 border border-white/10">
                 <div class="text-[10px] font-mono text-[#EAE905] uppercase">Match Schedule</div>
-                <div class="text-sm font-bold text-white mt-1">Luni, Marți, Joi</div>
-                <div class="text-[11px] text-slate-400">22:00 - 00:00 (Bucharest)</div>
+                <div class="text-sm font-bold text-white mt-1">Monday, Tuesday, Thursday</div>
+                <div class="text-[11px] text-slate-400">22:00 - 00:00 (Bucharest Time)</div>
               </div>
 
               <div class="p-4 rounded-xl bg-black/50 border border-white/10">
@@ -67,6 +67,12 @@ import { RouterLink } from '@angular/router';
                 View League Table
               </a>
               <a
+                routerLink="/performance"
+                class="px-5 py-2.5 rounded-xl bg-[#EAE905]/15 text-[#EAE905] border border-[#EAE905]/40 text-xs font-bold uppercase tracking-wider hover:bg-[#EAE905]/25 transition"
+              >
+                RYVL Performance
+              </a>
+              <a
                 routerLink="/fixtures"
                 class="px-5 py-2.5 rounded-xl bg-white/10 text-white text-xs font-bold uppercase tracking-wider hover:bg-white/15 transition border border-white/10"
               >
@@ -86,7 +92,7 @@ import { RouterLink } from '@angular/router';
             <div class="w-24 h-24 rounded-full bg-[#EAE905]/10 border-2 border-[#EAE905] flex items-center justify-center text-4xl shadow-xl">
               ⚽
             </div>
-            <div class="font-black text-white text-lg uppercase">Superliga Sezon 2</div>
+            <div class="font-black text-white text-lg uppercase">Superliga Season 2</div>
             <p class="text-xs text-slate-400">Official tournament sanctioned by Virtual Pro Gaming Global.</p>
             <div class="w-full pt-3 border-t border-white/10 flex items-center justify-around text-xs">
               <div>
@@ -108,30 +114,47 @@ import { RouterLink } from '@angular/router';
         </div>
       </div>
 
-      <!-- Additional Tournaments Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <!-- VPG Champions League -->
-        <div class="p-8 rounded-3xl bg-[#0c0c0e] border border-white/10 hover:border-[#EAE905]/30 transition space-y-4">
-          <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-xl text-blue-400">
-            ⭐
-          </div>
-          <h3 class="text-2xl font-bold text-white uppercase">VPG Champions League</h3>
-          <p class="text-xs text-slate-400 leading-relaxed">
-            The ultimate European Pro Clubs showcase. Pitting top clubs from England, Italy, Germany, France, Romania, and the Balkans in continental group stage clashes and high-stakes knockout ties.
-          </p>
-          <div class="text-xs font-mono text-[#EAE905]">Mid-Week European Match Nights</div>
+      <!-- Additional Configurable Tournaments Grid -->
+      <div class="space-y-6">
+        <div>
+          <h2 class="text-2xl font-black text-white uppercase tracking-tight">Additional Competitive Campaigns</h2>
+          <p class="text-xs text-slate-400 mt-1">Secondary and upcoming tournament circuits for RYVL Esports.</p>
         </div>
 
-        <!-- Cupa României -->
-        <div class="p-8 rounded-3xl bg-[#0c0c0e] border border-white/10 hover:border-[#EAE905]/30 transition space-y-4">
-          <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-xl text-amber-400">
-            🏆
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <!-- Competition Slot 2 -->
+          <div class="p-8 rounded-3xl bg-[#0c0c0e] border border-white/10 hover:border-[#EAE905]/30 transition space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-xl text-amber-400">
+                ⏳
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 uppercase">
+                Campaign Slot 2 • TBA
+              </span>
+            </div>
+            <h3 class="text-2xl font-bold text-white uppercase">Upcoming Tournament Campaign</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              Official competition details and schedule will be announced prior to seasonal registration. RYVL Esports management will configure and link the official VPG feed once brackets are finalized.
+            </p>
+            <div class="text-xs font-mono text-[#EAE905]">Configurable in Admin Settings</div>
           </div>
-          <h3 class="text-2xl font-bold text-white uppercase">Cupa României Pro Clubs</h3>
-          <p class="text-xs text-slate-400 leading-relaxed">
-            Unforgiving knockout tournament format where single-elimination pressure defines champions. RYVL participates with dedicated tactical formations tailored for direct elimination matches.
-          </p>
-          <div class="text-xs font-mono text-[#EAE905]">Knockout Rounds & Golden Goal Extra Time</div>
+
+          <!-- Competition Slot 3 -->
+          <div class="p-8 rounded-3xl bg-[#0c0c0e] border border-white/10 hover:border-[#EAE905]/30 transition space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-xl text-blue-400">
+                ⏳
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-blue-500/15 text-blue-300 border border-blue-500/30 uppercase">
+                Campaign Slot 3 • TBA
+              </span>
+            </div>
+            <h3 class="text-2xl font-bold text-white uppercase">Continental Circuit Slot</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              Reserved tournament slot for European or regional invitationals. Dedicated match telemetry and automated Discord broadcast webhooks are already provisioned.
+            </p>
+            <div class="text-xs font-mono text-[#EAE905]">Configurable in Admin Settings</div>
+          </div>
         </div>
       </div>
     </div>

@@ -1,10 +1,12 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  inject,
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ApiService } from '../../core/api.service';
 
 @Component({
   selector: 'app-public-contact',
@@ -134,12 +136,24 @@ import { FormsModule } from '@angular/forms';
                 ></textarea>
               </div>
 
+              @if (error()) {
+                <div class="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs">
+                  {{ error() }}
+                </div>
+              }
+
               <div class="flex items-center justify-end pt-2">
                 <button
                   type="submit"
-                  class="px-8 py-3.5 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-[#EAE905]/15 transition transform hover:scale-105 cursor-pointer"
+                  [disabled]="isSubmitting()"
+                  class="px-8 py-3.5 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] disabled:opacity-50 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-[#EAE905]/15 transition transform hover:scale-105 cursor-pointer flex items-center gap-2"
                 >
-                  Send Transmission
+                  @if (isSubmitting()) {
+                    <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                    <span>Transmitting...</span>
+                  } @else {
+                    <span>Send Transmission</span>
+                  }
                 </button>
               </div>
             </form>
@@ -150,7 +164,11 @@ import { FormsModule } from '@angular/forms';
   `,
 })
 export class ContactComponent {
+  private readonly api = inject(ApiService);
+
   readonly sent = signal<boolean>(false);
+  readonly isSubmitting = signal<boolean>(false);
+  readonly error = signal<string | null>(null);
 
   form = {
     name: '',
@@ -159,13 +177,24 @@ export class ContactComponent {
     message: '',
   };
 
-  sendMessage(): void {
+  async sendMessage(): Promise<void> {
     if (!this.form.name || !this.form.contact || !this.form.message) return;
-    this.sent.set(true);
+    this.isSubmitting.set(true);
+    this.error.set(null);
+    try {
+      await this.api.submitContact(this.form);
+      this.sent.set(true);
+    } catch (err: any) {
+      console.error('Failed to dispatch contact transmission:', err);
+      this.error.set(err.message || 'Failed to dispatch message. Please reach out on Discord.');
+    } finally {
+      this.isSubmitting.set(false);
+    }
   }
 
   resetForm(): void {
     this.sent.set(false);
+    this.error.set(null);
     this.form = {
       name: '',
       contact: '',

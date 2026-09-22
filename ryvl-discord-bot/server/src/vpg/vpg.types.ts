@@ -79,6 +79,7 @@ export interface VpgMatchItem {
   id: number;
   datetime: string;
   dateFormattedRo: string;
+  dateFormattedEn?: string;
   status: 'complete' | 'scheduled' | string;
   matchDay: number;
   homeName: string;
@@ -105,3 +106,76 @@ export interface VpgLeaderboardEntry {
   points?: number | null;
 }
 
+export interface RyvlPerformanceStats {
+  competitionName: string;
+  competitionSlug: string;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  points: number;
+  winRate: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  goalsPerMatch: number;
+  concededPerMatch: number;
+  cleanSheets: number;
+  currentStreak: ('W' | 'D' | 'L')[];
+  homeRecord: {
+    played: number;
+    wins: number;
+    draws: number;
+    losses: number;
+    goalsFor: number;
+    goalsAgainst: number;
+  };
+  awayRecord: {
+    played: number;
+    wins: number;
+    draws: number;
+    losses: number;
+    goalsFor: number;
+    goalsAgainst: number;
+  };
+  standingsPosition?: number | null;
+  totalTeams?: number | null;
+}
+
+export interface RyvlCompetitionDto {
+  id?: string;
+  name: string;
+  slug: string;
+  communitySlug?: string;
+  season?: number;
+  active: boolean;
+  displayOrder?: number;
+}
+
+export interface RyvlPerformanceResponse {
+  teamName: string;
+  activeCompetition: string;
+  competitions: RyvlCompetitionDto[];
+  stats: RyvlPerformanceStats;
+  recentResults: VpgMatchItem[];
+  upcomingFixtures: VpgMatchItem[];
+}
+
+export interface ContactFormPayload {
+  name: string;
+  contact: string;
+  topic: string;
+  message: string;
+  guildId?: string;
+}
+
+export interface RecruitmentFormPayload {
+  gamertag: string;
+  discordTag: string;
+  primaryPosition: string;
+  secondaryPosition?: string;
+  platform: string;
+  age: number;
+  experience?: string;
+  guildId?: string;
+}

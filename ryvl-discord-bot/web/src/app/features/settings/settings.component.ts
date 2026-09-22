@@ -7,11 +7,11 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { UpperCasePipe } from '@angular/common';
+import { UpperCasePipe, CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
-import { GuildSettings } from '../../core/models';
+import { GuildSettings, RyvlCompetition } from '../../core/models';
 
 const TIMEZONES = [
   'Europe/Bucharest',
@@ -30,7 +30,7 @@ const TIMEZONES = [
   selector: 'app-settings',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, UpperCasePipe],
+  imports: [CommonModule, FormsModule, UpperCasePipe],
   template: `
     <div class="max-w-7xl w-full mx-auto space-y-6 animate-fadeIn">
       <!-- Header -->
@@ -280,6 +280,190 @@ const TIMEZONES = [
           </div>
         </div>
 
+        <!-- Card 4: RYVL Dedicated Team Channels -->
+        <div class="p-6 rounded-xl bg-[#16213e] border border-[#EAE905]/30 shadow space-y-5">
+          <div class="border-b border-slate-700/50 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <span class="text-[#EAE905]">⭐</span>
+                <span>RYVL Team Performance Channels</span>
+              </h2>
+              <p class="text-xs text-slate-400">
+                Default announcement channels reserved specifically for RYVL Esports competitive outcomes.
+              </p>
+            </div>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[#EAE905]/15 text-[#EAE905] border border-[#EAE905]/30 self-start sm:self-center">
+              RYVL ESPORTS
+            </span>
+          </div>
+
+          <!-- Official Club Name -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Official Club Name</label>
+            <input
+              type="text"
+              [ngModel]="ryvlTeamName()"
+              (ngModelChange)="ryvlTeamName.set($event)"
+              name="ryvlTeamName"
+              placeholder="RYVL Esports"
+              class="w-full sm:w-80 bg-[#1a1a2e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
+            />
+            <p class="text-[11px] text-slate-400 mt-1">Identifies RYVL Esports in VPG Superliga matches and team leaderboards.</p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 pt-2">
+            <!-- RYVL Results Channel -->
+            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
+              <div class="flex items-center gap-2 text-xs font-bold text-white">
+                <span class="text-emerald-400">🏆</span>
+                <span>RYVL Results Channel</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Target channel for #ryvl-results (RYVL matches only).</p>
+              <select
+                [ngModel]="defaultRyvlResultsChannelId()"
+                (ngModelChange)="defaultRyvlResultsChannelId.set($event)"
+                name="defaultRyvlResultsChannelId"
+                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
+              >
+                <option value="">None (disabled)</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- RYVL Fixtures Channel -->
+            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
+              <div class="flex items-center gap-2 text-xs font-bold text-white">
+                <span class="text-[#EAE905]">📅</span>
+                <span>RYVL Fixtures Channel</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Target channel for #ryvl-fixtures (upcoming games).</p>
+              <select
+                [ngModel]="defaultRyvlFixturesChannelId()"
+                (ngModelChange)="defaultRyvlFixturesChannelId.set($event)"
+                name="defaultRyvlFixturesChannelId"
+                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
+              >
+                <option value="">None (disabled)</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- RYVL Leaderboards Channel -->
+            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
+              <div class="flex items-center gap-2 text-xs font-bold text-white">
+                <span class="text-blue-400">📊</span>
+                <span>RYVL Leaderboards Channel</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Target channel for #ryvl-leaderboards and performance.</p>
+              <select
+                [ngModel]="defaultRyvlLeaderboardChannelId()"
+                (ngModelChange)="defaultRyvlLeaderboardChannelId.set($event)"
+                name="defaultRyvlLeaderboardChannelId"
+                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
+              >
+                <option value="">None (disabled)</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 5: Competition Slots Manager -->
+        <div class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-5">
+          <div class="border-b border-slate-700/50 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <span class="text-[#EAE905]">🌐</span>
+                <span>Multi-Competition Slots Manager</span>
+              </h2>
+              <p class="text-xs text-slate-400">
+                Slot 1 is VPG Superliga România. Configure Slot 2 & Slot 3 for other VPG tournaments.
+              </p>
+            </div>
+            <button
+              type="button"
+              (click)="loadCompetitions()"
+              class="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer self-start sm:self-center"
+            >
+              Refresh Slots
+            </button>
+          </div>
+
+          <div class="space-y-4">
+            @for (comp of competitions(); track comp.id) {
+              <div class="p-4 rounded-xl bg-[#1a1a2e] border border-slate-700/70 space-y-3">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-mono font-bold text-[#EAE905]">Slot {{ comp.displayOrder || ($index + 1) }}</span>
+                    <span class="text-sm font-bold text-white">{{ comp.name }}</span>
+                  </div>
+                  <span
+                    class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold"
+                    [ngClass]="comp.active ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'"
+                  >
+                    {{ comp.active ? 'ACTIVE' : 'TBA / UPCOMING' }}
+                  </span>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                  <div>
+                    <label class="block text-[11px] text-slate-400 mb-1">Competition Name</label>
+                    <input
+                      type="text"
+                      [(ngModel)]="comp.name"
+                      [name]="'comp_name_' + comp.id"
+                      class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-[#EAE905]"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-slate-400 mb-1">VPG Slug</label>
+                    <input
+                      type="text"
+                      [(ngModel)]="comp.slug"
+                      [name]="'comp_slug_' + comp.id"
+                      class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-[#EAE905]"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-[11px] text-slate-400 mb-1">Season</label>
+                    <input
+                      type="number"
+                      [(ngModel)]="comp.season"
+                      [name]="'comp_season_' + comp.id"
+                      class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-2.5 py-1.5 text-white focus:outline-none focus:border-[#EAE905]"
+                    />
+                  </div>
+                  <div class="flex items-end justify-between gap-2">
+                    <label class="flex items-center gap-2 cursor-pointer pb-2">
+                      <input
+                        type="checkbox"
+                        [(ngModel)]="comp.active"
+                        [name]="'comp_active_' + comp.id"
+                        class="rounded border-slate-700 cursor-pointer"
+                      />
+                      <span class="text-xs text-slate-300">Active</span>
+                    </label>
+
+                    <button
+                      type="button"
+                      (click)="saveCompetition(comp)"
+                      class="px-3.5 py-1.5 rounded-lg bg-[#EAE905] text-black font-extrabold text-xs hover:bg-[#d8d704] transition cursor-pointer"
+                    >
+                      Save Slot
+                    </button>
+                  </div>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
         <!-- Save Button -->
         <div class="flex items-center justify-end gap-3 pt-2">
           <button
@@ -319,6 +503,11 @@ export class SettingsComponent implements OnInit {
   readonly defaultFixturesChannelId = signal<string>('');
   readonly defaultStandingsChannelId = signal<string>('');
   readonly defaultLiveResultsChannelId = signal<string>('');
+  readonly defaultRyvlResultsChannelId = signal<string>('');
+  readonly defaultRyvlFixturesChannelId = signal<string>('');
+  readonly defaultRyvlLeaderboardChannelId = signal<string>('');
+  readonly ryvlTeamName = signal<string>('RYVL Esports');
+  readonly competitions = signal<RyvlCompetition[]>([]);
 
   readonly botStatus = signal<'online' | 'offline' | 'idle'>('online');
 
@@ -380,6 +569,30 @@ export class SettingsComponent implements OnInit {
           '';
         this.defaultLiveResultsChannelId.set(liveCh);
 
+        const ryvlResCh =
+          active.settings?.defaultRyvlResultsChannelId ||
+          active.defaultRyvlResultsChannelId ||
+          '';
+        this.defaultRyvlResultsChannelId.set(ryvlResCh);
+
+        const ryvlFixCh =
+          active.settings?.defaultRyvlFixturesChannelId ||
+          active.defaultRyvlFixturesChannelId ||
+          '';
+        this.defaultRyvlFixturesChannelId.set(ryvlFixCh);
+
+        const ryvlLdCh =
+          active.settings?.defaultRyvlLeaderboardChannelId ||
+          active.defaultRyvlLeaderboardChannelId ||
+          '';
+        this.defaultRyvlLeaderboardChannelId.set(ryvlLdCh);
+
+        const teamName =
+          active.settings?.ryvlTeamName ||
+          active.ryvlTeamName ||
+          'RYVL Esports';
+        this.ryvlTeamName.set(teamName);
+
         this.botStatus.set(active.settings?.botActive ? 'online' : 'offline');
       }
     });
@@ -389,6 +602,7 @@ export class SettingsComponent implements OnInit {
     const gid = this.guildStore.activeGuildId();
     if (gid) {
       this.loadSettings(gid);
+      this.loadCompetitions(gid);
     }
   }
 
@@ -404,9 +618,42 @@ export class SettingsComponent implements OnInit {
       this.defaultFixturesChannelId.set(s.defaultFixturesChannelId || '');
       this.defaultStandingsChannelId.set(s.defaultStandingsChannelId || '');
       this.defaultLiveResultsChannelId.set(s.defaultLiveResultsChannelId || '');
+      this.defaultRyvlResultsChannelId.set(s.defaultRyvlResultsChannelId || '');
+      this.defaultRyvlFixturesChannelId.set(s.defaultRyvlFixturesChannelId || '');
+      this.defaultRyvlLeaderboardChannelId.set(s.defaultRyvlLeaderboardChannelId || '');
+      this.ryvlTeamName.set(s.ryvlTeamName || 'RYVL Esports');
       this.botStatus.set(s.botStatus);
     } catch {
       // Keep loaded bootstrap values as fallback
+    }
+  }
+
+  async loadCompetitions(guildId?: string): Promise<void> {
+    const gid = guildId || this.guildStore.activeGuildId();
+    if (!gid) return;
+    try {
+      const res = await this.api.getCompetitions(gid);
+      this.competitions.set(res.competitions || []);
+    } catch (err) {
+      console.warn('Could not load competitions for settings:', err);
+    }
+  }
+
+  async saveCompetition(comp: RyvlCompetition): Promise<void> {
+    const gid = this.guildStore.activeGuildId();
+    if (!gid || !comp.id) return;
+    try {
+      await this.api.updateCompetition(gid, comp.id, {
+        name: comp.name,
+        slug: comp.slug,
+        season: Number(comp.season),
+        active: Boolean(comp.active),
+      });
+      this.successMessage.set(`Updated competition slot: ${comp.name}`);
+      this.loadCompetitions(gid);
+    } catch (err: any) {
+      console.error('Failed to update competition slot:', err);
+      this.errorMessage.set(err.message || 'Failed to update competition slot.');
     }
   }
 
@@ -430,6 +677,10 @@ export class SettingsComponent implements OnInit {
       defaultFixturesChannelId: this.defaultFixturesChannelId() || null,
       defaultStandingsChannelId: this.defaultStandingsChannelId() || null,
       defaultLiveResultsChannelId: this.defaultLiveResultsChannelId() || null,
+      defaultRyvlResultsChannelId: this.defaultRyvlResultsChannelId() || null,
+      defaultRyvlFixturesChannelId: this.defaultRyvlFixturesChannelId() || null,
+      defaultRyvlLeaderboardChannelId: this.defaultRyvlLeaderboardChannelId() || null,
+      ryvlTeamName: this.ryvlTeamName() || 'RYVL Esports',
     };
 
     try {
@@ -443,6 +694,10 @@ export class SettingsComponent implements OnInit {
         defaultFixturesChannelId: this.defaultFixturesChannelId() || null,
         defaultStandingsChannelId: this.defaultStandingsChannelId() || null,
         defaultLiveResultsChannelId: this.defaultLiveResultsChannelId() || null,
+        defaultRyvlResultsChannelId: this.defaultRyvlResultsChannelId() || null,
+        defaultRyvlFixturesChannelId: this.defaultRyvlFixturesChannelId() || null,
+        defaultRyvlLeaderboardChannelId: this.defaultRyvlLeaderboardChannelId() || null,
+        ryvlTeamName: this.ryvlTeamName() || 'RYVL Esports',
       });
       this.successMessage.set('Settings saved successfully!');
     } catch (err: unknown) {

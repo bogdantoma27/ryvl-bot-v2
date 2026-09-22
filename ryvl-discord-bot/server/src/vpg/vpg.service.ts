@@ -10,6 +10,9 @@ import {
   VpgStandingsRow,
   VpgMatchItem,
   VpgLeaderboardEntry,
+  RyvlPerformanceStats,
+  RyvlPerformanceResponse,
+  RyvlCompetitionDto,
 } from './vpg.types';
 
 @Injectable()
@@ -38,6 +41,31 @@ export class VpgService {
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
+  }
+
+  formatDateEn(isoDate: string): string {
+    try {
+      const d = new Date(isoDate);
+      const parts = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/Bucharest',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      }).formatToParts(d);
+
+      const day = parts.find((p) => p.type === 'day')?.value || '';
+      const month = parts.find((p) => p.type === 'month')?.value || '';
+      const year = parts.find((p) => p.type === 'year')?.value || '';
+      const hour = parts.find((p) => p.type === 'hour')?.value || '';
+      const minute = parts.find((p) => p.type === 'minute')?.value || '';
+
+      return `${day} ${month} ${year}, ${hour}:${minute} Bucharest Time`;
+    } catch {
+      return isoDate;
+    }
   }
 
   formatDateRo(dateStr: string): string {
@@ -323,9 +351,9 @@ export class VpgService {
     return seasons[0] || 2;
   }
 
-  async fetchStandings(season?: number): Promise<VpgStandingsRow[]> {
+  async fetchStandings(season?: number, leagueSlug = 'Superliga-Romania'): Promise<VpgStandingsRow[]> {
     const targetSeason = season || (await this.fetchLatestSeason());
-    const url = `${this.API_BASE}/leagues/Superliga-Romania/table/?season=${targetSeason}&is_history=false`;
+    const url = `${this.API_BASE}/leagues/${leagueSlug}/table/?season=${targetSeason}&is_history=false`;
     const res = await fetch(url, {
       signal: AbortSignal.timeout(15000),
       headers: { 'User-Agent': 'RYVLBot/2.0' },
@@ -356,9 +384,10 @@ export class VpgService {
     season?: number,
     limit = 20,
     offset = 0,
+    leagueSlug = 'Superliga-Romania',
   ): Promise<VpgMatchItem[]> {
     const targetSeason = season || (await this.fetchLatestSeason());
-    const url = `${this.API_BASE}/leagues/Superliga-Romania/matches/?status=${status}&season=${targetSeason}&limit=${limit}&offset=${offset}`;
+    const url = `${this.API_BASE}/leagues/${leagueSlug}/matches/?status=${status}&season=${targetSeason}&limit=${limit}&offset=${offset}`;
     const res = await fetch(url, {
       signal: AbortSignal.timeout(15000),
       headers: { 'User-Agent': 'RYVLBot/2.0' },
@@ -371,6 +400,7 @@ export class VpgService {
       id: Number(m.id),
       datetime: m.datetime,
       dateFormattedRo: this.formatDateRo(m.datetime),
+      dateFormattedEn: this.formatDateEn(m.datetime),
       status: m.status || status,
       matchDay: Number(m.match_day || 0),
       homeName: m.home_name || 'Home Team',
@@ -385,6 +415,7 @@ export class VpgService {
   async fetchLeaderboard(
     category: 'strikers' | 'cam' | 'gk' | 'cb' | 'cdm' | 'wingers' = 'strikers',
     season?: number,
+    leagueSlug = 'Superliga-Romania',
   ): Promise<VpgLeaderboardEntry[]> {
     const targetSeason = season || (await this.fetchLatestSeason());
     const lbNameMap: Record<string, string> = {
@@ -396,7 +427,7 @@ export class VpgService {
       wingers: 'top_wingers',
     };
     const lbName = lbNameMap[category] || 'top_strikers';
-    const url = `${this.API_BASE}/leagues/Superliga-Romania/leaderboard/?leaderboard=${lbName}&weekly=false&season=${targetSeason}&limit=25&offset=0`;
+    const url = `${this.API_BASE}/leagues/${leagueSlug}/leaderboard/?leaderboard=${lbName}&weekly=false&season=${targetSeason}&limit=25&offset=0`;
     const res = await fetch(url, {
       signal: AbortSignal.timeout(15000),
       headers: { 'User-Agent': 'RYVLBot/2.0' },
@@ -470,5 +501,230 @@ export class VpgService {
         channelId: params.channelId,
       },
     });
+  }
+
+  async getCompetitions(guildId?: string): Promise<RyvlCompetitionDto[]> {
+    if (guildId) {
+      const comps = await this.prisma.ryvlCompetition.findMany({
+        where: { guildId },
+        orderBy: { displayOrder: 'asc' },
+      });
+      if (comps.length > 0) {
+        return comps.map((c) => ({
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          communitySlug: c.communitySlug,
+          season: c.season ?? undefined,
+          active: c.active,
+          displayOrder: c.displayOrder,
+        }));
+      }
+    }
+
+    // Default 3 competition slots (Slot 1 active, Slot 2 & 3 ready for easy configuration)
+    return [
+      {
+        id: 'slot-1',
+        name: 'VPG Superliga Romania',
+        slug: 'Superliga-Romania',
+        communitySlug: 'VPGRoPS5',
+        active: true,
+        displayOrder: 1,
+      },
+      {
+        id: 'slot-2',
+        name: 'VPG Competition 2',
+        slug: 'vpg-competition-2',
+        communitySlug: 'VPGRoPS5',
+        active: false,
+        displayOrder: 2,
+      },
+      {
+        id: 'slot-3',
+        name: 'VPG Competition 3',
+        slug: 'vpg-competition-3',
+        communitySlug: 'VPGRoPS5',
+        active: false,
+        displayOrder: 3,
+      },
+    ];
+  }
+
+  async upsertCompetition(guildId: string, compId: string, data: Partial<RyvlCompetitionDto>) {
+    const existing = await this.prisma.ryvlCompetition.findFirst({
+      where: {
+        guildId,
+        OR: [{ id: compId }, { slug: data.slug || '' }],
+      },
+    });
+
+    if (existing) {
+      return this.prisma.ryvlCompetition.update({
+        where: { id: existing.id },
+        data: {
+          name: data.name ?? existing.name,
+          slug: data.slug ?? existing.slug,
+          communitySlug: data.communitySlug ?? existing.communitySlug,
+          active: data.active !== undefined ? data.active : existing.active,
+          season: data.season ?? existing.season,
+          displayOrder: data.displayOrder ?? existing.displayOrder,
+        },
+      });
+    }
+
+    return this.prisma.ryvlCompetition.create({
+      data: {
+        guildId,
+        name: data.name || 'VPG Competition',
+        slug: data.slug || `competition-${Date.now()}`,
+        communitySlug: data.communitySlug || 'VPGRoPS5',
+        active: data.active ?? true,
+        season: data.season,
+        displayOrder: data.displayOrder ?? 1,
+      },
+    });
+  }
+
+  async getRyvlPerformance(
+    guildId?: string,
+    competitionSlug?: string,
+  ): Promise<RyvlPerformanceResponse> {
+    const competitions = await this.getCompetitions(guildId);
+    const targetComp = competitionSlug
+      ? competitions.find((c) => c.slug === competitionSlug) || competitions[0]
+      : competitions.find((c) => c.active) || competitions[0];
+
+    const activeSlug = targetComp.slug;
+    const activeName = targetComp.name;
+
+    let teamName = 'RYVL Esports';
+    if (guildId) {
+      const g = await this.prisma.guild.findUnique({ where: { id: guildId } });
+      if (g?.ryvlTeamName) teamName = g.ryvlTeamName;
+    }
+
+    let allMatches: VpgMatchItem[] = [];
+    let scheduledMatches: VpgMatchItem[] = [];
+    let standings: VpgStandingsRow[] = [];
+
+    try {
+      allMatches = await this.fetchMatches('complete', undefined, 100, 0, activeSlug);
+    } catch {
+      allMatches = [];
+    }
+
+    try {
+      scheduledMatches = await this.fetchMatches('scheduled', undefined, 30, 0, activeSlug);
+    } catch {
+      scheduledMatches = [];
+    }
+
+    try {
+      standings = await this.fetchStandings(undefined, activeSlug);
+    } catch {
+      standings = [];
+    }
+
+    const teamMatcher = /ryvl|rival/i;
+
+    const ryvlMatches = allMatches.filter(
+      (m) => teamMatcher.test(m.homeName) || teamMatcher.test(m.awayName),
+    );
+
+    let wins = 0;
+    let draws = 0;
+    let losses = 0;
+    let goalsFor = 0;
+    let goalsAgainst = 0;
+    let cleanSheets = 0;
+
+    const homeRecord = { played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 };
+    const awayRecord = { played: 0, wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0 };
+
+    const streak: ('W' | 'D' | 'L')[] = [];
+
+    for (const m of ryvlMatches) {
+      const isHome = teamMatcher.test(m.homeName);
+      const ryvlScore = isHome ? (m.homeScore ?? 0) : (m.awayScore ?? 0);
+      const oppScore = isHome ? (m.awayScore ?? 0) : (m.homeScore ?? 0);
+
+      goalsFor += ryvlScore;
+      goalsAgainst += oppScore;
+
+      if (oppScore === 0) cleanSheets++;
+
+      if (isHome) {
+        homeRecord.played++;
+        homeRecord.goalsFor += ryvlScore;
+        homeRecord.goalsAgainst += oppScore;
+      } else {
+        awayRecord.played++;
+        awayRecord.goalsFor += ryvlScore;
+        awayRecord.goalsAgainst += oppScore;
+      }
+
+      if (ryvlScore > oppScore) {
+        wins++;
+        if (isHome) homeRecord.wins++;
+        else awayRecord.wins++;
+        if (streak.length < 5) streak.push('W');
+      } else if (ryvlScore < oppScore) {
+        losses++;
+        if (isHome) homeRecord.losses++;
+        else awayRecord.losses++;
+        if (streak.length < 5) streak.push('L');
+      } else {
+        draws++;
+        if (isHome) homeRecord.draws++;
+        else awayRecord.draws++;
+        if (streak.length < 5) streak.push('D');
+      }
+    }
+
+    const played = ryvlMatches.length;
+    const points = wins * 3 + draws * 1;
+    const winRate = played > 0 ? Math.round((wins / played) * 100) : 0;
+    const goalDifference = goalsFor - goalsAgainst;
+    const goalsPerMatch = played > 0 ? Number((goalsFor / played).toFixed(2)) : 0;
+    const concededPerMatch = played > 0 ? Number((goalsAgainst / played).toFixed(2)) : 0;
+
+    const standingsRow = standings.find((r) => teamMatcher.test(r.teamName));
+    const standingsPosition = standingsRow ? standingsRow.position : null;
+
+    const ryvlUpcoming = scheduledMatches
+      .filter((m) => teamMatcher.test(m.homeName) || teamMatcher.test(m.awayName))
+      .slice(0, 10);
+
+    const stats: RyvlPerformanceStats = {
+      competitionName: activeName,
+      competitionSlug: activeSlug,
+      played,
+      wins,
+      draws,
+      losses,
+      points,
+      winRate,
+      goalsFor,
+      goalsAgainst,
+      goalDifference,
+      goalsPerMatch,
+      concededPerMatch,
+      cleanSheets,
+      currentStreak: streak,
+      homeRecord,
+      awayRecord,
+      standingsPosition,
+      totalTeams: standings.length || null,
+    };
+
+    return {
+      teamName,
+      activeCompetition: activeSlug,
+      competitions,
+      stats,
+      recentResults: ryvlMatches.slice(0, 10),
+      upcomingFixtures: ryvlUpcoming,
+    };
   }
 }

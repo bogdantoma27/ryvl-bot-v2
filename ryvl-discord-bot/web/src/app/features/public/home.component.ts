@@ -63,18 +63,26 @@ import { VpgMatchItem } from '../../core/models';
           <!-- Action Buttons -->
           <div class="flex flex-wrap items-center justify-center gap-4 pt-4">
             <a
-              routerLink="/live"
+              routerLink="/performance"
               class="px-8 py-4 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] text-black font-black text-sm uppercase tracking-wider transition duration-200 transform hover:-translate-y-0.5 shadow-xl shadow-[#EAE905]/20 flex items-center gap-2.5 cursor-pointer"
             >
-              <span class="w-2.5 h-2.5 rounded-full bg-rose-600 animate-pulse"></span>
+              <span>RYVL Performance</span>
+              <svg class="w-4 h-4 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+            </a>
+
+            <a
+              routerLink="/live"
+              class="px-7 py-4 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-sm uppercase tracking-wider transition duration-200 backdrop-blur-sm flex items-center gap-2.5 cursor-pointer"
+            >
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
               <span>Match Center</span>
             </a>
 
             <a
               routerLink="/recruitment"
-              class="px-8 py-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-white font-bold text-sm uppercase tracking-wider transition duration-200 backdrop-blur-sm flex items-center gap-2 cursor-pointer"
+              class="px-7 py-4 rounded-xl bg-white/5 hover:bg-white/10 border border-white/15 text-white font-bold text-sm uppercase tracking-wider transition duration-200 backdrop-blur-sm flex items-center gap-2 cursor-pointer"
             >
-              <span>Join The Roster</span>
+              <span>Join Roster</span>
               <svg class="w-4 h-4 text-[#EAE905]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
@@ -107,7 +115,7 @@ import { VpgMatchItem } from '../../core/models';
 
           <div class="p-6 rounded-2xl bg-[#0d0d0e] border border-white/10 shadow-lg relative overflow-hidden group hover:border-[#EAE905]/40 transition">
             <div class="text-[11px] font-mono text-slate-400 uppercase tracking-widest">Match Nights</div>
-            <div class="text-3xl sm:text-4xl font-black text-[#EAE905] mt-1">LUN / MAR / JOI</div>
+            <div class="text-3xl sm:text-4xl font-black text-[#EAE905] mt-1">MON / TUE / THU</div>
             <div class="text-xs text-slate-400 mt-1">22:00 Bucharest Time</div>
           </div>
 
@@ -147,8 +155,8 @@ import { VpgMatchItem } from '../../core/models';
             @for (m of recentMatches(); track m.id) {
               <div class="p-5 rounded-2xl bg-[#0d0d0e] border border-white/10 hover:border-[#EAE905]/40 transition space-y-3">
                 <div class="flex items-center justify-between text-[11px] text-slate-400">
-                  <span class="font-mono font-bold text-[#EAE905]">ETAPA {{ m.matchDay || '?' }}</span>
-                  <span>{{ m.dateFormattedRo }}</span>
+                  <span class="font-mono font-bold text-[#EAE905]">MATCHDAY {{ m.matchDay || '?' }}</span>
+                  <span>{{ m.dateFormattedEn || m.dateFormattedRo }}</span>
                 </div>
 
                 <div class="flex items-center justify-between gap-3 pt-1">
@@ -179,7 +187,7 @@ import { VpgMatchItem } from '../../core/models';
                 </div>
 
                 <div class="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-400">
-                  <span class="text-emerald-400 font-semibold">● Confirmat</span>
+                  <span class="text-emerald-400 font-semibold">● Confirmed</span>
                   <a [href]="'https://virtualprogaming.com/match/' + m.id" target="_blank" class="hover:text-white">
                     VPG Details ↗
                   </a>

@@ -190,12 +190,12 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
             .setDescription('Category of the leaderboard')
             .setRequired(true)
             .addChoices(
-              { name: 'Golgheteri (Top Strikers)', value: 'strikers' },
-              { name: 'Creatori de Joc (Top CAM)', value: 'cam' },
-              { name: 'Extreme (Top Wingers)', value: 'wingers' },
-              { name: 'Mijlocași Defensivi (Top CDM)', value: 'cdm' },
-              { name: 'Fundași Centrali (Top CB)', value: 'cb' },
-              { name: 'Portari (Top Portari)', value: 'gk' },
+              { name: 'Top Strikers', value: 'strikers' },
+              { name: 'Top Playmakers (CAM)', value: 'cam' },
+              { name: 'Top Wingers', value: 'wingers' },
+              { name: 'Top Defensive Midfielders (CDM)', value: 'cdm' },
+              { name: 'Top Center Backs (CB)', value: 'cb' },
+              { name: 'Top Goalkeepers (GK)', value: 'gk' },
             ),
         )
         .addIntegerOption((opt) =>
@@ -231,6 +231,57 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         ),
     );
 
+  const ryvlCommand = new SlashCommandBuilder()
+    .setName('ryvl')
+    .setDescription('RYVL Esports team performance, records, results & schedule')
+    .addSubcommand((sub) =>
+      sub
+        .setName('performance')
+        .setDescription('Display comprehensive performance record & form guide for RYVL Esports')
+        .addStringOption((opt) =>
+          opt
+            .setName('competition')
+            .setDescription('Competition slug (defaults to active championship)')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('results')
+        .setDescription('Show recent match results for RYVL Esports')
+        .addStringOption((opt) =>
+          opt
+            .setName('competition')
+            .setDescription('Competition slug (optional)')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('fixtures')
+        .setDescription('Show upcoming scheduled games for RYVL Esports')
+        .addStringOption((opt) =>
+          opt
+            .setName('competition')
+            .setDescription('Competition slug (optional)')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('setup')
+        .setDescription('Configure dedicated RYVL channels (ryvl-results, ryvl-fixtures, ryvl-leaderboard)')
+        .addChannelOption((opt) =>
+          opt.setName('results_channel').setDescription('Channel for ryvl-results').setRequired(false),
+        )
+        .addChannelOption((opt) =>
+          opt.setName('fixtures_channel').setDescription('Channel for ryvl-fixtures').setRequired(false),
+        )
+        .addChannelOption((opt) =>
+          opt.setName('leaderboard_channel').setDescription('Channel for ryvl-leaderboard').setRequired(false),
+        ),
+    );
+
   return [
     eventCommand.toJSON(),
     lineupPostCommand.toJSON(),
@@ -240,6 +291,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     vpgTransfersCommand.toJSON(),
     superligaCommand.toJSON(),
     liveResultsCommand.toJSON(),
+    ryvlCommand.toJSON(),
   ];
 }
 

@@ -245,6 +245,10 @@ export class GuildStore {
     defaultFixturesChannelId?: string | null;
     defaultStandingsChannelId?: string | null;
     defaultLiveResultsChannelId?: string | null;
+    defaultRyvlResultsChannelId?: string | null;
+    defaultRyvlFixturesChannelId?: string | null;
+    defaultRyvlLeaderboardChannelId?: string | null;
+    ryvlTeamName?: string;
     timezone?: string;
     name?: string;
   }): void {
@@ -275,6 +279,19 @@ export class GuildStore {
         updated.defaultLiveResultsChannelId !== undefined
           ? updated.defaultLiveResultsChannelId
           : current.defaultLiveResultsChannelId,
+      defaultRyvlResultsChannelId:
+        updated.defaultRyvlResultsChannelId !== undefined
+          ? updated.defaultRyvlResultsChannelId
+          : current.defaultRyvlResultsChannelId,
+      defaultRyvlFixturesChannelId:
+        updated.defaultRyvlFixturesChannelId !== undefined
+          ? updated.defaultRyvlFixturesChannelId
+          : current.defaultRyvlFixturesChannelId,
+      defaultRyvlLeaderboardChannelId:
+        updated.defaultRyvlLeaderboardChannelId !== undefined
+          ? updated.defaultRyvlLeaderboardChannelId
+          : current.defaultRyvlLeaderboardChannelId,
+      ryvlTeamName: updated.ryvlTeamName ?? current.ryvlTeamName,
       settings: current.settings
         ? {
             ...current.settings,
@@ -302,6 +319,19 @@ export class GuildStore {
               updated.defaultLiveResultsChannelId !== undefined
                 ? updated.defaultLiveResultsChannelId
                 : current.settings.defaultLiveResultsChannelId,
+            defaultRyvlResultsChannelId:
+              updated.defaultRyvlResultsChannelId !== undefined
+                ? updated.defaultRyvlResultsChannelId
+                : current.settings.defaultRyvlResultsChannelId,
+            defaultRyvlFixturesChannelId:
+              updated.defaultRyvlFixturesChannelId !== undefined
+                ? updated.defaultRyvlFixturesChannelId
+                : current.settings.defaultRyvlFixturesChannelId,
+            defaultRyvlLeaderboardChannelId:
+              updated.defaultRyvlLeaderboardChannelId !== undefined
+                ? updated.defaultRyvlLeaderboardChannelId
+                : current.settings.defaultRyvlLeaderboardChannelId,
+            ryvlTeamName: updated.ryvlTeamName ?? current.settings.ryvlTeamName,
             timezone: updated.timezone ?? current.settings.timezone,
           }
         : {
@@ -312,6 +342,10 @@ export class GuildStore {
             defaultFixturesChannelId: updated.defaultFixturesChannelId || null,
             defaultStandingsChannelId: updated.defaultStandingsChannelId || null,
             defaultLiveResultsChannelId: updated.defaultLiveResultsChannelId || null,
+            defaultRyvlResultsChannelId: updated.defaultRyvlResultsChannelId || null,
+            defaultRyvlFixturesChannelId: updated.defaultRyvlFixturesChannelId || null,
+            defaultRyvlLeaderboardChannelId: updated.defaultRyvlLeaderboardChannelId || null,
+            ryvlTeamName: updated.ryvlTeamName || 'RYVL Esports',
             botActive: true,
           },
     };

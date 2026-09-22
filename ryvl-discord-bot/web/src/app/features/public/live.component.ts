@@ -31,31 +31,25 @@ import { VpgMatchItem } from '../../core/models';
 
       <!-- Game Day Banner -->
       <div
-        class="p-6 sm:p-8 rounded-3xl border relative overflow-hidden"
-        [class.bg-emerald-950-20]="isGameNight()"
-        [class.border-emerald-500-30]="isGameNight()"
-        [class.bg-[#0c0c0e]]="!isGameNight()"
-        [class.border-white-10]="!isGameNight()"
+        class="p-6 sm:p-8 rounded-3xl border relative overflow-hidden transition"
+        [ngClass]="isGameNight() ? 'bg-emerald-950/20 border-emerald-500/30' : 'bg-[#0c0c0e] border-white/10'"
       >
         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
           <div class="space-y-1">
             <div class="flex items-center gap-2">
               <span
                 class="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider"
-                [class.bg-emerald-500-20]="isGameNight()"
-                [class.text-emerald-400]="isGameNight()"
-                [class.bg-slate-800]="!isGameNight()"
-                [class.text-slate-400]="!isGameNight()"
+                [ngClass]="isGameNight() ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-400'"
               >
                 {{ isGameNight() ? '🟢 TONIGHT IS GAME NIGHT' : '⚪ TRAINING & PREPARATION DAY' }}
               </span>
               <span class="text-xs text-slate-400 font-mono">{{ todayFormatted() }}</span>
             </div>
             <h2 class="text-2xl font-black text-white uppercase">
-              {{ isGameNight() ? 'Official Superliga Matchday Active' : 'Next Game Night: Luni / Marți / Joi (22:00)' }}
+              {{ isGameNight() ? 'Official Superliga Matchday Active' : 'Next Game Night: Monday / Tuesday / Thursday (22:00)' }}
             </h2>
             <p class="text-xs text-slate-400">
-              Matches kickoff in Romanian time (Europe/Bucharest). Results update automatically.
+              Matches kickoff in Bucharest Time (Europe/Bucharest). Results update automatically.
             </p>
           </div>
 
@@ -191,7 +185,7 @@ export class LiveComponent implements OnInit {
   }
 
   todayFormatted(): string {
-    return new Date().toLocaleDateString('ro-RO', {
+    return new Date().toLocaleDateString('en-US', {
       timeZone: 'Europe/Bucharest',
       weekday: 'long',
       year: 'numeric',

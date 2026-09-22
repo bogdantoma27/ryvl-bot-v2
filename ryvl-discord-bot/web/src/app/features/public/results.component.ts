@@ -62,7 +62,7 @@ import { VpgMatchItem } from '../../core/models';
             class="bg-[#121214] border border-white/10 text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-[#EAE905] cursor-pointer"
           >
             @for (s of seasons(); track s) {
-              <option [value]="s">Sezonul {{ s }}</option>
+              <option [value]="s">Season {{ s }}</option>
             }
           </select>
 
@@ -98,7 +98,7 @@ import { VpgMatchItem } from '../../core/models';
           @if (onlyRyvl()) {
             <button
               (click)="onlyRyvl.set(false)"
-              class="px-4 py-2 rounded-xl bg-[#EAE905] text-black text-xs font-bold uppercase mt-2 cursor-pointer"
+              class="px-4 py-2 rounded-xl bg-[#EAE905] text-black text-xs font-black uppercase mt-2 cursor-pointer"
             >
               Show All League Results
             </button>
@@ -108,10 +108,8 @@ import { VpgMatchItem } from '../../core/models';
         <div class="space-y-4">
           @for (m of filteredMatches(); track m.id) {
             <div
-              class="p-5 sm:p-6 rounded-2xl bg-[#0c0c0e] border transition group hover:border-[#EAE905]/40"
-              [class.border-[#EAE905]/50]="isRyvlMatch(m)"
-              [class.bg-[#121214]]="isRyvlMatch(m)"
-              [class.border-white-10]="!isRyvlMatch(m)"
+              class="p-5 sm:p-6 rounded-2xl border transition group hover:border-[#EAE905]/40"
+              [ngClass]="isRyvlMatch(m) ? 'border-[#EAE905]/50 bg-[#121214]' : 'bg-[#0c0c0e] border-white/10'"
             >
               <div class="flex flex-col md:flex-row items-center justify-between gap-6">
                 <!-- Matchday & Time -->
@@ -124,7 +122,7 @@ import { VpgMatchItem } from '../../core/models';
                       <span class="text-[10px] font-bold text-[#EAE905] uppercase tracking-wider">RYVL MATCH</span>
                     }
                   </div>
-                  <div class="text-[11px] text-slate-400 mt-1">{{ m.dateFormattedRo }}</div>
+                  <div class="text-[11px] text-slate-400 mt-1">{{ m.dateFormattedEn || m.dateFormattedRo }}</div>
                 </div>
 
                 <!-- Scoreboard (Home - Score - Away) -->
@@ -151,15 +149,14 @@ import { VpgMatchItem } from '../../core/models';
                     @if (isRyvlMatch(m)) {
                       @let outcome = getRyvlOutcome(m);
                       <span
-                        class="text-[10px] font-mono font-bold uppercase mt-1 px-2 py-0.5 rounded"
-                        [class.bg-emerald-500-20]="outcome === 'WIN'"
-                        [class.text-emerald-400]="outcome === 'WIN'"
-                        [class.bg-rose-500-20]="outcome === 'LOSS'"
-                        [class.text-rose-400]="outcome === 'LOSS'"
-                        [class.bg-slate-500-20]="outcome === 'DRAW'"
-                        [class.text-slate-300]="outcome === 'DRAW'"
+                        class="text-[10px] font-mono font-bold uppercase mt-1 px-2 py-0.5 rounded border"
+                        [ngClass]="{
+                          'bg-emerald-500/20 text-emerald-400 border-emerald-500/40': outcome === 'WIN',
+                          'bg-rose-500/20 text-rose-400 border-rose-500/40': outcome === 'LOSS',
+                          'bg-slate-500/20 text-slate-300 border-slate-500/40': outcome === 'DRAW'
+                        }"
                       >
-                        {{ outcome === 'WIN' ? 'VICTORIE' : outcome === 'LOSS' ? 'ÎNFRÂNGERE' : 'EGAL' }}
+                        {{ outcome }}
                       </span>
                     }
                   </div>

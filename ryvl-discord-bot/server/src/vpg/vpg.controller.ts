@@ -14,6 +14,7 @@ import { VpgService } from './vpg.service';
 import { VpgPollerService } from './vpg-poller.service';
 import { VpgSuperligaPollerService } from './vpg-superliga-poller.service';
 import { UpdateVpgConfigDto } from './vpg.types';
+import { RyvlCommands } from '../discord/commands/ryvl-commands';
 
 @Controller()
 export class VpgController {
@@ -23,6 +24,7 @@ export class VpgController {
     private readonly vpgService: VpgService,
     private readonly vpgPollerService: VpgPollerService,
     private readonly vpgSuperligaPollerService: VpgSuperligaPollerService,
+    private readonly ryvlCommands: RyvlCommands,
   ) {}
 
   // ----------------------------------------------------
@@ -243,5 +245,83 @@ export class VpgController {
       body.season,
     );
     return result;
+  }
+
+  // ----------------------------------------------------
+  // RYVL Team Performance & Multi-Competition Endpoints
+  // ----------------------------------------------------
+
+  @Get('api/vpg/performance')
+  async getRyvlPerformance(
+    @Query('guildId') guildId?: string,
+    @Query('competition') competition?: string,
+  ) {
+    return this.vpgService.getRyvlPerformance(guildId, competition);
+  }
+
+  @Get('api/guilds/:guildId/vpg/competitions')
+  async getGuildCompetitions(@Param('guildId') guildId: string) {
+    const competitions = await this.vpgService.getCompetitions(guildId);
+    return { competitions };
+  }
+
+  @Patch('api/guilds/:guildId/vpg/competitions/:id')
+  @UseGuards(AuthGuard)
+  async updateGuildCompetition(
+    @Param('guildId') guildId: string,
+    @Param('id') compId: string,
+    @Body() body: any,
+  ) {
+    const updated = await this.vpgService.upsertCompetition(guildId, compId, body);
+    return { success: true, competition: updated };
+  }
+
+  @Post('api/guilds/:guildId/vpg/performance/post-results')
+  @UseGuards(AuthGuard)
+  async postRyvlResults(
+    @Param('guildId') guildId: string,
+    @Body() body: { channelId?: string },
+  ) {
+    return this.ryvlCommands.postRyvlResultsToChannel(guildId, body.channelId);
+  }
+
+  @Post('api/guilds/:guildId/vpg/performance/post-fixtures')
+  @UseGuards(AuthGuard)
+  async postRyvlFixtures(
+    @Param('guildId') guildId: string,
+    @Body() body: { channelId?: string },
+  ) {
+    return this.ryvlCommands.postRyvlFixturesToChannel(guildId, body.channelId);
+  }
+
+  // ----------------------------------------------------
+  // Public Form Submissions (Dispatches to Discord)
+  // ----------------------------------------------------
+
+  @Post('api/public/contact')
+  async submitContactForm(@Body() body: { name: string; contact: string; topic: string; message: string; guildId?: string }) {
+    if (!body.name || !body.contact || !body.message) {
+      return { success: false, error: 'Please provide name, contact information, and message.' };
+    }
+    const result = await this.ryvlCommands.dispatchContactNotification(body);
+    return { success: result.success, message: result.success ? 'Message delivered to RYVL management.' : 'Failed to deliver notification.' };
+  }
+
+  @Post('api/public/recruitment')
+  async submitRecruitmentForm(@Body() body: {
+    gamertag: string;
+    discordTag: string;
+    primaryPosition: string;
+    secondaryPosition?: string;
+    platform: string;
+    age: number;
+    experience?: string;
+    guildId?: string;
+  }) {
+    if (!body.gamertag || !body.discordTag || !body.primaryPosition) {
+      return { success: false, error: 'Gamertag, Discord tag, and primary position are required.' };
+    }
+    const result = await this.ryvlCommands.dispatchRecruitmentNotification(body);
+    return { success: result.success, message: result.success ? 'Trial application submitted to RYVL recruitment staff.' : 'Failed to deliver application.' };
   }
 }

@@ -20,7 +20,7 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#EAE905]/15 pb-6">
         <div>
-          <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">Clasament Oficial</div>
+          <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">Official Standings</div>
           <h1 class="text-4xl font-black text-white uppercase tracking-tight">Superliga Standings & Stats</h1>
           <p class="text-xs sm:text-sm text-slate-400 mt-2">
             Official table standings and player leaderboards for Virtual Pro Gaming România.
@@ -36,7 +36,7 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
             class="bg-[#121214] border border-white/10 text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-[#EAE905] cursor-pointer"
           >
             @for (s of seasons(); track s) {
-              <option [value]="s">Sezonul {{ s }}</option>
+              <option [value]="s">Season {{ s }}</option>
             }
           </select>
         </div>
@@ -49,7 +49,7 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
             <span class="text-[#EAE905]">🏆</span>
             <span>League Table</span>
           </h2>
-          <span class="text-xs text-slate-400">Sezonul {{ selectedSeason() }}</span>
+          <span class="text-xs text-slate-400">Season {{ selectedSeason() }}</span>
         </div>
 
         @if (isLoadingStandings()) {
@@ -66,14 +66,14 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
                   <tr class="bg-[#121214] border-b border-white/10 text-slate-400 font-mono uppercase text-[11px]">
                     <th class="py-3.5 px-4 w-12 text-center">Pos</th>
                     <th class="py-3.5 px-4">Club</th>
-                    <th class="py-3.5 px-3 text-center">M</th>
-                    <th class="py-3.5 px-3 text-center">V</th>
-                    <th class="py-3.5 px-3 text-center">E</th>
-                    <th class="py-3.5 px-3 text-center">Î</th>
-                    <th class="py-3.5 px-3 text-center">GM</th>
-                    <th class="py-3.5 px-3 text-center">GP</th>
+                    <th class="py-3.5 px-3 text-center">MP</th>
+                    <th class="py-3.5 px-3 text-center">W</th>
+                    <th class="py-3.5 px-3 text-center">D</th>
+                    <th class="py-3.5 px-3 text-center">L</th>
+                    <th class="py-3.5 px-3 text-center">GF</th>
+                    <th class="py-3.5 px-3 text-center">GA</th>
                     <th class="py-3.5 px-3 text-center">GD</th>
-                    <th class="py-3.5 px-4 text-center font-bold text-white">Pct</th>
+                    <th class="py-3.5 px-4 text-center font-bold text-white">PTS</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-white/5">
@@ -195,7 +195,7 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
                 <div class="text-right shrink-0">
                   @if (selectedCategory() === 'strikers') {
                     <div class="text-base font-black font-mono text-[#EAE905]">{{ e.goals }} <span class="text-[10px] text-slate-400 font-normal">G</span></div>
-                    <div class="text-[10px] text-slate-500 font-mono">{{ e.matchesPlayed }} Meciuri</div>
+                    <div class="text-[10px] text-slate-500 font-mono">{{ e.matchesPlayed }} Matches</div>
                   } @else if (selectedCategory() === 'cam' || selectedCategory() === 'wingers') {
                     <div class="text-base font-black font-mono text-[#EAE905]">{{ e.assists }} <span class="text-[10px] text-slate-400 font-normal">A</span></div>
                     <div class="text-[10px] text-slate-500 font-mono">{{ e.goals }}G • {{ e.matchesPlayed }}M</div>
@@ -228,12 +228,12 @@ export class StandingsComponent implements OnInit {
   readonly isLoadingLeaderboard = signal<boolean>(true);
 
   readonly categories = [
-    { key: 'strikers', label: 'Golgheteri (ST)' },
+    { key: 'strikers', label: 'Top Scorers (ST)' },
     { key: 'cam', label: 'Playmakers (CAM)' },
-    { key: 'wingers', label: 'Extreme (Wingers)' },
-    { key: 'cdm', label: 'Mijlocași Def. (CDM)' },
-    { key: 'cb', label: 'Fundași (CB)' },
-    { key: 'gk', label: 'Portari (GK)' },
+    { key: 'wingers', label: 'Wingers (LW/RW)' },
+    { key: 'cdm', label: 'Def. Midfield (CDM)' },
+    { key: 'cb', label: 'Defenders (CB)' },
+    { key: 'gk', label: 'Goalkeepers (GK)' },
   ];
 
   async ngOnInit(): Promise<void> {

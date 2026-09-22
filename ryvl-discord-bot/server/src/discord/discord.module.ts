@@ -14,6 +14,7 @@ import { EaModule } from '../ea/ea.module';
 import { VpgModule } from '../vpg/vpg.module';
 import { VpgCommands } from './commands/vpg-commands';
 import { SuperligaCommands } from './commands/superliga-commands';
+import { RyvlCommands } from './commands/ryvl-commands';
 
 @Global()
 @Module({
@@ -35,7 +36,8 @@ import { SuperligaCommands } from './commands/superliga-commands';
     EaCommands,
     VpgCommands,
     SuperligaCommands,
+    RyvlCommands,
   ],
-  exports: [DiscordService],
+  exports: [DiscordService, RyvlCommands],
 })
 export class DiscordModule {}

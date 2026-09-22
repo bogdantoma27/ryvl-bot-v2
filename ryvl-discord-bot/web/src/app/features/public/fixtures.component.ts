@@ -62,7 +62,7 @@ import { VpgMatchItem } from '../../core/models';
             class="bg-[#121214] border border-white/10 text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-[#EAE905] cursor-pointer"
           >
             @for (s of seasons(); track s) {
-              <option [value]="s">Sezonul {{ s }}</option>
+              <option [value]="s">Season {{ s }}</option>
             }
           </select>
 
@@ -98,7 +98,7 @@ import { VpgMatchItem } from '../../core/models';
           @if (onlyRyvl()) {
             <button
               (click)="onlyRyvl.set(false)"
-              class="px-4 py-2 rounded-xl bg-[#EAE905] text-black text-xs font-bold uppercase mt-2 cursor-pointer"
+              class="px-4 py-2 rounded-xl bg-[#EAE905] text-black text-xs font-black uppercase mt-2 cursor-pointer"
             >
               Show All League Fixtures
             </button>
@@ -108,23 +108,21 @@ import { VpgMatchItem } from '../../core/models';
         <div class="space-y-4">
           @for (m of filteredFixtures(); track m.id) {
             <div
-              class="p-5 sm:p-6 rounded-2xl bg-[#0c0c0e] border transition group hover:border-[#EAE905]/40"
-              [class.border-[#EAE905]/50]="isRyvlMatch(m)"
-              [class.bg-[#121214]]="isRyvlMatch(m)"
-              [class.border-white-10]="!isRyvlMatch(m)"
+              class="p-5 sm:p-6 rounded-2xl border transition group hover:border-[#EAE905]/40"
+              [ngClass]="isRyvlMatch(m) ? 'border-[#EAE905]/50 bg-[#121214]' : 'bg-[#0c0c0e] border-white/10'"
             >
               <div class="flex flex-col md:flex-row items-center justify-between gap-6">
                 <!-- Matchday & Time -->
                 <div class="flex md:flex-col items-center md:items-start justify-between w-full md:w-44 shrink-0 text-left">
                   <div class="flex items-center gap-2">
                     <span class="px-2.5 py-0.5 rounded bg-[#EAE905]/10 border border-[#EAE905]/30 text-[#EAE905] font-mono text-[11px] font-bold">
-                      ETAPA {{ m.matchDay || '?' }}
+                      MATCHDAY {{ m.matchDay || '?' }}
                     </span>
                     @if (isRyvlMatch(m)) {
                       <span class="text-[10px] font-bold text-[#EAE905] uppercase tracking-wider">RYVL MATCH</span>
                     }
                   </div>
-                  <div class="text-[11px] text-slate-400 mt-1 font-medium">{{ m.dateFormattedRo }}</div>
+                  <div class="text-[11px] text-slate-400 mt-1 font-medium">{{ m.dateFormattedEn || m.dateFormattedRo }}</div>
                 </div>
 
                 <!-- Matchup (Home vs Away) -->
@@ -163,7 +161,7 @@ import { VpgMatchItem } from '../../core/models';
                 <div class="shrink-0 w-full md:w-auto text-center md:text-right">
                   <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold">
                     <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
-                    Programat
+                    Scheduled
                   </span>
                 </div>
               </div>

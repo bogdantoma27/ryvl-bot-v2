@@ -24,9 +24,9 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
             <div class="relative">
               <div class="absolute -inset-1 bg-[#EAE905] rounded-xl opacity-30 group-hover:opacity-75 blur transition duration-300"></div>
               <img
-                src="/assets/branding/ryvl-logo.png"
-                alt="RYVL Esports"
-                class="relative h-11 w-11 object-contain transform group-hover:scale-105 transition"
+                src="/assets/branding/ryvl-mark.png"
+                alt="RYVL Crest"
+                class="relative h-10 w-auto object-contain transform group-hover:scale-105 transition"
               />
             </div>
             <div class="flex flex-col">
@@ -43,49 +43,56 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
               routerLink="/"
               routerLinkActive="!text-[#EAE905] !bg-[#EAE905]/10 !border-[#EAE905]/30"
               [routerLinkActiveOptions]="{ exact: true }"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
             >
               Home
             </a>
             <a
               routerLink="/team"
               routerLinkActive="!text-[#EAE905] !bg-[#EAE905]/10 !border-[#EAE905]/30"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
             >
               Team
             </a>
             <a
+              routerLink="/performance"
+              routerLinkActive="!text-[#EAE905] !bg-[#EAE905]/10 !border-[#EAE905]/30"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
+            >
+              Performance
+            </a>
+            <a
               routerLink="/competitions"
               routerLinkActive="!text-[#EAE905] !bg-[#EAE905]/10 !border-[#EAE905]/30"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
             >
               Competitions
             </a>
             <a
               routerLink="/results"
               routerLinkActive="!text-[#EAE905] !bg-[#EAE905]/10 !border-[#EAE905]/30"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
             >
               Results
             </a>
             <a
               routerLink="/fixtures"
               routerLinkActive="!text-[#EAE905] !bg-[#EAE905]/10 !border-[#EAE905]/30"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
             >
               Fixtures
             </a>
             <a
               routerLink="/standings"
               routerLinkActive="!text-[#EAE905] !bg-[#EAE905]/10 !border-[#EAE905]/30"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
             >
               Standings
             </a>
             <a
               routerLink="/live"
               routerLinkActive="!text-[#EAE905] !bg-[#EAE905]/10 !border-[#EAE905]/30"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition flex items-center gap-1.5"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition flex items-center gap-1.5"
             >
               <span class="w-1.5 h-1.5 rounded-full bg-rose-500 animate-ping"></span>
               <span>Live</span>
@@ -93,21 +100,21 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
             <a
               routerLink="/recruitment"
               routerLinkActive="!text-[#EAE905] !bg-[#EAE905]/10 !border-[#EAE905]/30"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
             >
               Recruitment
             </a>
             <a
               routerLink="/about"
               routerLinkActive="!text-[#EAE905] !bg-[#EAE905]/10 !border-[#EAE905]/30"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
             >
               About
             </a>
             <a
               routerLink="/contact"
               routerLinkActive="!text-[#EAE905] !bg-[#EAE905]/10 !border-[#EAE905]/30"
-              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider text-slate-300 hover:text-[#EAE905] hover:bg-white/5 border border-transparent transition"
             >
               Contact
             </a>
@@ -174,6 +181,13 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
               class="block px-3 py-2 rounded-lg text-sm font-bold uppercase text-slate-200 hover:text-[#EAE905] hover:bg-white/5"
             >
               Team
+            </a>
+            <a
+              (click)="mobileNavOpen.set(false)"
+              routerLink="/performance"
+              class="block px-3 py-2 rounded-lg text-sm font-bold uppercase text-[#EAE905] hover:bg-white/5"
+            >
+              RYVL Performance
             </a>
             <a
               (click)="mobileNavOpen.set(false)"
@@ -256,7 +270,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
             <!-- Col 1: Brand & Slogan -->
             <div class="lg:col-span-2 space-y-4">
               <div class="flex items-center gap-3">
-                <img src="/assets/branding/ryvl-logo.png" alt="RYVL" class="h-10 w-10 object-contain" />
+                <img src="/assets/branding/ryvl-mark.png" alt="RYVL" class="h-10 w-auto object-contain" />
                 <span class="text-xl font-black text-white tracking-wider">RYVL ESPORTS</span>
               </div>
               <p class="text-xs text-slate-400 font-mono uppercase tracking-widest text-[#EAE905]">
@@ -278,6 +292,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
               <ul class="space-y-2 text-xs text-slate-400">
                 <li><a routerLink="/" class="hover:text-white transition">Home</a></li>
                 <li><a routerLink="/team" class="hover:text-white transition">Team Roster</a></li>
+                <li><a routerLink="/performance" class="hover:text-white transition">Team Performance</a></li>
                 <li><a routerLink="/about" class="hover:text-white transition">About RYVL</a></li>
                 <li><a routerLink="/recruitment" class="hover:text-white transition">Trials & Recruitment</a></li>
                 <li><a routerLink="/contact" class="hover:text-white transition">Contact Us</a></li>
@@ -288,6 +303,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
             <div class="space-y-3">
               <h4 class="text-xs font-bold uppercase tracking-widest text-[#EAE905]">Competitions</h4>
               <ul class="space-y-2 text-xs text-slate-400">
+                <li><a routerLink="/performance" class="hover:text-white transition font-bold text-[#EAE905]">RYVL Performance</a></li>
                 <li><a routerLink="/results" class="hover:text-white transition">Superliga Results</a></li>
                 <li><a routerLink="/fixtures" class="hover:text-white transition">Superliga Fixtures</a></li>
                 <li><a routerLink="/standings" class="hover:text-white transition">League Table</a></li>
