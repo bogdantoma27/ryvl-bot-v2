@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   OnInit,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -141,17 +142,31 @@ export class LineupDraftsComponent implements OnInit {
   protected readonly drafts = signal<LineupDraft[]>([]);
   protected readonly isLoading = signal<boolean>(false);
 
-  async ngOnInit(): Promise<void> {
-    await this.loadDrafts();
+  constructor() {
+    effect(() => {
+      const gid = this.guildStore.activeGuildId();
+      if (gid) {
+        this.loadDrafts(gid);
+      } else {
+        this.drafts.set([]);
+      }
+    });
   }
 
-  async loadDrafts(): Promise<void> {
-    const guildId = this.guildStore.activeGuildId();
-    if (!guildId) return;
+  async ngOnInit(): Promise<void> {
+    const gid = this.guildStore.activeGuildId();
+    if (gid) {
+      await this.loadDrafts(gid);
+    }
+  }
+
+  async loadDrafts(guildId?: string): Promise<void> {
+    const targetGuildId = guildId || this.guildStore.activeGuildId();
+    if (!targetGuildId) return;
 
     this.isLoading.set(true);
     try {
-      const items = await this.api.getLineupDrafts(guildId);
+      const items = await this.api.getLineupDrafts(targetGuildId);
       this.drafts.set(items);
     } catch (err) {
       console.error('Failed to load drafts:', err);

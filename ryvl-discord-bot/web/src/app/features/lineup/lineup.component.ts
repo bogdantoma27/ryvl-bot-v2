@@ -144,8 +144,8 @@ function getTodayDateString(): string {
                 <div>
                   <label class="block text-xs font-semibold text-slate-300 mb-1.5">Formation</label>
                   <select
-                    [(ngModel)]="selectedFormation"
-                    (ngModelChange)="onFormationChange()"
+                    [ngModel]="selectedFormation()"
+                    (ngModelChange)="onFormationChange($event)"
                     class="w-full bg-[#11192e] border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#EAE905] transition cursor-pointer"
                   >
                     @for (fmt of formationList(); track fmt) {
@@ -240,7 +240,7 @@ function getTodayDateString(): string {
                     {{ filledCount() }}/11 Filled
                   </span>
                 </h2>
-                <p class="text-xs text-slate-400 mt-0.5">Assign server members or custom trialists to each position in {{ selectedFormation }}.</p>
+                <p class="text-xs text-slate-400 mt-0.5">Assign server members or custom trialists to each position in {{ selectedFormation() }}.</p>
               </div>
 
               <div class="flex items-center gap-2">
@@ -280,7 +280,7 @@ function getTodayDateString(): string {
             <!-- Formation Slots Grid (Full Width) -->
             <div class="bg-[#11192e] p-4 rounded-xl border border-slate-700/80">
               <div class="text-xs font-bold text-white mb-2.5 flex items-center justify-between">
-                <span>Formation Slot Assignments ({{ selectedFormation }})</span>
+                <span>Formation Slot Assignments ({{ selectedFormation() }})</span>
                 <span class="text-[11px] text-slate-400">Click &times; to unassign a slot</span>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
@@ -374,7 +374,8 @@ function getTodayDateString(): string {
 
                 <input
                   type="text"
-                  [(ngModel)]="memberSearch"
+                  [ngModel]="memberSearch()"
+                  (ngModelChange)="memberSearch.set($event)"
                   placeholder="Search server members..."
                   class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#EAE905]"
                 />
@@ -405,6 +406,9 @@ function getTodayDateString(): string {
                           class="bg-[#11192e] border border-slate-700 rounded px-2 py-1 text-[11px] text-[#EAE905] focus:outline-none cursor-pointer"
                         >
                           <option value="">{{ getSlotForMember(getMemberName(m)) ? 'Move slot...' : 'Assign slot...' }}</option>
+                          @if (getSlotForMember(getMemberName(m))) {
+                            <option value="__unassign__">Unassign from pitch</option>
+                          }
                           @for (slot of currentSlots(); track slot) {
                             <option [value]="slot">
                               {{ slot.toUpperCase() }}{{ assignments()[slot] ? ' (' + assignments()[slot] + ')' : '' }}
@@ -511,7 +515,8 @@ function getTodayDateString(): string {
               <div>
                 <label class="block text-xs font-semibold text-slate-300 mb-1.5">Target Discord Text Channel</label>
                 <select
-                  [(ngModel)]="channelId"
+                  [ngModel]="channelId()"
+                  (ngModelChange)="channelId.set($event)"
                   class="w-full bg-[#11192e] border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-[#EAE905] transition cursor-pointer"
                 >
                   <option value="">Select a channel...</option>
@@ -560,7 +565,7 @@ function getTodayDateString(): string {
 
               <div class="border-b sm:border-b-0 sm:border-r border-slate-800 pb-3 sm:pb-0 pr-4">
                 <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Formation</span>
-                <div class="text-sm font-bold text-[#EAE905]">{{ formationLabels()[selectedFormation] || selectedFormation }}</div>
+                <div class="text-sm font-bold text-[#EAE905]">{{ formationLabels()[selectedFormation()] || selectedFormation() }}</div>
                 <div class="text-[11px] text-slate-400">{{ filledCount() }}/11 positions filled</div>
               </div>
 
@@ -582,7 +587,7 @@ function getTodayDateString(): string {
             <!-- Publish Action Button -->
             <button
               type="button"
-              [disabled]="isPosting() || !channelId"
+              [disabled]="isPosting() || !channelId()"
               (click)="publishToDiscord()"
               class="w-full bg-[#5865F2] hover:bg-[#4752C4] disabled:opacity-50 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-500/25 transition duration-150 flex items-center justify-center gap-2 cursor-pointer"
             >
@@ -666,18 +671,18 @@ export class LineupComponent implements OnInit {
   // Form State
   protected draftId: string | null = null;
   protected title = 'RYVL Match Lineup';
-  protected selectedFormation = '433';
+  protected readonly selectedFormation = signal<string>('433');
   protected kickoffDate = getTodayDateString();
   protected kickoffTime = '21:45';
   protected timezone = 'Europe/Bucharest';
   protected primaryColor = '#EAE905';
   protected secondaryColor = '#111111';
-  protected channelId = '';
+  protected readonly channelId = signal<string>('');
   protected selectedRoleIds = signal<string[]>([]);
   protected assignments = signal<Record<string, string>>({});
 
   // Sub-panel state
-  protected memberSearch = '';
+  protected readonly memberSearch = signal<string>('');
   protected customPlayerName = '';
   protected customPlayerSlot = '';
   protected previewSvg = signal<string>('');
@@ -688,7 +693,7 @@ export class LineupComponent implements OnInit {
   protected notification = signal<{ message: string; type: 'success' | 'error' } | null>(null);
 
   protected readonly currentSlots = computed(() => {
-    return this.slotsByFmt()[this.selectedFormation] || [
+    return this.slotsByFmt()[this.selectedFormation()] || [
       'gk', 'lb', 'lcb', 'rcb', 'rb', 'lcm', 'cm', 'rcm', 'lw', 'st', 'rw',
     ];
   });
@@ -722,7 +727,7 @@ export class LineupComponent implements OnInit {
 
   protected readonly filteredMembers = computed(() => {
     const members = this.guildStore.activeGuild()?.members || [];
-    const query = this.memberSearch.trim().toLowerCase();
+    const query = this.memberSearch().trim().toLowerCase();
     if (!query) return members;
     return members.filter((m) => {
       const name = this.getMemberName(m).toLowerCase();
@@ -740,7 +745,7 @@ export class LineupComponent implements OnInit {
   });
 
   protected readonly targetChannelName = computed(() => {
-    const ch = this.guildStore.activeGuild()?.channels?.find((c) => c.id === this.channelId);
+    const ch = this.guildStore.activeGuild()?.channels?.find((c) => c.id === this.channelId());
     return ch ? ch.name : 'Not selected';
   });
 
@@ -752,14 +757,17 @@ export class LineupComponent implements OnInit {
     return names.join(', ');
   });
 
+  private lastLoadedGuildId: string | null = null;
+
   constructor() {
     effect(() => {
       const active = this.guildStore.activeGuild();
-      if (active && !this.channelId) {
-        this.channelId = active.settings?.defaultChannelId || active.channels?.[0]?.id || '';
-      }
       const guildId = this.guildStore.activeGuildId();
-      if (guildId && this.formationList().length === 0) {
+      if (active && (!this.channelId() || guildId !== this.lastLoadedGuildId)) {
+        this.channelId.set(active.settings?.defaultChannelId || active.channels?.[0]?.id || '');
+      }
+      if (guildId && guildId !== this.lastLoadedGuildId) {
+        this.lastLoadedGuildId = guildId;
         this.initLineupData(guildId);
       }
     });
@@ -767,7 +775,8 @@ export class LineupComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     const guildId = this.guildStore.activeGuildId();
-    if (guildId) {
+    if (guildId && guildId !== this.lastLoadedGuildId) {
+      this.lastLoadedGuildId = guildId;
       await this.initLineupData(guildId);
     }
   }
@@ -816,8 +825,8 @@ export class LineupComponent implements OnInit {
       if (draft) {
         this.draftId = draft.id;
         this.title = draft.title || this.title;
-        this.selectedFormation = draft.formation || this.selectedFormation;
-        if (draft.channelId) this.channelId = draft.channelId;
+        this.selectedFormation.set(draft.formation || '433');
+        if (draft.channelId) this.channelId.set(draft.channelId);
         if (draft.timezone) this.timezone = draft.timezone;
         if (draft.mentionRoleIds) this.selectedRoleIds.set(draft.mentionRoleIds);
         if (draft.assignments) {
@@ -857,15 +866,35 @@ export class LineupComponent implements OnInit {
     this.goToStep(prev);
   }
 
-  protected onFormationChange(): void {
-    const validSlots = new Set(this.currentSlots());
-    const next: Record<string, string> = {};
-    for (const [slot, name] of Object.entries(this.assignments())) {
-      if (validSlots.has(slot)) {
-        next[slot] = name;
+  protected onFormationChange(newFormation: string): void {
+    if (!newFormation || newFormation === this.selectedFormation()) return;
+    this.selectedFormation.set(newFormation);
+    this.customPlayerSlot = '';
+
+    const newSlots = this.currentSlots();
+    const validSlotsSet = new Set(newSlots);
+
+    const oldAssignments = this.assignments();
+    const nextAssignments: Record<string, string> = {};
+    const unmappedPlayers: string[] = [];
+
+    // 1. Keep slots that exist in the new formation with the exact same slot key
+    for (const [slot, name] of Object.entries(oldAssignments)) {
+      if (validSlotsSet.has(slot) && name?.trim()) {
+        nextAssignments[slot] = name.trim();
+      } else if (name?.trim()) {
+        unmappedPlayers.push(name.trim());
       }
     }
-    this.assignments.set(next);
+
+    // 2. Put any unmapped players into the first remaining empty slots of the new formation
+    for (const slot of newSlots) {
+      if (!nextAssignments[slot] && unmappedPlayers.length > 0) {
+        nextAssignments[slot] = unmappedPlayers.shift()!;
+      }
+    }
+
+    this.assignments.set(nextAssignments);
     this.refreshPreview();
   }
 
@@ -885,6 +914,12 @@ export class LineupComponent implements OnInit {
     const select = event.target as HTMLSelectElement;
     const targetSlot = select.value;
     if (!targetSlot) return;
+
+    if (targetSlot === '__unassign__') {
+      this.unassignMember(displayName);
+      select.value = '';
+      return;
+    }
 
     const next = { ...this.assignments() };
     // Free up any slot this member was previously occupying
@@ -908,7 +943,13 @@ export class LineupComponent implements OnInit {
       });
       return;
     }
-    const next = { ...this.assignments(), [emptySlot]: displayName };
+    const next = { ...this.assignments() };
+    for (const [slot, name] of Object.entries(next)) {
+      if (name === displayName) {
+        delete next[slot];
+      }
+    }
+    next[emptySlot] = displayName;
     this.assignments.set(next);
     this.refreshPreview();
   }
@@ -944,7 +985,13 @@ export class LineupComponent implements OnInit {
       return;
     }
 
-    const next = { ...this.assignments(), [targetSlot]: name };
+    const next = { ...this.assignments() };
+    for (const [slot, existingName] of Object.entries(next)) {
+      if (existingName.toLowerCase() === name.toLowerCase()) {
+        delete next[slot];
+      }
+    }
+    next[targetSlot] = name;
     this.assignments.set(next);
     this.customPlayerName = '';
     this.customPlayerSlot = '';
@@ -964,8 +1011,30 @@ export class LineupComponent implements OnInit {
   private buildKickoffDate(): Date | null {
     if (!this.kickoffDate) return null;
     const time = this.kickoffTime || '20:00';
-    const parsed = new Date(`${this.kickoffDate}T${time}:00Z`);
-    return isNaN(parsed.getTime()) ? null : parsed;
+    const tz = this.timezone || 'Europe/Bucharest';
+    try {
+      const naive = new Date(`${this.kickoffDate}T${time}:00.000Z`);
+      if (isNaN(naive.getTime())) return null;
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
+      const parts = formatter.formatToParts(naive);
+      const getPart = (type: string) => parts.find((p) => p.type === type)?.value;
+      const formattedIso = `${getPart('year')}-${getPart('month')}-${getPart('day')}T${getPart('hour')}:${getPart('minute')}:${getPart('second')}Z`;
+      const inTz = new Date(formattedIso);
+      const offsetMs = inTz.getTime() - naive.getTime();
+      return new Date(naive.getTime() - offsetMs);
+    } catch {
+      const fallback = new Date(`${this.kickoffDate}T${time}:00Z`);
+      return isNaN(fallback.getTime()) ? null : fallback;
+    }
   }
 
   protected formatKickoffFor(timeZone: string): string {
@@ -1001,7 +1070,7 @@ export class LineupComponent implements OnInit {
       }
 
       const payload: LineupRenderPayload = {
-        formation: this.selectedFormation,
+        formation: this.selectedFormation(),
         title: this.title,
         players: cleanPlayers,
         kickoff_at: this.buildKickoffDate()?.toISOString() || null,
@@ -1027,14 +1096,21 @@ export class LineupComponent implements OnInit {
 
     this.isSavingDraft.set(true);
     try {
+      const cleanPlayers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(this.assignments())) {
+        if (v && typeof v === 'string' && v.trim()) {
+          cleanPlayers[k.toLowerCase()] = v.trim();
+        }
+      }
+
       const payload = {
         title: this.title,
-        channel_id: this.channelId || null,
-        formation: this.selectedFormation,
+        channel_id: this.channelId() || null,
+        formation: this.selectedFormation(),
         kickoff_at: this.buildKickoffDate()?.toISOString() || null,
         timezone: this.timezone,
         mention_role_ids: this.selectedRoleIds(),
-        assignments: this.assignments(),
+        assignments: cleanPlayers,
       };
 
       if (this.draftId) {
@@ -1055,18 +1131,25 @@ export class LineupComponent implements OnInit {
 
   protected async publishToDiscord(): Promise<void> {
     const guildId = this.guildStore.activeGuildId();
-    if (!guildId || !this.channelId) {
+    if (!guildId || !this.channelId()) {
       this.notification.set({ message: 'Please select a Discord target channel in Step 3.', type: 'error' });
       return;
     }
 
     this.isPosting.set(true);
     try {
+      const cleanPlayers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(this.assignments())) {
+        if (v && typeof v === 'string' && v.trim()) {
+          cleanPlayers[k.toLowerCase()] = v.trim();
+        }
+      }
+
       const payload: LineupPostPayload = {
-        channel_id: this.channelId,
-        formation: this.selectedFormation,
+        channel_id: this.channelId(),
+        formation: this.selectedFormation(),
         title: this.title,
-        players: this.assignments(),
+        players: cleanPlayers,
         kickoff_at: this.buildKickoffDate()?.toISOString() || null,
         mention_role_ids: this.selectedRoleIds(),
         primary_color: this.primaryColor,
@@ -1090,3 +1173,4 @@ export class LineupComponent implements OnInit {
     }
   }
 }
+
