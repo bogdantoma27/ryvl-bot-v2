@@ -38,10 +38,10 @@ const WEEKDAYS = [
 ];
 
 const TIMEZONES = [
-  'UTC',
-  'Europe/London',
-  'Europe/Paris',
   'Europe/Bucharest',
+  'Europe/London',
+  'UTC',
+  'Europe/Paris',
   'America/New_York',
   'America/Chicago',
   'America/Los_Angeles',
@@ -628,7 +628,7 @@ export class EventCreateComponent implements OnInit {
   readonly time = signal<string>('20:00');
   readonly duration = signal<string>('1h');
   readonly customDurationMinutes = signal<number>(60);
-  readonly timezone = signal<string>('UTC');
+  readonly timezone = signal<string>('Europe/Bucharest');
 
   readonly isRecurring = signal<boolean>(false);
   readonly frequency = signal<'daily' | 'weekly' | 'biweekly' | 'monthly'>('weekly');
@@ -673,7 +673,7 @@ export class EventCreateComponent implements OnInit {
     effect(() => {
       const active = this.guildStore.activeGuild();
       if (active) {
-        if (active.defaultTimezone && this.timezone() === 'UTC') {
+        if (active.defaultTimezone) {
           this.timezone.set(active.defaultTimezone);
         }
         const defaultChannel = active.settings?.defaultChannelId;
@@ -690,7 +690,7 @@ export class EventCreateComponent implements OnInit {
   ngOnInit(): void {
     const active = this.guildStore.activeGuild();
     if (active) {
-      if (active.defaultTimezone && this.timezone() === 'UTC') {
+      if (active.defaultTimezone) {
         this.timezone.set(active.defaultTimezone);
       }
       const defaultChannel = active.settings?.defaultChannelId;

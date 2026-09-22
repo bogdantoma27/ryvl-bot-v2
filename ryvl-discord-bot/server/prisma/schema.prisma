@@ -11,7 +11,7 @@ model Guild {
   id               String   @id // Discord guild snowflake
   name             String
   iconUrl          String?  @map("icon_url")
-  timezone         String   @default("UTC")
+  timezone         String   @default("Europe/Bucharest")
   defaultChannelId String?  @map("default_channel_id")
   joinedAt         DateTime @default(now()) @map("joined_at")
   events           Event[]
@@ -28,7 +28,7 @@ model LineupDraft {
   channelId          String?   @map("channel_id")
   formation          String    @default("433")
   kickoffAt          DateTime? @map("kickoff_at")
-  timezone           String    @default("UTC")
+  timezone           String    @default("Europe/Bucharest")
   mentionRoleIds     String[]  @default([]) @map("mention_role_ids")
   assignments        Json      @default("{}")
   createdByDiscordId String    @map("created_by_discord_id")
@@ -48,7 +48,7 @@ model Event {
   imageUrl       String?     @map("image_url")
   color          String      @default("#5865F2")
   channelId      String      @map("channel_id")
-  timezone       String      @default("UTC")
+  timezone       String      @default("Europe/Bucharest")
   createdById    String      @map("created_by_id")
   mentionRoleIds String[]    @default([]) @map("mention_role_ids")
   rrule          String?     // RFC 5545 RRULE string, null = one-off

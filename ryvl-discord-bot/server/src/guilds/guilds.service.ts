@@ -97,19 +97,19 @@ export class GuildsService {
       id: guild.id,
       name: realName,
       iconUrl: realIconUrl,
-      defaultTimezone: guild.timezone || 'UTC',
+      defaultTimezone: guild.timezone || 'Europe/Bucharest',
       guild: {
         id: guild.id,
         name: realName,
         iconUrl: realIconUrl,
-        timezone: guild.timezone,
+        timezone: guild.timezone || 'Europe/Bucharest',
         defaultChannelId,
       },
       channels,
       roles,
       members,
       settings: {
-        timezone: guild.timezone || 'UTC',
+        timezone: guild.timezone || 'Europe/Bucharest',
         defaultChannelId,
         botActive: true,
       },
@@ -127,7 +127,7 @@ export class GuildsService {
       guildId: guild.id,
       name: clientGuild?.name || guild.name,
       iconUrl: clientGuild?.iconURL({ extension: 'png', size: 256 }) || guild.iconUrl,
-      timezone: guild.timezone || 'UTC',
+      timezone: guild.timezone || 'Europe/Bucharest',
       defaultChannelId: guild.defaultChannelId || null,
       botStatus: 'online',
     };
@@ -149,7 +149,7 @@ export class GuildsService {
       create: {
         id: guildId,
         name: data.name || 'Discord Server',
-        timezone: data.timezone || 'UTC',
+        timezone: data.timezone || 'Europe/Bucharest',
         defaultChannelId: data.defaultChannelId || null,
       },
     });

@@ -54,7 +54,7 @@ export class EventsService {
       create: {
         id: guildId,
         name: `Guild ${guildId}`,
-        timezone: validData.timezone || 'UTC',
+        timezone: validData.timezone || 'Europe/Bucharest',
       },
     });
 
@@ -72,7 +72,7 @@ export class EventsService {
         imageUrl: validData.imageUrl || null,
         color: validData.color || '#5865F2',
         channelId: validData.channelId,
-        timezone: validData.timezone || 'UTC',
+        timezone: validData.timezone || 'Europe/Bucharest',
         createdById,
         mentionRoleIds: validData.mentionRoleIds || [],
         rrule: validData.rrule || null,

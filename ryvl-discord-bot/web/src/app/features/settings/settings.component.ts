@@ -14,11 +14,11 @@ import { GuildStore } from '../../core/guild.store';
 import { GuildSettings } from '../../core/models';
 
 const TIMEZONES = [
-  'UTC',
+  'Europe/Bucharest',
   'Europe/London',
+  'UTC',
   'Europe/Paris',
   'Europe/Berlin',
-  'Europe/Bucharest',
   'America/New_York',
   'America/Chicago',
   'America/Los_Angeles',
@@ -194,7 +194,7 @@ export class SettingsComponent implements OnInit {
 
   readonly guildName = signal<string>('');
   readonly guildIconUrl = signal<string | null>(null);
-  readonly timezone = signal<string>('UTC');
+  readonly timezone = signal<string>('Europe/Bucharest');
   readonly defaultChannelId = signal<string>('');
   readonly botStatus = signal<'online' | 'offline' | 'idle'>('online');
 

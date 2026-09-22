@@ -39,18 +39,19 @@ export const SLOT_LABELS: Record<string, string> = {
   rs: 'RS',
 };
 
-export const Y_ATTACK = 210;
-export const Y_SUPPORT = 380;
-export const Y_MIDFIELD = 570;
-export const Y_HOLDING = 760;
-export const Y_DEFENCE = 930;
+export const Y_ATTACK = 185;
+export const Y_SUPPORT = 320;
+export const Y_MIDFIELD = 455;
+export const Y_HOLDING = 590;
+export const Y_DEFENCE = 725;
+export const Y_GK = 835;
 
-function xPositions(count: number): number[] {
+function xPositions(count: number, width = 1350): number[] {
   if (count === 1) {
-    return [450];
+    return [Math.round(width / 2)];
   }
-  const left = count >= 4 ? 145 : count === 3 ? 220 : 330;
-  const right = 900 - left;
+  const left = count >= 5 ? 160 : count >= 4 ? 200 : count === 3 ? 320 : 450;
+  const right = width - left;
   return Array.from({ length: count }, (_, index) =>
     Math.round(left + ((right - left) * index) / (count - 1)),
   );
@@ -62,7 +63,7 @@ function makeFormation(
   rows: [number, string[]][],
 ): FormationLayout {
   const coords: Record<string, [number, number]> = {
-    gk: [450, 1120],
+    gk: [675, Y_GK],
   };
 
   for (const [y, slots] of rows) {

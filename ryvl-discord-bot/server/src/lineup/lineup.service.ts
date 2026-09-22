@@ -70,8 +70,8 @@ export class LineupService {
       labels_by_formation: labels,
       slots_by_formation: slotsByFormation(),
       coords_by_formation: coords,
-      canvas_width: 900,
-      canvas_height: 1400,
+      canvas_width: 1350,
+      canvas_height: 940,
     };
   }
 
@@ -163,7 +163,7 @@ export class LineupService {
         channelId: payload.channel_id || null,
         formation: payload.formation || '433',
         kickoffAt: payload.kickoff_at ? new Date(payload.kickoff_at) : null,
-        timezone: payload.timezone || 'UTC',
+        timezone: payload.timezone || 'Europe/Bucharest',
         mentionRoleIds: payload.mention_role_ids || [],
         assignments: payload.assignments || {},
         createdByDiscordId: userId,

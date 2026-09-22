@@ -147,12 +147,12 @@ export class GuildStore {
         id: raw.id || raw.guild?.id || guildId,
         name: raw.name || raw.guild?.name || 'Discord Server',
         iconUrl: raw.iconUrl || raw.guild?.iconUrl || null,
-        defaultTimezone: raw.defaultTimezone || raw.guild?.timezone || 'UTC',
+        defaultTimezone: raw.defaultTimezone || raw.guild?.timezone || 'Europe/Bucharest',
         channels: raw.channels || [],
         roles: raw.roles || [],
         members: raw.members || [],
         settings: {
-          timezone: raw.settings?.timezone || raw.defaultTimezone || raw.guild?.timezone || 'UTC',
+          timezone: raw.settings?.timezone || raw.defaultTimezone || raw.guild?.timezone || 'Europe/Bucharest',
           defaultChannelId,
           botActive: raw.settings?.botActive ?? true,
         },
@@ -229,7 +229,7 @@ export class GuildStore {
             timezone: updated.timezone ?? current.settings.timezone,
           }
         : {
-            timezone: updated.timezone || 'UTC',
+            timezone: updated.timezone || 'Europe/Bucharest',
             defaultChannelId: updated.defaultChannelId || null,
             botActive: true,
           },

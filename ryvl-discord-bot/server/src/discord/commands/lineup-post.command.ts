@@ -30,6 +30,45 @@ import { PrismaService } from '../../prisma/prisma.service';
 export const LINEUP_MODAL_SETUP_PREFIX = 'lineup:modal:setup:';
 export const LINEUP_MODAL_CUSTOM_PREFIX = 'lineup:modal:custom:';
 
+function parseKickoffDateTime(
+  dateStr: string,
+  timeStr: string,
+  timeZone = 'Europe/Bucharest',
+): Date | null {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hour, minute] = timeStr.split(':').map(Number);
+  if (!year || !month || !day || isNaN(hour) || isNaN(minute)) return null;
+
+  const naive = new Date(Date.UTC(year, month - 1, day, hour, minute, 0));
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(naive);
+    const getPart = (t: string) => parts.find((p) => p.type === t)?.value;
+    const y = Number(getPart('year'));
+    const m = Number(getPart('month'));
+    const d = Number(getPart('day'));
+    let h = Number(getPart('hour'));
+    if (h === 24) h = 0;
+    const min = Number(getPart('minute'));
+    const s = Number(getPart('second'));
+    const inTzUtc = Date.UTC(y, m - 1, d, h, min, s);
+    const offsetMs = inTzUtc - naive.getTime();
+    return new Date(naive.getTime() - offsetMs);
+  } catch {
+    const fallback = new Date(`${dateStr}T${timeStr}:00Z`);
+    return isNaN(fallback.getTime()) ? null : fallback;
+  }
+}
+
 interface LineupWizardSession {
   id: string;
   userId: string;
@@ -95,9 +134,8 @@ export class LineupPostCommand {
     const channelOption = interaction.options.getChannel('channel');
     let targetChannelId = channelOption?.id;
 
+    const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
     if (!targetChannelId) {
-      // Look up guild default channel
-      const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
       targetChannelId = guild?.defaultChannelId || interaction.channelId;
     }
 
@@ -170,10 +208,11 @@ export class LineupPostCommand {
 
     let kickoffAt: Date | null = null;
     if (dateInput && timeInput) {
-      const parsed = new Date(`${dateInput}T${timeInput}:00Z`);
-      if (!isNaN(parsed.getTime())) {
-        kickoffAt = parsed;
-      }
+      kickoffAt = parseKickoffDateTime(
+        dateInput,
+        timeInput,
+        guild?.timezone || 'Europe/Bucharest',
+      );
     }
 
     const layout = FORMATIONS[formationInput] || FORMATIONS['433'];
@@ -207,12 +246,17 @@ export class LineupPostCommand {
 
     await interaction.deferReply({ ephemeral: true });
 
+    const guild = await this.prisma.guild.findUnique({
+      where: { id: interaction.guildId! },
+    });
+
     let kickoffAt: Date | null = null;
     if (dateInput && timeInput) {
-      const parsed = new Date(`${dateInput}T${timeInput}:00Z`);
-      if (!isNaN(parsed.getTime())) {
-        kickoffAt = parsed;
-      }
+      kickoffAt = parseKickoffDateTime(
+        dateInput,
+        timeInput,
+        guild?.timezone || 'Europe/Bucharest',
+      );
     }
 
     const formationKey = formationInput in FORMATIONS ? formationInput : '433';

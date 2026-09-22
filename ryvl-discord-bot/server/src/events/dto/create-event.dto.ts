@@ -8,7 +8,7 @@ export const createEventSchema = z.object({
   imageUrl: z.string().url('Image URL must be valid').optional().or(z.literal('')),
   color: z.string().regex(/^#([0-9a-fA-F]{6})$/, 'Color must be a valid hex color (e.g. #5865F2)').optional().default('#5865F2'),
   channelId: z.string().min(1, 'Channel ID is required'),
-  timezone: z.string().optional().default('UTC'),
+  timezone: z.string().optional().default('Europe/Bucharest'),
   mentionRoleIds: z.array(z.string()).optional().default([]),
   rrule: z.string().nullable().optional(),
   duration: z.coerce.number().int().positive().optional().default(60),
