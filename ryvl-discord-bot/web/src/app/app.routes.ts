@@ -98,7 +98,7 @@ export const routes: Routes = [
       {
         path: 'club',
         loadComponent: () =>
-          import('./features/ea-tracker/ea-tracker.component').then((m) => m.EaTrackerComponent),
+          import('./features/public/club.component').then((m) => m.PublicClubComponent),
       },
       {
         path: 'transfers',
