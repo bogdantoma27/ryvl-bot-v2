@@ -126,7 +126,7 @@ export class LineupRendererService {
     );
 
     return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="width: 100%; max-width: 100%; height: auto; display: block;">
   <defs>
     <style>
       .txt-title { font-family: 'Segoe UI', Arial, sans-serif; font-weight: 700; fill: #ffffff; }

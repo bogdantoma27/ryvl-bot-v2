@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { ApiService } from './api.service';
-import { GuildBootstrap, GuildSummary } from './models';
+import { GuildBootstrap, GuildMemberOption, GuildSummary } from './models';
 
 const STORAGE_KEY = 'ryvl_active_guild_id';
 const STORAGE_AVAILABLE_KEY = 'ryvl_cached_available_guilds';
@@ -171,6 +171,30 @@ export class GuildStore {
       this.error.set(`Could not load details for server ${guildId}`);
     } finally {
       this.isLoading.set(false);
+    }
+  }
+
+  async fetchMembers(guildId?: string): Promise<GuildMemberOption[]> {
+    const targetGuildId = guildId || this.activeGuildId();
+    if (!targetGuildId) return [];
+
+    try {
+      const members = await this.api.getGuildMembers(targetGuildId);
+      const current = this.activeGuild();
+      if (current && current.id === targetGuildId) {
+        const updated = { ...current, members };
+        this.activeGuild.set(updated);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(
+            `${STORAGE_BOOTSTRAP_PREFIX}${targetGuildId}`,
+            JSON.stringify(updated),
+          );
+        }
+      }
+      return members;
+    } catch (err) {
+      console.error(`Failed to fetch members for ${targetGuildId}:`, err);
+      return [];
     }
   }
 

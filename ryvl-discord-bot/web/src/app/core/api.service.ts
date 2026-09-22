@@ -7,6 +7,7 @@ import {
   EventItem,
   EventRsvp,
   GuildBootstrap,
+  GuildMemberOption,
   GuildSettings,
   GuildSummary,
   LineupFormationsResponse,
@@ -88,6 +89,14 @@ export class ApiService {
   getBootstrap(guildId: string): Promise<GuildBootstrap> {
     return firstValueFrom(
       this.http.get<GuildBootstrap>(`${this.baseUrl}/api/guilds/${guildId}/bootstrap`, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  getGuildMembers(guildId: string): Promise<GuildMemberOption[]> {
+    return firstValueFrom(
+      this.http.get<GuildMemberOption[]>(`${this.baseUrl}/api/guilds/${guildId}/members`, {
         headers: this.headers(),
       })
     );

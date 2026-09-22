@@ -37,12 +37,13 @@ import { LineupDraft } from '../../core/models';
 
         <a
           routerLink="/lineup"
-          class="text-xs text-black bg-[#EAE905] hover:bg-[#d8d704] font-bold px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 self-start sm:self-center"
+          class="btn-yellow text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 self-start sm:self-center"
+          style="background-color: #EAE905 !important; color: #111111 !important;"
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
-          <span>Create New Lineup</span>
+          <span style="color: #111111 !important;">Create New Lineup</span>
         </a>
       </div>
 

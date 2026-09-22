@@ -117,6 +117,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
           });
         }
         this.logger.log(`Synchronized ${guilds.size} guilds with database.`);
+        await this.registerGuildSlashCommands();
       } catch (err) {
         this.logger.warn(`Could not sync guilds on startup: ${err}`);
       }
@@ -137,6 +138,11 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             iconUrl: guild.iconURL(),
           },
         });
+        const rest = new REST({ version: '10' }).setToken(this.configService.discordToken);
+        await rest.put(
+          Routes.applicationGuildCommands(this.configService.discordClientId, guild.id),
+          { body: getSlashCommands() },
+        );
       } catch (err) {
         this.logger.error(`Failed to upsert guild on GuildCreate: ${err}`);
       }
@@ -224,6 +230,29 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async registerGuildSlashCommands(): Promise<void> {
+    try {
+      const rest = new REST({ version: '10' }).setToken(this.configService.discordToken);
+      const commands = getSlashCommands();
+      const guilds = await this.client.guilds.fetch().catch(() => null);
+      if (guilds) {
+        for (const [id] of guilds) {
+          try {
+            await rest.put(
+              Routes.applicationGuildCommands(this.configService.discordClientId, id),
+              { body: commands },
+            );
+            this.logger.log(`Instantly registered guild slash commands for guild: ${id}`);
+          } catch (gErr) {
+            this.logger.warn(`Could not register commands for guild ${id}: ${gErr}`);
+          }
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`Failed to register guild slash commands: ${error}`);
+    }
+  }
+
   private async connectClient(): Promise<void> {
     try {
       this.logger.log('Connecting Discord client...');
@@ -297,24 +326,48 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getGuildMembers(guildId: string): Promise<DiscordMemberInfo[]> {
-    const guild = await this.client.guilds.fetch(guildId).catch(() => null);
+    const guild =
+      this.client.guilds.cache.get(guildId) ||
+      (await this.client.guilds.fetch(guildId).catch(() => null));
     if (!guild) {
-      throw new NotFoundException(`Discord guild with ID "${guildId}" not found or bot is not in it`);
+      return [];
     }
 
-    const members = await guild.members.fetch({ limit: 100 });
+    let memberCollection = guild.members.cache;
+    try {
+      const fetched = await guild.members.fetch({ limit: 1000 }).catch(() => null);
+      if (fetched && fetched.size > 0) {
+        memberCollection = fetched;
+      }
+    } catch (fetchErr) {
+      this.logger.warn(`Could not fetch live members for guild ${guildId}: ${fetchErr}`);
+    }
+
     const result: DiscordMemberInfo[] = [];
-
-    for (const [, member] of members) {
-      result.push({
-        id: member.id,
-        username: member.user.username,
-        displayName: member.displayName,
-        avatarUrl: member.displayAvatarURL(),
-      });
+    for (const [, member] of memberCollection) {
+      if (!member.user.bot) {
+        result.push({
+          id: member.id,
+          username: member.user.username,
+          displayName: member.displayName || member.user.globalName || member.user.username,
+          avatarUrl: member.displayAvatarURL(),
+        });
+      }
     }
 
-    return result;
+    // If all members were bots or empty, include non-system users as fallback
+    if (result.length === 0 && memberCollection.size > 0) {
+      for (const [, member] of memberCollection) {
+        result.push({
+          id: member.id,
+          username: member.user.username,
+          displayName: member.displayName || member.user.globalName || member.user.username,
+          avatarUrl: member.displayAvatarURL(),
+        });
+      }
+    }
+
+    return result.sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
 
   async sendMessageToChannel(

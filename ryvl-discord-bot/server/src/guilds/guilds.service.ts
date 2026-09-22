@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { Guild, PermissionFlagsBits } from 'discord.js';
 import { Guild as PrismaGuild } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { DiscordService, DiscordChannelInfo, DiscordRoleInfo } from '../discord/discord.service';
+import { DiscordService, DiscordChannelInfo, DiscordRoleInfo, DiscordMemberInfo } from '../discord/discord.service';
 
 export interface UserGuildItem {
   id: string;
@@ -78,9 +78,10 @@ export class GuildsService {
       this.discordService.client.guilds.cache.get(guildId) ||
       (await this.discordService.client.guilds.fetch(guildId).catch(() => null));
 
-    const [channels, roles] = await Promise.all([
+    const [channels, roles, members] = await Promise.all([
       this.discordService.getGuildChannels(guildId).catch((): DiscordChannelInfo[] => []),
       this.discordService.getGuildRoles(guildId).catch((): DiscordRoleInfo[] => []),
+      this.discordService.getGuildMembers(guildId).catch((): DiscordMemberInfo[] => []),
     ]);
 
     const realIconUrl =
@@ -106,12 +107,17 @@ export class GuildsService {
       },
       channels,
       roles,
+      members,
       settings: {
         timezone: guild.timezone || 'UTC',
         defaultChannelId,
         botActive: true,
       },
     };
+  }
+
+  async getMembers(guildId: string): Promise<DiscordMemberInfo[]> {
+    return this.discordService.getGuildMembers(guildId).catch(() => []);
   }
 
   async getSettings(guildId: string): Promise<any> {

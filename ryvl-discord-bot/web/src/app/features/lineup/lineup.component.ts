@@ -68,9 +68,10 @@ function getTodayDateString(): string {
             type="button"
             [disabled]="isSavingDraft()"
             (click)="saveDraft()"
-            class="text-xs text-black bg-[#EAE905] hover:bg-[#d8d704] font-bold px-3 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            class="btn-yellow text-xs font-bold px-3.5 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+            style="color: #111111 !important;"
           >
-            <span>{{ isSavingDraft() ? 'Saving...' : 'Save Draft' }}</span>
+            <span style="color: #111111 !important;">{{ isSavingDraft() ? 'Saving...' : 'Save Draft' }}</span>
           </button>
         </div>
       </div>
@@ -226,16 +227,33 @@ function getTodayDateString(): string {
           </div>
         }
 
-        <!-- STEP 2: Fill Positions -->
+        <!-- STEP 2: Fill Positions (Full width, roster on top, full image preview below) -->
         @if (currentStep() === 2) {
-          <div class="space-y-4">
+          <div class="space-y-6">
+            <!-- Header bar for step 2 -->
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-800 pb-3">
               <div>
-                <h2 class="text-base font-bold text-white">Fill Positions ({{ filledCount() }}/11)</h2>
-                <p class="text-xs text-slate-400">Assign Discord members or custom trialists to each position in {{ selectedFormation }}.</p>
+                <h2 class="text-base font-bold text-white flex items-center gap-2">
+                  <span>Fill Formation Positions</span>
+                  <span class="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-[#EAE905] border border-slate-700 font-bold">
+                    {{ filledCount() }}/11 Filled
+                  </span>
+                </h2>
+                <p class="text-xs text-slate-400 mt-0.5">Assign server members or custom trialists to each position in {{ selectedFormation }}.</p>
               </div>
 
               <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  (click)="refreshMembers()"
+                  class="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Refresh Roster</span>
+                </button>
+
                 <button
                   type="button"
                   (click)="clearAllSlots()"
@@ -247,154 +265,194 @@ function getTodayDateString(): string {
                 <button
                   type="button"
                   (click)="refreshPreview()"
-                  class="text-xs text-[#EAE905] hover:text-white px-3 py-1.5 rounded-lg border border-[#EAE905]/40 hover:bg-[#EAE905]/10 transition flex items-center gap-1.5 cursor-pointer"
+                  class="btn-yellow text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                  style="color: #111111 !important;"
                 >
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                   </svg>
-                  <span>Update Pitch Preview</span>
+                  <span style="color: #111111 !important;">Update Graphic</span>
                 </button>
               </div>
             </div>
 
-            <!-- Two Columns: Left Roster & Custom Name, Right Pitch Preview & Slot Grid -->
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              <!-- Left: Server Roster & Custom Member (5 cols) -->
-              <div class="lg:col-span-5 space-y-4">
-                <!-- Custom Trialist / Name Input -->
-                <div class="bg-[#11192e] p-3.5 rounded-xl border border-slate-700/80 space-y-2">
-                  <div class="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                    <svg class="w-4 h-4 text-[#EAE905]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                    </svg>
-                    <span>Custom Name / Trialist</span>
+            <!-- Formation Slots Grid (Full Width) -->
+            <div class="bg-[#11192e] p-4 rounded-xl border border-slate-700/80">
+              <div class="text-xs font-bold text-white mb-2.5 flex items-center justify-between">
+                <span>Formation Slot Assignments ({{ selectedFormation }})</span>
+                <span class="text-[11px] text-slate-400">Click &times; to unassign a slot</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                @for (slot of currentSlots(); track slot) {
+                  <div
+                    class="p-2 rounded-lg border text-xs flex flex-col justify-between transition"
+                    [class.bg-slate-800]="!assignments()[slot]"
+                    [class.border-slate-700]="!assignments()[slot]"
+                    [class.bg-emerald-950/40]="!!assignments()[slot]"
+                    [class.border-emerald-700/60]="!!assignments()[slot]"
+                  >
+                    <div class="flex items-center justify-between">
+                      <span class="font-bold text-[#EAE905] uppercase text-[11px]">{{ slot }}</span>
+                      @if (assignments()[slot]) {
+                        <button
+                          type="button"
+                          (click)="unassignSlot(slot)"
+                          title="Unassign slot"
+                          class="text-slate-400 hover:text-rose-400 text-sm leading-none cursor-pointer"
+                        >
+                          &times;
+                        </button>
+                      }
+                    </div>
+                    <div class="mt-1 truncate font-medium text-[11px]" [class.text-white]="assignments()[slot]" [class.text-slate-500]="!assignments()[slot]">
+                      {{ assignments()[slot] || 'Empty' }}
+                    </div>
                   </div>
-                  <div class="flex gap-2">
-                    <input
-                      type="text"
-                      [(ngModel)]="customPlayerName"
-                      placeholder="e.g. GuestPlayer"
-                      (keyup.enter)="addCustomPlayerToFirstEmptySlot()"
-                      class="flex-1 bg-[#16213e] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#EAE905]"
-                    />
-                    <button
-                      type="button"
-                      (click)="addCustomPlayerToFirstEmptySlot()"
-                      class="bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition cursor-pointer"
-                    >
-                      Assign Next
-                    </button>
-                  </div>
+                }
+              </div>
+            </div>
+
+            <!-- Member Roster & Custom Name (2 Columns side by side) -->
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+              <!-- Custom Trialist / Player Name Input (4 cols) -->
+              <div class="md:col-span-4 bg-[#11192e] p-4 rounded-xl border border-slate-700/80 space-y-3">
+                <div class="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-[#EAE905]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Add Guest / Trialist</span>
                 </div>
-
-                <!-- Server Members Search & List -->
-                <div class="bg-[#11192e] p-3.5 rounded-xl border border-slate-700/80 space-y-3">
-                  <div class="flex items-center justify-between">
-                    <span class="text-xs font-bold text-white">Server Members</span>
-                    <span class="text-[10px] text-slate-400">{{ filteredMembers().length }} available</span>
-                  </div>
-
+                <p class="text-[11px] text-slate-400">Type any custom player name not currently in the Discord server.</p>
+                <div class="space-y-2">
                   <input
                     type="text"
-                    [(ngModel)]="memberSearch"
-                    placeholder="Search roster..."
-                    class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#EAE905]"
+                    [(ngModel)]="customPlayerName"
+                    placeholder="e.g. GuestPlayer"
+                    (keyup.enter)="addCustomPlayerToFirstEmptySlot()"
+                    class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905]"
                   />
-
-                  <div class="max-h-[360px] overflow-y-auto space-y-1.5 pr-1">
-                    @for (m of filteredMembers(); track m.id) {
-                      <div class="flex items-center justify-between p-2 rounded-lg bg-[#16213e]/70 hover:bg-[#1f2e54] border border-slate-800 transition">
-                        <div class="flex items-center gap-2.5 min-w-0">
-                          @if (m.avatar_url) {
-                            <img [src]="m.avatar_url" [alt]="m.display_name" class="w-6 h-6 rounded-full object-cover shrink-0" />
-                          } @else {
-                            <div class="w-6 h-6 rounded-full bg-slate-700 text-slate-200 flex items-center justify-center text-[10px] font-bold shrink-0">
-                              {{ m.display_name.slice(0, 1).toUpperCase() }}
-                            </div>
-                          }
-                          <span class="text-xs font-medium text-slate-200 truncate">{{ m.display_name }}</span>
-                        </div>
-
-                        <!-- Dropdown or quick button to assign -->
-                        <div class="flex items-center gap-1 shrink-0">
-                          <select
-                            (change)="onAssignMemberSelect(m.display_name, $event)"
-                            class="bg-[#11192e] border border-slate-700 rounded px-1.5 py-1 text-[11px] text-[#EAE905] focus:outline-none cursor-pointer"
-                          >
-                            <option value="">Assign to...</option>
-                            @for (slot of currentSlots(); track slot) {
-                              <option [value]="slot">{{ slot.toUpperCase() }}{{ assignments()[slot] ? ' (' + assignments()[slot] + ')' : '' }}</option>
-                            }
-                          </select>
-                        </div>
-                      </div>
-                    } @empty {
-                      <div class="text-center py-6 text-xs text-slate-500">No matching members found.</div>
-                    }
-                  </div>
+                  <button
+                    type="button"
+                    (click)="addCustomPlayerToFirstEmptySlot()"
+                    class="w-full bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold py-2 px-3 rounded-lg transition cursor-pointer"
+                  >
+                    Assign to First Empty Slot
+                  </button>
                 </div>
               </div>
 
-              <!-- Right: Pitch Preview & Slot Map (7 cols) -->
-              <div class="lg:col-span-7 space-y-4">
-                <!-- Slot Grid: Quick inspection and removal -->
-                <div class="bg-[#11192e] p-3.5 rounded-xl border border-slate-700/80">
-                  <div class="text-xs font-bold text-white mb-2.5">Formation Slots</div>
-                  <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                    @for (slot of currentSlots(); track slot) {
-                      <div
-                        class="p-2 rounded-lg border text-xs flex flex-col justify-between transition"
-                        [class.bg-slate-800]="!assignments()[slot]"
-                        [class.border-slate-700]="!assignments()[slot]"
-                        [class.bg-emerald-950/40]="!!assignments()[slot]"
-                        [class.border-emerald-700/60]="!!assignments()[slot]"
-                      >
-                        <div class="flex items-center justify-between">
-                          <span class="font-bold text-[#EAE905] uppercase text-[11px]">{{ slot }}</span>
-                          @if (assignments()[slot]) {
-                            <button
-                              type="button"
-                              (click)="unassignSlot(slot)"
-                              title="Unassign slot"
-                              class="text-slate-400 hover:text-rose-400 text-sm leading-none cursor-pointer"
-                            >
-                              &times;
-                            </button>
-                          }
-                        </div>
-                        <div class="mt-1 truncate font-medium text-[11px]" [class.text-white]="assignments()[slot]" [class.text-slate-500]="!assignments()[slot]">
-                          {{ assignments()[slot] || 'Empty' }}
-                        </div>
-                      </div>
-                    }
+              <!-- Server Members Roster (8 cols) -->
+              <div class="md:col-span-8 bg-[#11192e] p-4 rounded-xl border border-slate-700/80 space-y-3">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-bold text-white">Server Members</span>
+                    <span class="text-[11px] text-slate-400">({{ filteredMembers().length }} members)</span>
                   </div>
-                </div>
-
-                <!-- Pitch SVG Preview Container -->
-                <div class="bg-[#11192e] p-4 rounded-xl border border-slate-700/80 flex flex-col items-center">
-                  @if (isLoadingPreview()) {
-                    <div class="py-20 flex flex-col items-center text-slate-400 gap-2">
-                      <svg class="w-8 h-8 animate-spin text-[#EAE905]" fill="none" viewBox="0 0 24 24">
+                  @if (isLoadingMembers()) {
+                    <span class="text-[11px] text-amber-400 flex items-center gap-1">
+                      <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                       </svg>
-                      <span class="text-xs">Rendering pitch preview...</span>
+                      Loading members...
+                    </span>
+                  }
+                </div>
+
+                <input
+                  type="text"
+                  [(ngModel)]="memberSearch"
+                  placeholder="Search server members..."
+                  class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#EAE905]"
+                />
+
+                <div class="max-h-[220px] overflow-y-auto space-y-1.5 pr-1">
+                  @for (m of filteredMembers(); track m.id) {
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-[#16213e]/70 hover:bg-[#1f2e54] border border-slate-800 transition">
+                      <div class="flex items-center gap-2.5 min-w-0">
+                        @if (m.avatar_url) {
+                          <img [src]="m.avatar_url" [alt]="m.display_name" class="w-6 h-6 rounded-full object-cover shrink-0" />
+                        } @else {
+                          <div class="w-6 h-6 rounded-full bg-slate-700 text-slate-200 flex items-center justify-center text-[10px] font-bold shrink-0">
+                            {{ m.display_name.slice(0, 1).toUpperCase() }}
+                          </div>
+                        }
+                        <span class="text-xs font-medium text-slate-200 truncate">{{ m.display_name }}</span>
+                      </div>
+
+                      <div class="flex items-center gap-1 shrink-0">
+                        <select
+                          (change)="onAssignMemberSelect(m.display_name, $event)"
+                          class="bg-[#11192e] border border-slate-700 rounded px-2 py-1 text-[11px] text-[#EAE905] focus:outline-none cursor-pointer"
+                        >
+                          <option value="">Assign to slot...</option>
+                          @for (slot of currentSlots(); track slot) {
+                            <option [value]="slot">{{ slot.toUpperCase() }}{{ assignments()[slot] ? ' (' + assignments()[slot] + ')' : '' }}</option>
+                          }
+                        </select>
+                      </div>
                     </div>
-                  } @else if (previewSvg()) {
-                    <div class="w-full max-w-[420px] rounded-lg overflow-hidden shadow-2xl border border-slate-800" [innerHTML]="safePreviewSvg()"></div>
-                  } @else {
-                    <div class="py-16 text-center text-slate-500 text-xs">
-                      <p>Preview ready to render.</p>
-                      <button
-                        type="button"
-                        (click)="refreshPreview()"
-                        class="mt-2 text-[#EAE905] font-semibold underline cursor-pointer"
-                      >
-                        Generate Pitch Graphic
-                      </button>
+                  } @empty {
+                    <div class="text-center py-6 text-xs text-slate-500">
+                      @if (isLoadingMembers()) {
+                        Loading server members...
+                      } @else {
+                        No members found. Click "Refresh Roster" above if members didn't load.
+                      }
                     </div>
                   }
                 </div>
+              </div>
+            </div>
+
+            <!-- PITCH GRAPHIC PREVIEW (Below server members, full space, scalable & entirely visible) -->
+            <div class="bg-[#11192e] p-6 rounded-2xl border border-slate-700/80 space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                  <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                    <svg class="w-4 h-4 text-[#EAE905]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Pitch Formation Graphic Preview</span>
+                  </h3>
+                  <p class="text-xs text-slate-400 mt-0.5">High-definition vector preview of the exact graphic posted to Discord.</p>
+                </div>
+
+                <button
+                  type="button"
+                  (click)="refreshPreview()"
+                  class="btn-yellow text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                  style="color: #111111 !important;"
+                >
+                  <span style="color: #111111 !important;">Render Graphic</span>
+                </button>
+              </div>
+
+              <!-- Full Pitch SVG Container: Scaled cleanly without cut-off -->
+              <div class="w-full flex justify-center py-4">
+                @if (isLoadingPreview()) {
+                  <div class="py-28 flex flex-col items-center text-slate-400 gap-2">
+                    <svg class="w-8 h-8 animate-spin text-[#EAE905]" fill="none" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                    </svg>
+                    <span class="text-xs">Rendering pitch formation...</span>
+                  </div>
+                } @else if (previewSvg()) {
+                  <div class="w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl border border-slate-700 bg-black" [innerHTML]="safePreviewSvg()"></div>
+                } @else {
+                  <div class="py-20 text-center text-slate-500 text-xs">
+                    <p>No preview generated yet.</p>
+                    <button
+                      type="button"
+                      (click)="refreshPreview()"
+                      class="btn-yellow mt-3 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
+                      style="color: #111111 !important;"
+                    >
+                      <span style="color: #111111 !important;">Generate Pitch Graphic</span>
+                    </button>
+                  </div>
+                }
               </div>
             </div>
           </div>
@@ -449,78 +507,66 @@ function getTodayDateString(): string {
           <div class="space-y-6">
             <div>
               <h2 class="text-base font-bold text-white">Review & Publish to Discord</h2>
-              <p class="text-xs text-slate-400 mt-1">Review the match lineup and publish the official image attachment to your server.</p>
+              <p class="text-xs text-slate-400 mt-1">Review the match lineup details and publish the official graphic to your server.</p>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              <!-- Summary Details (5 cols) -->
-              <div class="lg:col-span-5 space-y-4">
-                <div class="bg-[#11192e] p-4 rounded-xl border border-slate-700/80 space-y-3">
-                  <div class="border-b border-slate-800 pb-2.5">
-                    <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Lineup Title</span>
-                    <div class="text-sm font-bold text-white">{{ title }}</div>
-                  </div>
-
-                  <div class="border-b border-slate-800 pb-2.5 flex items-center justify-between">
-                    <div>
-                      <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Formation</span>
-                      <div class="text-sm font-bold text-[#EAE905]">{{ formationLabels()[selectedFormation] || selectedFormation }}</div>
-                    </div>
-                    <span class="text-xs bg-slate-800 px-2.5 py-1 rounded-lg text-slate-300 font-semibold">
-                      {{ filledCount() }}/11 Filled
-                    </span>
-                  </div>
-
-                  <div class="border-b border-slate-800 pb-2.5">
-                    <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Kickoff Times</span>
-                    <div class="text-xs text-slate-200 mt-0.5 space-y-0.5">
-                      <div>🇷🇴 Romania: <strong>{{ formatKickoffFor('Europe/Bucharest') }}</strong></div>
-                      <div>🇬🇧 UK: <strong>{{ formatKickoffFor('Europe/London') }}</strong></div>
-                    </div>
-                  </div>
-
-                  <div class="border-b border-slate-800 pb-2.5">
-                    <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Destination Channel</span>
-                    <div class="text-xs font-semibold text-white mt-0.5">#{{ targetChannelName() }}</div>
-                  </div>
-
-                  <div>
-                    <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Role Mentions</span>
-                    <div class="text-xs text-slate-300 mt-0.5">{{ selectedMentionRolesText() }}</div>
-                  </div>
-                </div>
-
-                <!-- Publish Action Button -->
-                <button
-                  type="button"
-                  [disabled]="isPosting() || !channelId"
-                  (click)="publishToDiscord()"
-                  class="w-full bg-[#5865F2] hover:bg-[#4752C4] disabled:opacity-50 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-500/25 transition duration-150 flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  @if (isPosting()) {
-                    <svg class="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
-                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                    </svg>
-                    <span>Posting to Discord...</span>
-                  } @else {
-                    <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.893.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z" />
-                    </svg>
-                    <span>Post Lineup to Discord</span>
-                  }
-                </button>
+            <!-- Match details summary card -->
+            <div class="bg-[#11192e] p-5 rounded-2xl border border-slate-700/80 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div class="border-b sm:border-b-0 sm:border-r border-slate-800 pb-3 sm:pb-0 pr-4">
+                <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Lineup Title</span>
+                <div class="text-sm font-bold text-white truncate">{{ title }}</div>
               </div>
 
-              <!-- Graphic Pitch Render Preview (7 cols) -->
-              <div class="lg:col-span-7 flex flex-col items-center">
-                <div class="w-full max-w-[420px] rounded-2xl overflow-hidden shadow-2xl border border-slate-700 bg-black">
-                  @if (previewSvg()) {
-                    <div [innerHTML]="safePreviewSvg()"></div>
-                  } @else {
-                    <div class="py-24 text-center text-xs text-slate-500">Generating preview...</div>
-                  }
+              <div class="border-b sm:border-b-0 sm:border-r border-slate-800 pb-3 sm:pb-0 pr-4">
+                <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Formation</span>
+                <div class="text-sm font-bold text-[#EAE905]">{{ formationLabels()[selectedFormation] || selectedFormation }}</div>
+                <div class="text-[11px] text-slate-400">{{ filledCount() }}/11 positions filled</div>
+              </div>
+
+              <div class="border-b sm:border-b-0 sm:border-r border-slate-800 pb-3 sm:pb-0 pr-4">
+                <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Kickoff Times</span>
+                <div class="text-xs text-slate-200 mt-0.5 space-y-0.5">
+                  <div>🇷🇴 <strong>{{ formatKickoffFor('Europe/Bucharest') }}</strong></div>
+                  <div>🇬🇧 <strong>{{ formatKickoffFor('Europe/London') }}</strong></div>
                 </div>
+              </div>
+
+              <div>
+                <span class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Target Channel</span>
+                <div class="text-xs font-semibold text-white mt-0.5">#{{ targetChannelName() }}</div>
+                <div class="text-[11px] text-slate-400">{{ selectedMentionRolesText() }}</div>
+              </div>
+            </div>
+
+            <!-- Publish Action Button -->
+            <button
+              type="button"
+              [disabled]="isPosting() || !channelId"
+              (click)="publishToDiscord()"
+              class="w-full bg-[#5865F2] hover:bg-[#4752C4] disabled:opacity-50 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-indigo-500/25 transition duration-150 flex items-center justify-center gap-2 cursor-pointer"
+            >
+              @if (isPosting()) {
+                <svg class="w-4 h-4 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                </svg>
+                <span>Posting Lineup to Discord...</span>
+              } @else {
+                <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.893.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z" />
+                </svg>
+                <span>Post Lineup to Discord</span>
+              }
+            </button>
+
+            <!-- Full graphic preview centered below -->
+            <div class="w-full flex justify-center pt-2">
+              <div class="w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl border border-slate-700 bg-black">
+                @if (previewSvg()) {
+                  <div [innerHTML]="safePreviewSvg()"></div>
+                } @else {
+                  <div class="py-24 text-center text-xs text-slate-500">Generating preview...</div>
+                }
               </div>
             </div>
           </div>
@@ -545,9 +591,10 @@ function getTodayDateString(): string {
               <button
                 type="button"
                 (click)="nextStep()"
-                class="px-5 py-2.5 rounded-xl text-xs font-bold text-black bg-[#EAE905] hover:bg-[#d8d704] transition cursor-pointer"
+                class="btn-yellow px-5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer"
+                style="color: #111111 !important;"
               >
-                Continue &rarr;
+                <span style="color: #111111 !important;">Continue &rarr;</span>
               </button>
             }
           </div>
@@ -593,6 +640,7 @@ export class LineupComponent implements OnInit {
   protected customPlayerName = '';
   protected previewSvg = signal<string>('');
   protected isLoadingPreview = signal<boolean>(false);
+  protected isLoadingMembers = signal<boolean>(false);
   protected isSavingDraft = signal<boolean>(false);
   protected isPosting = signal<boolean>(false);
   protected notification = signal<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -650,11 +698,16 @@ export class LineupComponent implements OnInit {
     if (!guildId) return;
 
     try {
+      // 1. Load formations
       const res: LineupFormationsResponse = await this.api.getLineupFormations(guildId);
       this.formationList.set(res.formations);
       this.formationLabels.set(res.labels_by_formation);
       this.slotsByFmt.set(res.slots_by_formation);
 
+      // 2. Fetch server members if not already loaded
+      await this.refreshMembers();
+
+      // 3. Load draft or render preview
       const queryDraftId = this.route.snapshot.queryParamMap.get('draftId');
       if (queryDraftId) {
         await this.loadDraft(guildId, queryDraftId);
@@ -663,6 +716,20 @@ export class LineupComponent implements OnInit {
       }
     } catch (err) {
       console.error('Failed to initialize lineup:', err);
+    }
+  }
+
+  async refreshMembers(): Promise<void> {
+    const guildId = this.guildStore.activeGuildId();
+    if (!guildId) return;
+
+    this.isLoadingMembers.set(true);
+    try {
+      await this.guildStore.fetchMembers(guildId);
+    } catch (err) {
+      console.error('Failed to refresh members:', err);
+    } finally {
+      this.isLoadingMembers.set(false);
     }
   }
 

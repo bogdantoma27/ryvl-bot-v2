@@ -34,3 +34,26 @@ input, select, textarea {
   color: #ffffff;
 }
 
+.btn-yellow, a.btn-yellow, button.btn-yellow, .badge-yellow {
+  background-color: #EAE905 !important;
+  color: #111111 !important;
+  font-weight: 700 !important;
+}
+
+.btn-yellow *, a.btn-yellow *, button.btn-yellow * {
+  color: #111111 !important;
+}
+
+.btn-yellow:hover, a.btn-yellow:hover, button.btn-yellow:hover {
+  background-color: #d8d704 !important;
+  color: #000000 !important;
+}
+
+.btn-yellow:hover *, a.btn-yellow:hover *, button.btn-yellow:hover * {
+  color: #000000 !important;
+}
+
+.text-pitch-dark {
+  color: #111111 !important;
+}
+

@@ -23,6 +23,11 @@ export class GuildsController {
     return this.guildsService.getBootstrapData(guildId);
   }
 
+  @Get(':guildId/members')
+  async getMembers(@Param('guildId') guildId: string) {
+    return this.guildsService.getMembers(guildId);
+  }
+
   @Get(':guildId/settings')
   async getSettings(@Param('guildId') guildId: string) {
     return this.guildsService.getSettings(guildId);
