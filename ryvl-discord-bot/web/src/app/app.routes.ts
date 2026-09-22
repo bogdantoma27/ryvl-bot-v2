@@ -72,11 +72,18 @@ export const routes: Routes = [
       import('./features/lineup/lineup-drafts.component').then((m) => m.LineupDraftsComponent),
   },
   {
+    path: 'club',
+    canMatch: [authGuard],
+    loadComponent: () =>
+      import('./features/ea-tracker/ea-tracker.component').then((m) => m.EaTrackerComponent),
+  },
+  {
     path: 'settings',
     canMatch: [authGuard],
     loadComponent: () =>
       import('./features/settings/settings.component').then((m) => m.SettingsComponent),
   },
+
   {
     path: '**',
     redirectTo: '',

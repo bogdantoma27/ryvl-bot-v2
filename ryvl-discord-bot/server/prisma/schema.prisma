@@ -13,9 +13,11 @@ model Guild {
   iconUrl          String?  @map("icon_url")
   timezone         String   @default("Europe/Bucharest")
   defaultChannelId String?  @map("default_channel_id")
-  joinedAt         DateTime @default(now()) @map("joined_at")
-  events           Event[]
-  lineupDrafts     LineupDraft[]
+  joinedAt           DateTime            @default(now()) @map("joined_at")
+  events             Event[]
+  lineupDrafts       LineupDraft[]
+  clubTrackerConfig  ClubTrackerConfig?
+  processedEaMatches ProcessedEaMatch[]
 
   @@map("guilds")
 }
@@ -113,4 +115,44 @@ enum RsvpStatus {
   ACCEPTED
   TENTATIVE
   DECLINED
+}
+
+model ClubTrackerConfig {
+  id              String    @id @default(uuid())
+  guildId         String    @unique @map("guild_id")
+  guild           Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  clubId          String    @default("128199") @map("club_id")
+  clubName        String    @default("RYVL Esports") @map("club_name")
+  platform        String    @default("common-gen5")
+  channelId       String?   @map("channel_id")
+  enabled         Boolean   @default(true)
+  matchTypes      String[]  @default(["leagueMatch", "friendlyMatch", "playoffMatch"]) @map("match_types")
+  pollIntervalSec Int       @default(90) @map("poll_interval_sec")
+  lastPolledAt    DateTime? @map("last_polled_at")
+  lastMatchId     String?   @map("last_match_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("club_tracker_configs")
+}
+
+model ProcessedEaMatch {
+  id               String   @id @default(uuid())
+  eaMatchId        String   @map("ea_match_id")
+  guildId          String   @map("guild_id")
+  guild            Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  clubId           String   @map("club_id")
+  matchType        String   @map("match_type")
+  homeClubName     String   @map("home_club_name")
+  awayClubName     String   @map("away_club_name")
+  homeScore        Int      @map("home_score")
+  awayScore        Int      @map("away_score")
+  timestamp        DateTime
+  discordMessageId String?  @map("discord_message_id")
+  channelId        String?  @map("channel_id")
+  rawPayload       Json?    @map("raw_payload")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([guildId, eaMatchId])
+  @@map("processed_ea_matches")
 }

@@ -163,6 +163,19 @@ import { User } from './core/models';
             </a>
 
             <a
+              routerLink="/club"
+              routerLinkActive="!bg-[#00d26a] !text-black font-bold shadow-md shadow-emerald-500/20"
+              (click)="closeMobileSidebar()"
+              class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-slate-200 hover:text-white hover:bg-[#1f2e54] transition cursor-pointer"
+            >
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+              </svg>
+              <span>Club Tracker</span>
+            </a>
+
+            <a
               routerLink="/settings"
               routerLinkActive="!bg-[#5865F2] !text-white font-bold shadow-md shadow-indigo-500/20"
               (click)="closeMobileSidebar()"

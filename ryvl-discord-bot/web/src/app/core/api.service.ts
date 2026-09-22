@@ -266,4 +266,77 @@ export class ApiService {
       ),
     );
   }
+
+  getEaConfig(guildId: string): Promise<{ config: any; clubInfo: any; overallStats: any }> {
+    return firstValueFrom(
+      this.http.get<{ config: any; clubInfo: any; overallStats: any }>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/config`,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  updateEaConfig(guildId: string, data: any): Promise<any> {
+    return firstValueFrom(
+      this.http.patch<any>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/config`,
+        data,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  searchEaClubs(guildId: string, query: string): Promise<any[]> {
+    return firstValueFrom(
+      this.http.get<any[]>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/search`,
+        {
+          headers: this.headers(),
+          params: { query },
+        },
+      ),
+    );
+  }
+
+  getEaMatches(guildId: string, count = 10): Promise<any[]> {
+    return firstValueFrom(
+      this.http.get<any[]>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/matches`,
+        {
+          headers: this.headers(),
+          params: { count: String(count) },
+        },
+      ),
+    );
+  }
+
+  getEaMembers(guildId: string): Promise<any> {
+    return firstValueFrom(
+      this.http.get<any>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/members`,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  postLatestEaMatch(guildId: string, channelId?: string): Promise<{ success: boolean; match?: any; error?: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; match?: any; error?: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/post-latest`,
+        { channelId },
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  pollEaNow(guildId: string): Promise<{ postedCount: number; latestMatch?: any }> {
+    return firstValueFrom(
+      this.http.post<{ postedCount: number; latestMatch?: any }>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/poll-now`,
+        {},
+        { headers: this.headers() },
+      ),
+    );
+  }
 }
+

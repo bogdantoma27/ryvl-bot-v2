@@ -4,6 +4,8 @@ import {
   OnModuleDestroy,
   Logger,
   NotFoundException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import {
   Client,
@@ -31,7 +33,9 @@ import {
   LINEUP_MODAL_SETUP_PREFIX,
   LINEUP_MODAL_CUSTOM_PREFIX,
 } from './commands/lineup-post.command';
+import { EaCommands } from './commands/ea-commands';
 import { RsvpButtonHandler } from './interactions/rsvp-button.handler';
+
 
 export interface DiscordChannelInfo {
   id: string;
@@ -71,6 +75,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     private readonly eventEditCommand: EventEditCommand,
     private readonly rsvpButtonHandler: RsvpButtonHandler,
     private readonly lineupPostCommand: LineupPostCommand,
+    @Inject(forwardRef(() => EaCommands))
+    private readonly eaCommands: EaCommands,
   ) {
     this.client = new Client({
       intents: [
@@ -168,8 +174,15 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             }
           } else if (interaction.commandName === 'lineup_post') {
             await this.lineupPostCommand.execute(interaction);
+          } else if (interaction.commandName === 'ea_setup') {
+            await this.eaCommands.handleSetup(interaction);
+          } else if (interaction.commandName === 'ea_stats') {
+            await this.eaCommands.handleStats(interaction);
+          } else if (interaction.commandName === 'ea_latest') {
+            await this.eaCommands.handleLatest(interaction);
           }
         } else if (interaction.isAutocomplete()) {
+
           if (interaction.commandName === 'event') {
             const subcommand = interaction.options.getSubcommand();
             if (subcommand === 'delete') {

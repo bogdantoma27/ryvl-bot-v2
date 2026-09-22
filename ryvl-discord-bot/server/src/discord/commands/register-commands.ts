@@ -65,5 +65,42 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .setRequired(false),
     );
 
-  return [eventCommand.toJSON(), lineupPostCommand.toJSON()];
+  const eaSetupCommand = new SlashCommandBuilder()
+    .setName('ea_setup')
+    .setDescription('Configure automatic EA Pro Clubs match notifications')
+    .addChannelOption((option) =>
+      option
+        .setName('channel')
+        .setDescription('Channel where match stats should be published')
+        .setRequired(true),
+    )
+    .addStringOption((option) =>
+      option
+        .setName('club_name')
+        .setDescription('Club name on EA (defaults to RYVL Esports)')
+        .setRequired(false),
+    );
+
+  const eaStatsCommand = new SlashCommandBuilder()
+    .setName('ea_stats')
+    .setDescription('View club stats, records, and ratings')
+    .addStringOption((option) =>
+      option
+        .setName('club_name')
+        .setDescription('Club name on EA (defaults to configured club)')
+        .setRequired(false),
+    );
+
+  const eaLatestCommand = new SlashCommandBuilder()
+    .setName('ea_latest')
+    .setDescription('Post the most recent EA Pro Clubs match results immediately');
+
+  return [
+    eventCommand.toJSON(),
+    lineupPostCommand.toJSON(),
+    eaSetupCommand.toJSON(),
+    eaStatsCommand.toJSON(),
+    eaLatestCommand.toJSON(),
+  ];
 }
+
