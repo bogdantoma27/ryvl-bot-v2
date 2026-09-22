@@ -77,6 +77,11 @@ export const routes: Routes = [
       import('./features/ea-tracker/ea-tracker.component').then((m) => m.EaTrackerComponent),
   },
   {
+    path: 'transfers',
+    loadComponent: () =>
+      import('./features/vpg-transfers/vpg-transfers.component').then((m) => m.VpgTransfersComponent),
+  },
+  {
     path: 'settings',
     canMatch: [authGuard],
     loadComponent: () =>

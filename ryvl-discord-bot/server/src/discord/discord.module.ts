@@ -11,6 +11,8 @@ import { LineupRendererService } from '../lineup/lineup-renderer.service';
 import { PrismaModule } from '../prisma/prisma.module';
 import { EventsModule } from '../events/events.module';
 import { EaModule } from '../ea/ea.module';
+import { VpgModule } from '../vpg/vpg.module';
+import { VpgCommands } from './commands/vpg-commands';
 
 @Global()
 @Module({
@@ -18,6 +20,7 @@ import { EaModule } from '../ea/ea.module';
     PrismaModule,
     EventsModule,
     forwardRef(() => EaModule),
+    forwardRef(() => VpgModule),
   ],
   providers: [
     DiscordService,
@@ -29,6 +32,7 @@ import { EaModule } from '../ea/ea.module';
     LineupRendererService,
     LineupPostCommand,
     EaCommands,
+    VpgCommands,
   ],
   exports: [DiscordService],
 })

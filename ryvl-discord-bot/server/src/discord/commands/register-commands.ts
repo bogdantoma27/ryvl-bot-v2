@@ -95,12 +95,50 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .setName('ea_latest')
     .setDescription('Post the most recent EA Pro Clubs match results immediately');
 
+  const vpgTransfersCommand = new SlashCommandBuilder()
+    .setName('vpg_transfers')
+    .setDescription('VPG Superliga România transfers tracker')
+    .addSubcommand((sub) =>
+      sub
+        .setName('setup')
+        .setDescription('Configure automatic VPG transfer announcements')
+        .addChannelOption((option) =>
+          option
+            .setName('channel')
+            .setDescription('Channel where transfers should be published')
+            .setRequired(true),
+        )
+        .addBooleanOption((option) =>
+          option
+            .setName('enabled')
+            .setDescription('Enable auto-posting transfers')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('latest')
+        .setDescription('Show recent VPG Superliga transfers')
+        .addIntegerOption((option) =>
+          option
+            .setName('count')
+            .setDescription('Number of transfers to display (1-5)')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('check')
+        .setDescription('Check for new VPG transfers right now'),
+    );
+
   return [
     eventCommand.toJSON(),
     lineupPostCommand.toJSON(),
     eaSetupCommand.toJSON(),
     eaStatsCommand.toJSON(),
     eaLatestCommand.toJSON(),
+    vpgTransfersCommand.toJSON(),
   ];
 }
 

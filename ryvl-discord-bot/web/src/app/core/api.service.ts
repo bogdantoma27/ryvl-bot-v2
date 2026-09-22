@@ -350,5 +350,61 @@ export class ApiService {
       ),
     );
   }
+
+  getVpgConfig(guildId?: string | null): Promise<any> {
+    const url =
+      guildId && guildId !== 'default'
+        ? `${this.baseUrl}/api/guilds/${guildId}/vpg/config`
+        : `${this.baseUrl}/api/vpg/default`;
+    return firstValueFrom(
+      this.http.get<any>(url, { headers: this.headers() }),
+    );
+  }
+
+  getVpgTransfers(
+    guildId?: string | null,
+    limit = 20,
+  ): Promise<{ transfers: any[]; processedHistory?: any[]; total: number }> {
+    const url =
+      guildId && guildId !== 'default'
+        ? `${this.baseUrl}/api/guilds/${guildId}/vpg/transfers`
+        : `${this.baseUrl}/api/vpg/default/transfers`;
+    return firstValueFrom(
+      this.http.get<any>(url, {
+        headers: this.headers(),
+        params: { limit: String(limit) },
+      }),
+    );
+  }
+
+  updateVpgConfig(guildId: string, data: any): Promise<any> {
+    return firstValueFrom(
+      this.http.patch<any>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/config`,
+        data,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  pollVpgTransfersNow(guildId: string): Promise<{ success: boolean; postedCount: number }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; postedCount: number }>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/poll-now`,
+        {},
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  postVpgTransferLatest(guildId: string): Promise<{ success: boolean; messageId?: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; messageId?: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/post-latest`,
+        {},
+        { headers: this.headers() },
+      ),
+    );
+  }
 }
 

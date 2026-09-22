@@ -34,6 +34,7 @@ import {
   LINEUP_MODAL_CUSTOM_PREFIX,
 } from './commands/lineup-post.command';
 import { EaCommands } from './commands/ea-commands';
+import { VpgCommands } from './commands/vpg-commands';
 import { RsvpButtonHandler } from './interactions/rsvp-button.handler';
 
 
@@ -77,6 +78,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     private readonly lineupPostCommand: LineupPostCommand,
     @Inject(forwardRef(() => EaCommands))
     private readonly eaCommands: EaCommands,
+    @Inject(forwardRef(() => VpgCommands))
+    private readonly vpgCommands: VpgCommands,
   ) {
     this.client = new Client({
       intents: [
@@ -180,6 +183,15 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             await this.eaCommands.handleStats(interaction);
           } else if (interaction.commandName === 'ea_latest') {
             await this.eaCommands.handleLatest(interaction);
+          } else if (interaction.commandName === 'vpg_transfers') {
+            const subcommand = interaction.options.getSubcommand();
+            if (subcommand === 'setup') {
+              await this.vpgCommands.handleSetup(interaction);
+            } else if (subcommand === 'latest') {
+              await this.vpgCommands.handleLatest(interaction);
+            } else if (subcommand === 'check') {
+              await this.vpgCommands.handleCheck(interaction);
+            }
           }
         } else if (interaction.isAutocomplete()) {
 

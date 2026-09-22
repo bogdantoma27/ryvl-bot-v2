@@ -18,6 +18,8 @@ model Guild {
   lineupDrafts       LineupDraft[]
   clubTrackerConfig  ClubTrackerConfig?
   processedEaMatches ProcessedEaMatch[]
+  vpgTransferConfig      VpgTransferConfig?
+  processedVpgTransfers  ProcessedVpgTransfer[]
 
   @@map("guilds")
 }
@@ -155,4 +157,44 @@ model ProcessedEaMatch {
 
   @@unique([guildId, eaMatchId])
   @@map("processed_ea_matches")
+}
+
+model VpgTransferConfig {
+  id              String    @id @default(uuid())
+  guildId         String    @unique @map("guild_id")
+  guild           Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  communitySlug   String    @default("VPGRoPS5") @map("community_slug")
+  leagueSlug      String    @default("Superliga-Romania") @map("league_slug")
+  leagueName      String    @default("Superliga România") @map("league_name")
+  channelId       String?   @map("channel_id")
+  enabled         Boolean   @default(true)
+  pollIntervalSec Int       @default(120) @map("poll_interval_sec")
+  lastPolledAt    DateTime? @map("last_polled_at")
+  lastTransferId  Int?      @map("last_transfer_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@map("vpg_transfer_configs")
+}
+
+model ProcessedVpgTransfer {
+  id               String   @id @default(uuid())
+  transferId       Int      @map("transfer_id")
+  guildId          String   @map("guild_id")
+  guild            Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  username         String
+  fromName         String?  @map("from_name")
+  fromSlug         String?  @map("from_slug")
+  fromLogo         String?  @map("from_logo")
+  toName           String?  @map("to_name")
+  toSlug           String?  @map("to_slug")
+  toLogo           String?  @map("to_logo")
+  amount           Float    @default(0)
+  occurredAt       DateTime @map("occurred_at")
+  discordMessageId String?  @map("discord_message_id")
+  channelId        String?  @map("channel_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([guildId, transferId])
+  @@map("processed_vpg_transfers")
 }
