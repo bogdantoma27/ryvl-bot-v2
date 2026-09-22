@@ -13,8 +13,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { EaService } from './ea.service';
 import { EaPollerService } from './ea-poller.service';
 
-@Controller('api/guilds/:guildId/ea')
-@UseGuards(AuthGuard)
+@Controller()
 export class EaController {
   private readonly logger = new Logger(EaController.name);
 
@@ -23,9 +22,35 @@ export class EaController {
     private readonly eaPollerService: EaPollerService,
   ) {}
 
-  @Get('config')
+  // ----------------------------------------------------
+  // Public Endpoints (Accessible by all users on web)
+  // ----------------------------------------------------
+
+  @Get('api/ea/default')
+  async getDefaultConfig() {
+    const config = await this.eaService.getDefaultTrackerConfig();
+    return this.getConfig(config.guildId);
+  }
+
+  @Get('api/ea/default/matches')
+  async getDefaultMatches(@Query('count') count = '10') {
+    const config = await this.eaService.getDefaultTrackerConfig();
+    return this.getRecentMatches(config.guildId, count);
+  }
+
+  @Get('api/ea/default/members')
+  async getDefaultMembers() {
+    const config = await this.eaService.getDefaultTrackerConfig();
+    return this.getMembers(config.guildId);
+  }
+
+  @Get('api/guilds/:guildId/ea/config')
   async getConfig(@Param('guildId') guildId: string) {
-    const config = await this.eaService.getOrCreateTrackerConfig(guildId);
+    const config =
+      guildId === 'default'
+        ? await this.eaService.getDefaultTrackerConfig()
+        : await this.eaService.getOrCreateTrackerConfig(guildId);
+
     let clubInfo = null;
     let overallStats = null;
 
@@ -54,38 +79,16 @@ export class EaController {
     };
   }
 
-  @Patch('config')
-  async updateConfig(
-    @Param('guildId') guildId: string,
-    @Body()
-    body: {
-      clubId?: string;
-      clubName?: string;
-      platform?: string;
-      channelId?: string | null;
-      enabled?: boolean;
-      matchTypes?: string[];
-      pollIntervalSec?: number;
-    },
-  ) {
-    return this.eaService.updateTrackerConfig(guildId, body);
-  }
-
-  @Get('search')
-  async searchClubs(
-    @Query('query') query: string,
-    @Query('platform') platform = 'common-gen5',
-  ) {
-    if (!query || !query.trim()) return [];
-    return this.eaService.searchClubs(query.trim(), platform);
-  }
-
-  @Get('matches')
+  @Get('api/guilds/:guildId/ea/matches')
   async getRecentMatches(
     @Param('guildId') guildId: string,
     @Query('count') count = '10',
   ) {
-    const config = await this.eaService.getOrCreateTrackerConfig(guildId);
+    const config =
+      guildId === 'default'
+        ? await this.eaService.getDefaultTrackerConfig()
+        : await this.eaService.getOrCreateTrackerConfig(guildId);
+
     const limit = Math.min(Math.max(parseInt(count, 10) || 10, 1), 20);
 
     const matchTypes =
@@ -121,16 +124,53 @@ export class EaController {
     return allMatches.map((raw) => this.eaService.parseMatch(raw, config.clubId));
   }
 
-  @Get('members')
+  @Get('api/guilds/:guildId/ea/members')
   async getMembers(@Param('guildId') guildId: string) {
-    const config = await this.eaService.getOrCreateTrackerConfig(guildId);
+    const config =
+      guildId === 'default'
+        ? await this.eaService.getDefaultTrackerConfig()
+        : await this.eaService.getOrCreateTrackerConfig(guildId);
+
     return this.eaService.fetchMemberStats(
       config.clubId,
       config.platform || 'common-gen5',
     );
   }
 
-  @Post('post-latest')
+  // ----------------------------------------------------
+  // Protected Admin Actions (Requires AuthGuard)
+  // ----------------------------------------------------
+
+  @Patch('api/guilds/:guildId/ea/config')
+  @UseGuards(AuthGuard)
+  async updateConfig(
+    @Param('guildId') guildId: string,
+    @Body()
+    body: {
+      clubId?: string;
+      clubName?: string;
+      platform?: string;
+      channelId?: string | null;
+      enabled?: boolean;
+      matchTypes?: string[];
+      pollIntervalSec?: number;
+    },
+  ) {
+    return this.eaService.updateTrackerConfig(guildId, body);
+  }
+
+  @Get('api/guilds/:guildId/ea/search')
+  @UseGuards(AuthGuard)
+  async searchClubs(
+    @Query('query') query: string,
+    @Query('platform') platform = 'common-gen5',
+  ) {
+    if (!query || !query.trim()) return [];
+    return this.eaService.searchClubs(query.trim(), platform);
+  }
+
+  @Post('api/guilds/:guildId/ea/post-latest')
+  @UseGuards(AuthGuard)
   async postLatest(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string },
@@ -138,7 +178,8 @@ export class EaController {
     return this.eaPollerService.postLatestMatch(guildId, body.channelId);
   }
 
-  @Post('poll-now')
+  @Post('api/guilds/:guildId/ea/poll-now')
+  @UseGuards(AuthGuard)
   async pollNow(@Param('guildId') guildId: string) {
     const config = await this.eaService.getOrCreateTrackerConfig(guildId);
     return this.eaPollerService.pollGuild(config);

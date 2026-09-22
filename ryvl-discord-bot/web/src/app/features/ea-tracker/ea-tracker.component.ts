@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 
@@ -79,17 +80,19 @@ import { GuildStore } from '../../core/guild.store';
 
           <!-- Hero Action Controls -->
           <div class="flex items-center gap-2.5 flex-wrap">
-            <button
-              type="button"
-              (click)="postLatestMatch()"
-              [disabled]="isActionRunning()"
-              class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition cursor-pointer disabled:opacity-50"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-              </svg>
-              <span>Post Latest to Discord</span>
-            </button>
+            @if (isAdmin()) {
+              <button
+                type="button"
+                (click)="postLatestMatch()"
+                [disabled]="isActionRunning()"
+                class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#5865F2] hover:bg-[#4752C4] text-white text-xs font-bold shadow-md shadow-indigo-500/20 transition cursor-pointer disabled:opacity-50"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+                <span>Post Latest to Discord</span>
+              </button>
+            }
 
             <button
               type="button"
@@ -100,20 +103,22 @@ import { GuildStore } from '../../core/guild.store';
               <svg class="w-4 h-4" [class.animate-spin]="isActionRunning()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
-              <span>Check New Matches</span>
+              <span>{{ isAdmin() ? 'Check New Matches' : 'Refresh Stats' }}</span>
             </button>
 
-            <button
-              type="button"
-              (click)="activeTab.set('settings')"
-              class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition cursor-pointer"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <span>Setup</span>
-            </button>
+            @if (isAdmin()) {
+              <button
+                type="button"
+                (click)="activeTab.set('settings')"
+                class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition cursor-pointer"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Setup</span>
+              </button>
+            }
           </div>
         </div>
 
@@ -189,14 +194,16 @@ import { GuildStore } from '../../core/guild.store';
           Squad & Member Stats ({{ members().length }})
         </button>
 
-        <button
-          type="button"
-          (click)="activeTab.set('settings')"
-          class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
-          [ngClass]="activeTab() === 'settings' ? 'bg-[#00d26a] text-black shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'"
-        >
-          Tracker Settings & Club Switch
-        </button>
+        @if (isAdmin()) {
+          <button
+            type="button"
+            (click)="activeTab.set('settings')"
+            class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
+            [ngClass]="activeTab() === 'settings' ? 'bg-[#00d26a] text-black shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'"
+          >
+            Tracker Settings & Club Switch
+          </button>
+        }
       </div>
 
       <!-- Tab 1: Recent Matches -->
@@ -442,7 +449,7 @@ import { GuildStore } from '../../core/guild.store';
       }
 
       <!-- Tab 3: Tracker Settings & Club Search -->
-      @if (activeTab() === 'settings') {
+      @if (isAdmin() && activeTab() === 'settings') {
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <!-- Discord Notification Channel & Controls Card -->
           <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
@@ -589,7 +596,10 @@ import { GuildStore } from '../../core/guild.store';
 })
 export class EaTrackerComponent implements OnInit {
   private readonly api = inject(ApiService);
+  private readonly route = inject(ActivatedRoute);
   readonly guildStore = inject(GuildStore);
+
+  readonly isAdmin = computed(() => Boolean(this.api.getSessionToken()));
 
   readonly defaultCrest =
     'https://media.contentapi.ea.com/content/dam/ea/fc/common/global/tertiary-logo.svg';
@@ -700,13 +710,17 @@ export class EaTrackerComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    const guildId = this.guildStore.activeGuildId();
-    if (guildId) {
-      this.loadAllData(guildId);
-    }
+    this.route.queryParamMap.subscribe((params) => {
+      const gId = params.get('guildId') || this.guildStore.activeGuildId() || 'default';
+      this.loadAllData(gId);
+    });
   }
 
   async loadAllData(guildId: string): Promise<void> {
+    if (!this.isAdmin() && this.activeTab() === 'settings') {
+      this.activeTab.set('matches');
+    }
+
     try {
       const configRes = await this.api.getEaConfig(guildId);
       this.config.set(configRes.config);
@@ -820,8 +834,15 @@ export class EaTrackerComponent implements OnInit {
   }
 
   async postLatestMatch(): Promise<void> {
-    const guildId = this.guildStore.activeGuildId();
-    if (!guildId) return;
+    if (!this.isAdmin()) return;
+    const guildId =
+      this.config()?.guildId ||
+      this.route.snapshot.queryParamMap.get('guildId') ||
+      this.guildStore.activeGuildId();
+    if (!guildId || guildId === 'default') {
+      this.showToast('Select an active server to post match stats.', 'error');
+      return;
+    }
 
     this.isActionRunning.set(true);
     try {
@@ -839,20 +860,27 @@ export class EaTrackerComponent implements OnInit {
   }
 
   async pollNow(): Promise<void> {
-    const guildId = this.guildStore.activeGuildId();
-    if (!guildId) return;
+    const guildId =
+      this.config()?.guildId ||
+      this.route.snapshot.queryParamMap.get('guildId') ||
+      this.guildStore.activeGuildId() ||
+      'default';
 
     this.isActionRunning.set(true);
     try {
-      const res = await this.api.pollEaNow(guildId);
-      if (res.postedCount > 0) {
-        this.showToast(`Found and posted ${res.postedCount} new match(es)!`, 'success');
+      if (this.isAdmin() && guildId !== 'default') {
+        const res = await this.api.pollEaNow(guildId);
+        if (res.postedCount > 0) {
+          this.showToast(`Found and posted ${res.postedCount} new match(es)!`, 'success');
+        } else {
+          this.showToast('Checked EA servers: No new matches found.', 'success');
+        }
       } else {
-        this.showToast('Checked EA servers: No new matches found.', 'success');
+        this.showToast('Refreshed latest club statistics.', 'success');
       }
-      await this.loadMatches(guildId);
+      await Promise.all([this.loadMatches(guildId), this.loadMembers(guildId)]);
     } catch (err: any) {
-      this.showToast(`Poll failed: ${err.message}`, 'error');
+      this.showToast(`Refresh failed: ${err.message}`, 'error');
     } finally {
       this.isActionRunning.set(false);
     }

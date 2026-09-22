@@ -267,10 +267,14 @@ export class ApiService {
     );
   }
 
-  getEaConfig(guildId: string): Promise<{ config: any; clubInfo: any; overallStats: any }> {
+  getEaConfig(guildId?: string | null): Promise<{ config: any; clubInfo: any; overallStats: any }> {
+    const url =
+      guildId && guildId !== 'default'
+        ? `${this.baseUrl}/api/guilds/${guildId}/ea/config`
+        : `${this.baseUrl}/api/ea/default`;
     return firstValueFrom(
       this.http.get<{ config: any; clubInfo: any; overallStats: any }>(
-        `${this.baseUrl}/api/guilds/${guildId}/ea/config`,
+        url,
         { headers: this.headers() },
       ),
     );
@@ -298,10 +302,14 @@ export class ApiService {
     );
   }
 
-  getEaMatches(guildId: string, count = 10): Promise<any[]> {
+  getEaMatches(guildId?: string | null, count = 10): Promise<any[]> {
+    const url =
+      guildId && guildId !== 'default'
+        ? `${this.baseUrl}/api/guilds/${guildId}/ea/matches`
+        : `${this.baseUrl}/api/ea/default/matches`;
     return firstValueFrom(
       this.http.get<any[]>(
-        `${this.baseUrl}/api/guilds/${guildId}/ea/matches`,
+        url,
         {
           headers: this.headers(),
           params: { count: String(count) },
@@ -310,10 +318,14 @@ export class ApiService {
     );
   }
 
-  getEaMembers(guildId: string): Promise<any> {
+  getEaMembers(guildId?: string | null): Promise<any> {
+    const url =
+      guildId && guildId !== 'default'
+        ? `${this.baseUrl}/api/guilds/${guildId}/ea/members`
+        : `${this.baseUrl}/api/ea/default/members`;
     return firstValueFrom(
       this.http.get<any>(
-        `${this.baseUrl}/api/guilds/${guildId}/ea/members`,
+        url,
         { headers: this.headers() },
       ),
     );

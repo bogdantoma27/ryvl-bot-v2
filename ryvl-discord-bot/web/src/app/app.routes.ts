@@ -73,7 +73,6 @@ export const routes: Routes = [
   },
   {
     path: 'club',
-    canMatch: [authGuard],
     loadComponent: () =>
       import('./features/ea-tracker/ea-tracker.component').then((m) => m.EaTrackerComponent),
   },

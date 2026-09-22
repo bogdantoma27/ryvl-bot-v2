@@ -246,4 +246,31 @@ export class EaService {
       },
     });
   }
+
+  async getDefaultTrackerConfig() {
+    const existing = await this.prisma.clubTrackerConfig.findFirst({
+      where: { enabled: true },
+    });
+    if (existing) return existing;
+
+    const firstGuild = await this.prisma.guild.findFirst();
+    if (firstGuild) return this.getOrCreateTrackerConfig(firstGuild.id);
+
+    return {
+      id: 'default',
+      guildId: 'default',
+      clubId: '128199',
+      clubName: 'RYVL Esports',
+      platform: 'common-gen5',
+      channelId: null,
+      enabled: true,
+      matchTypes: ['leagueMatch', 'friendlyMatch', 'playoffMatch'],
+      pollIntervalSec: 90,
+      lastPolledAt: null,
+      lastMatchId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+  }
 }
+
