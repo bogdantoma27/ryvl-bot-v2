@@ -1,0 +1,36 @@
+@import 'tailwindcss';
+
+:root {
+  --color-primary: #5865F2;
+  --color-primary-hover: #4752C4;
+  --color-success: #57F287;
+  --color-warning: #FEE75C;
+  --color-danger: #ED4245;
+  --color-dark: #1a1a2e;
+  --color-dark-lighter: #16213e;
+  --color-dark-card: #0f3460;
+  --color-text: #dcddde;
+  --color-text-muted: #72767d;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #1a1a2e;
+  color: #dcddde;
+}
+
+button, a {
+  color: inherit;
+  text-decoration: none;
+}
+
+select option {
+  background-color: #16213e;
+  color: #ffffff;
+}
+
+input, select, textarea {
+  color: #ffffff;
+}
+

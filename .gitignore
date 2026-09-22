@@ -1,3 +1,10 @@
 /.agents
 /.claude
 /.codex-backups
+pgdata/
+*.log
+.env
+.env.*
+!.env.example
+node_modules/
+dist/

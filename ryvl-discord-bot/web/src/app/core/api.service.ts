@@ -1,0 +1,176 @@
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
+import {
+  AuthState,
+  EventCreatePayload,
+  EventItem,
+  EventRsvp,
+  GuildBootstrap,
+  GuildSettings,
+  GuildSummary,
+} from './models';
+
+const PRODUCTION_API_BASE_URL = 'https://ryvl-bot-api.onrender.com';
+const DEVELOPMENT_API_BASE_URL = 'http://localhost:3000';
+
+@Injectable({ providedIn: 'root' })
+export class ApiService {
+  private readonly http = inject(HttpClient);
+  private readonly sessionTokenKey = 'ryvl_token';
+
+  readonly baseUrl: string = (() => {
+    if (typeof window !== 'undefined' && window.location) {
+      const hostname = window.location.hostname;
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return DEVELOPMENT_API_BASE_URL;
+      }
+    }
+    return PRODUCTION_API_BASE_URL;
+  })();
+
+  getSessionToken(): string | null {
+    if (typeof window === 'undefined') return null;
+
+    if (window.location && window.location.search) {
+      const params = new URLSearchParams(window.location.search);
+      const urlToken = params.get('token');
+      if (urlToken) {
+        this.setSessionToken(urlToken);
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+        return urlToken;
+      }
+    }
+
+    return (
+      window.localStorage.getItem(this.sessionTokenKey) ||
+      window.sessionStorage.getItem(this.sessionTokenKey)
+    );
+  }
+
+  setSessionToken(token: string | null): void {
+    if (typeof window === 'undefined') return;
+    if (token) {
+      window.localStorage.setItem(this.sessionTokenKey, token);
+      window.sessionStorage.setItem(this.sessionTokenKey, token);
+    } else {
+      window.localStorage.removeItem(this.sessionTokenKey);
+      window.sessionStorage.removeItem(this.sessionTokenKey);
+    }
+  }
+
+  private headers(): { [header: string]: string } {
+    const token = this.getSessionToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  }
+
+  authMe(): Promise<AuthState> {
+    return firstValueFrom(
+      this.http.get<AuthState>(`${this.baseUrl}/api/auth/me`, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  getGuilds(): Promise<GuildSummary[]> {
+    return firstValueFrom(
+      this.http.get<GuildSummary[]>(`${this.baseUrl}/api/guilds`, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  getBootstrap(guildId: string): Promise<GuildBootstrap> {
+    return firstValueFrom(
+      this.http.get<GuildBootstrap>(`${this.baseUrl}/api/guilds/${guildId}/bootstrap`, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  getEvents(guildId: string, status?: string): Promise<EventItem[]> {
+    const params = status ? { status } : undefined;
+    return firstValueFrom(
+      this.http.get<EventItem[]>(`${this.baseUrl}/api/guilds/${guildId}/events`, {
+        headers: this.headers(),
+        params,
+      })
+    );
+  }
+
+  getEvent(guildId: string, eventId: string): Promise<EventItem> {
+    return firstValueFrom(
+      this.http.get<EventItem>(`${this.baseUrl}/api/guilds/${guildId}/events/${eventId}`, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  createEvent(guildId: string, data: EventCreatePayload | Record<string, unknown>): Promise<EventItem> {
+    return firstValueFrom(
+      this.http.post<EventItem>(`${this.baseUrl}/api/guilds/${guildId}/events`, data, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  updateEvent(
+    guildId: string,
+    eventId: string,
+    data: Partial<EventCreatePayload> | Record<string, unknown>
+  ): Promise<EventItem> {
+    return firstValueFrom(
+      this.http.patch<EventItem>(`${this.baseUrl}/api/guilds/${guildId}/events/${eventId}`, data, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  deleteEvent(guildId: string, eventId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.delete<void>(`${this.baseUrl}/api/guilds/${guildId}/events/${eventId}`, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  getRsvps(guildId: string, eventId: string, occurrenceId: string): Promise<EventRsvp[]> {
+    return firstValueFrom(
+      this.http.get<EventRsvp[]>(`${this.baseUrl}/api/guilds/${guildId}/events/${eventId}/rsvps`, {
+        headers: this.headers(),
+        params: { occurrenceId },
+      })
+    );
+  }
+
+  getSettings(guildId: string): Promise<GuildSettings> {
+    return firstValueFrom(
+      this.http.get<GuildSettings>(`${this.baseUrl}/api/guilds/${guildId}/settings`, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  updateSettings(guildId: string, data: Partial<GuildSettings>): Promise<GuildSettings> {
+    return firstValueFrom(
+      this.http.patch<GuildSettings>(`${this.baseUrl}/api/guilds/${guildId}/settings`, data, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  cancelOccurrence(guildId: string, eventId: string, occurrenceId: string): Promise<void> {
+    return firstValueFrom(
+      this.http.post<void>(
+        `${this.baseUrl}/api/guilds/${guildId}/events/${eventId}/occurrences/${occurrenceId}/cancel`,
+        {},
+        { headers: this.headers() }
+      )
+    );
+  }
+
+  getDiscordLoginUrl(): string {
+    return `${this.baseUrl}/api/auth/discord/start`;
+  }
+}
