@@ -13,6 +13,7 @@ import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 import {
+  GuildMemberOption,
   LineupDraft,
   LineupFormationsResponse,
   LineupPostPayload,
@@ -322,21 +323,33 @@ function getTodayDateString(): string {
                   </svg>
                   <span>Add Guest / Trialist</span>
                 </div>
-                <p class="text-[11px] text-slate-400">Type any custom player name not currently in the Discord server.</p>
+                <p class="text-[11px] text-slate-400">Type any player name and choose which formation position to place them in.</p>
                 <div class="space-y-2">
                   <input
                     type="text"
                     [(ngModel)]="customPlayerName"
                     placeholder="e.g. GuestPlayer"
-                    (keyup.enter)="addCustomPlayerToFirstEmptySlot()"
+                    (keyup.enter)="assignGuestPlayer()"
                     class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905]"
                   />
+                  <select
+                    [(ngModel)]="customPlayerSlot"
+                    class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-[#EAE905] cursor-pointer"
+                  >
+                    <option value="">First empty position</option>
+                    @for (slot of currentSlots(); track slot) {
+                      <option [value]="slot">
+                        {{ slot.toUpperCase() }}{{ assignments()[slot] ? ' (' + assignments()[slot] + ')' : '' }}
+                      </option>
+                    }
+                  </select>
                   <button
                     type="button"
-                    (click)="addCustomPlayerToFirstEmptySlot()"
-                    class="w-full bg-slate-700 hover:bg-slate-600 text-white text-xs font-semibold py-2 px-3 rounded-lg transition cursor-pointer"
+                    (click)="assignGuestPlayer()"
+                    class="btn-yellow w-full text-xs font-bold py-2 px-3 rounded-lg shadow-sm transition cursor-pointer"
+                    style="color: #111111 !important;"
                   >
-                    Assign to First Empty Slot
+                    <span style="color: #111111 !important;">Assign Guest Player</span>
                   </button>
                 </div>
               </div>
@@ -354,7 +367,7 @@ function getTodayDateString(): string {
                         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                       </svg>
-                      Loading members...
+                      Loading roster...
                     </span>
                   }
                 </div>
@@ -370,26 +383,54 @@ function getTodayDateString(): string {
                   @for (m of filteredMembers(); track m.id) {
                     <div class="flex items-center justify-between p-2 rounded-lg bg-[#16213e]/70 hover:bg-[#1f2e54] border border-slate-800 transition">
                       <div class="flex items-center gap-2.5 min-w-0">
-                        @if (m.avatar_url) {
-                          <img [src]="m.avatar_url" [alt]="m.display_name" class="w-6 h-6 rounded-full object-cover shrink-0" />
+                        @if (getMemberAvatar(m)) {
+                          <img [src]="getMemberAvatar(m)" [alt]="getMemberName(m)" class="w-6 h-6 rounded-full object-cover shrink-0" />
                         } @else {
                           <div class="w-6 h-6 rounded-full bg-slate-700 text-slate-200 flex items-center justify-center text-[10px] font-bold shrink-0">
-                            {{ m.display_name.slice(0, 1).toUpperCase() }}
+                            {{ getMemberInitial(m) }}
                           </div>
                         }
-                        <span class="text-xs font-medium text-slate-200 truncate">{{ m.display_name }}</span>
+                        <div class="truncate">
+                          <span class="text-xs font-medium text-slate-200 block truncate">{{ getMemberName(m) }}</span>
+                          @if (getSlotForMember(getMemberName(m))) {
+                            <span class="text-[10px] text-[#EAE905] font-semibold">Assigned: {{ getSlotForMember(getMemberName(m))?.toUpperCase() }}</span>
+                          }
+                        </div>
                       </div>
 
-                      <div class="flex items-center gap-1 shrink-0">
+                      <div class="flex items-center gap-1.5 shrink-0">
                         <select
-                          (change)="onAssignMemberSelect(m.display_name, $event)"
+                          [value]="getSlotForMember(getMemberName(m)) || ''"
+                          (change)="onAssignMemberSelect(getMemberName(m), $event)"
                           class="bg-[#11192e] border border-slate-700 rounded px-2 py-1 text-[11px] text-[#EAE905] focus:outline-none cursor-pointer"
                         >
-                          <option value="">Assign to slot...</option>
+                          <option value="">{{ getSlotForMember(getMemberName(m)) ? 'Move slot...' : 'Assign slot...' }}</option>
                           @for (slot of currentSlots(); track slot) {
-                            <option [value]="slot">{{ slot.toUpperCase() }}{{ assignments()[slot] ? ' (' + assignments()[slot] + ')' : '' }}</option>
+                            <option [value]="slot">
+                              {{ slot.toUpperCase() }}{{ assignments()[slot] ? ' (' + assignments()[slot] + ')' : '' }}
+                            </option>
                           }
                         </select>
+
+                        @if (getSlotForMember(getMemberName(m))) {
+                          <button
+                            type="button"
+                            (click)="unassignMember(getMemberName(m))"
+                            title="Remove from pitch"
+                            class="text-xs text-rose-400 hover:text-rose-300 px-1.5 py-0.5 rounded hover:bg-rose-950/40 cursor-pointer"
+                          >
+                            &times;
+                          </button>
+                        } @else {
+                          <button
+                            type="button"
+                            (click)="quickAssignMember(getMemberName(m))"
+                            title="Quick assign to next open position"
+                            class="text-[11px] px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition cursor-pointer"
+                          >
+                            + Add
+                          </button>
+                        }
                       </div>
                     </div>
                   } @empty {
@@ -638,6 +679,7 @@ export class LineupComponent implements OnInit {
   // Sub-panel state
   protected memberSearch = '';
   protected customPlayerName = '';
+  protected customPlayerSlot = '';
   protected previewSvg = signal<string>('');
   protected isLoadingPreview = signal<boolean>(false);
   protected isLoadingMembers = signal<boolean>(false);
@@ -656,19 +698,45 @@ export class LineupComponent implements OnInit {
     return this.currentSlots().filter((s) => Boolean(assigned[s]?.trim())).length;
   });
 
+  getMemberName(m: GuildMemberOption): string {
+    return m.displayName || m.display_name || m.username || 'Member';
+  }
+
+  getMemberAvatar(m: GuildMemberOption): string | null {
+    return m.avatarUrl || m.avatar_url || null;
+  }
+
+  getMemberInitial(m: GuildMemberOption): string {
+    const name = this.getMemberName(m);
+    return name.charAt(0).toUpperCase() || '?';
+  }
+
+  getSlotForMember(name: string): string | null {
+    for (const [slot, assigned] of Object.entries(this.assignments())) {
+      if (assigned === name) {
+        return slot;
+      }
+    }
+    return null;
+  }
+
   protected readonly filteredMembers = computed(() => {
     const members = this.guildStore.activeGuild()?.members || [];
     const query = this.memberSearch.trim().toLowerCase();
     if (!query) return members;
-    return members.filter(
-      (m) =>
-        m.display_name.toLowerCase().includes(query) ||
-        m.username.toLowerCase().includes(query),
-    );
+    return members.filter((m) => {
+      const name = this.getMemberName(m).toLowerCase();
+      const user = (m.username || '').toLowerCase();
+      return name.includes(query) || user.includes(query);
+    });
   });
 
   protected readonly safePreviewSvg = computed(() => {
-    return this.sanitizer.bypassSecurityTrustHtml(this.previewSvg());
+    const raw = this.previewSvg();
+    if (!raw) return '';
+    // Strip XML processing instructions to ensure standard inline HTML SVG rendering
+    const clean = raw.replace(/<\?xml[\s\S]*?\?>/gi, '').trim();
+    return this.sanitizer.bypassSecurityTrustHtml(clean);
   });
 
   protected readonly targetChannelName = computed(() => {
@@ -690,13 +758,21 @@ export class LineupComponent implements OnInit {
       if (active && !this.channelId) {
         this.channelId = active.settings?.defaultChannelId || active.channels?.[0]?.id || '';
       }
+      const guildId = this.guildStore.activeGuildId();
+      if (guildId && this.formationList().length === 0) {
+        this.initLineupData(guildId);
+      }
     });
   }
 
   async ngOnInit(): Promise<void> {
     const guildId = this.guildStore.activeGuildId();
-    if (!guildId) return;
+    if (guildId) {
+      await this.initLineupData(guildId);
+    }
+  }
 
+  private async initLineupData(guildId: string): Promise<void> {
     try {
       // 1. Load formations
       const res: LineupFormationsResponse = await this.api.getLineupFormations(guildId);
@@ -704,7 +780,7 @@ export class LineupComponent implements OnInit {
       this.formationLabels.set(res.labels_by_formation);
       this.slotsByFmt.set(res.slots_by_formation);
 
-      // 2. Fetch server members if not already loaded
+      // 2. Fetch server members
       await this.refreshMembers();
 
       // 3. Load draft or render preview
@@ -715,7 +791,7 @@ export class LineupComponent implements OnInit {
         await this.refreshPreview();
       }
     } catch (err) {
-      console.error('Failed to initialize lineup:', err);
+      console.error('Failed to initialize lineup data:', err);
     }
   }
 
@@ -762,7 +838,11 @@ export class LineupComponent implements OnInit {
 
   protected goToStep(step: LineupStep): void {
     this.currentStep.set(step);
-    if (step === 2 || step === 4) {
+    if (step === 2) {
+      // Ensure server members are loaded when reaching the 2nd step in the stepper
+      this.refreshMembers();
+      this.refreshPreview();
+    } else if (step === 4) {
       this.refreshPreview();
     }
   }
@@ -803,28 +883,71 @@ export class LineupComponent implements OnInit {
 
   protected onAssignMemberSelect(displayName: string, event: Event): void {
     const select = event.target as HTMLSelectElement;
-    const slot = select.value;
-    if (!slot) return;
+    const targetSlot = select.value;
+    if (!targetSlot) return;
 
-    const next = { ...this.assignments(), [slot]: displayName };
+    const next = { ...this.assignments() };
+    // Free up any slot this member was previously occupying
+    for (const [slot, name] of Object.entries(next)) {
+      if (name === displayName) {
+        delete next[slot];
+      }
+    }
+    next[targetSlot] = displayName;
     this.assignments.set(next);
     select.value = '';
     this.refreshPreview();
   }
 
-  protected addCustomPlayerToFirstEmptySlot(): void {
-    const name = this.customPlayerName.trim();
-    if (!name) return;
-
+  protected quickAssignMember(displayName: string): void {
     const emptySlot = this.currentSlots().find((s) => !this.assignments()[s]);
     if (!emptySlot) {
-      this.notification.set({ message: 'All 11 slots are already assigned!', type: 'error' });
+      this.notification.set({
+        message: 'All 11 slots are already filled. Use the dropdown to choose which slot to assign.',
+        type: 'error',
+      });
+      return;
+    }
+    const next = { ...this.assignments(), [emptySlot]: displayName };
+    this.assignments.set(next);
+    this.refreshPreview();
+  }
+
+  protected unassignMember(displayName: string): void {
+    const current = { ...this.assignments() };
+    for (const [slot, name] of Object.entries(current)) {
+      if (name === displayName) {
+        delete current[slot];
+      }
+    }
+    this.assignments.set(current);
+    this.refreshPreview();
+  }
+
+  protected assignGuestPlayer(): void {
+    const name = this.customPlayerName.trim();
+    if (!name) {
+      this.notification.set({ message: 'Please enter a guest player name.', type: 'error' });
       return;
     }
 
-    const next = { ...this.assignments(), [emptySlot]: name };
+    let targetSlot = this.customPlayerSlot;
+    if (!targetSlot) {
+      targetSlot = this.currentSlots().find((s) => !this.assignments()[s]) || '';
+    }
+
+    if (!targetSlot) {
+      this.notification.set({
+        message: 'All 11 slots are currently filled. Select a specific slot in the dropdown to replace it.',
+        type: 'error',
+      });
+      return;
+    }
+
+    const next = { ...this.assignments(), [targetSlot]: name };
     this.assignments.set(next);
     this.customPlayerName = '';
+    this.customPlayerSlot = '';
     this.refreshPreview();
   }
 
@@ -870,10 +993,17 @@ export class LineupComponent implements OnInit {
 
     this.isLoadingPreview.set(true);
     try {
+      const cleanPlayers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(this.assignments())) {
+        if (v && typeof v === 'string' && v.trim()) {
+          cleanPlayers[k.toLowerCase()] = v.trim();
+        }
+      }
+
       const payload: LineupRenderPayload = {
         formation: this.selectedFormation,
         title: this.title,
-        players: this.assignments(),
+        players: cleanPlayers,
         kickoff_at: this.buildKickoffDate()?.toISOString() || null,
         primary_color: this.primaryColor,
         secondary_color: this.secondaryColor,
@@ -881,7 +1011,9 @@ export class LineupComponent implements OnInit {
       };
 
       const res = await this.api.renderLineup(guildId, payload);
-      this.previewSvg.set(res.svg);
+      if (res && res.svg) {
+        this.previewSvg.set(res.svg);
+      }
     } catch (err) {
       console.error('Failed to render lineup preview:', err);
     } finally {

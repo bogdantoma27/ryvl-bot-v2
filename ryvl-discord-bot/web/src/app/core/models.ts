@@ -28,9 +28,11 @@ export interface RoleOption {
 
 export interface GuildMemberOption {
   id: string;
-  display_name: string;
+  displayName?: string;
+  display_name?: string;
   username: string;
-  avatar_url: string | null;
+  avatarUrl?: string | null;
+  avatar_url?: string | null;
 }
 
 export interface GuildSummary {

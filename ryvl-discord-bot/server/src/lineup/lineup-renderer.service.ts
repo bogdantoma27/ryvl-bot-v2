@@ -20,8 +20,9 @@ export interface RenderLineupOptions {
   showSlotTags?: boolean;
 }
 
-function escapeXml(unsafe: string): string {
-  return unsafe
+function escapeXml(unsafe: any): string {
+  if (unsafe === null || unsafe === undefined) return '';
+  return String(unsafe)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -125,8 +126,7 @@ export class LineupRendererService {
       showSlotTags,
     );
 
-    return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="width: 100%; max-width: 100%; height: auto; display: block;">
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="width: 100%; max-width: 100%; height: auto; display: block;">
   <defs>
     <style>
       .txt-title { font-family: 'Segoe UI', Arial, sans-serif; font-weight: 700; fill: #ffffff; }
@@ -300,7 +300,12 @@ export class LineupRendererService {
       .map((position, index) => {
         const [x, baseY] = layout.coords[position.key];
         const y = baseY + 108; // Legacy shirt offset
-        const playerName = players[position.key]?.trim() || position.label;
+        const raw =
+          players?.[position.key] ||
+          players?.[position.key.toLowerCase()] ||
+          players?.[position.key.toUpperCase()];
+        const playerName =
+          typeof raw === 'string' && raw.trim() ? raw.trim() : position.label;
         const playerNumber = index + 1;
         return this.renderSinglePlayer(
           x,
@@ -343,7 +348,8 @@ export class LineupRendererService {
     const bodyPoints = `${x - bodyHalf},${topY} ${x - 12},${topY} ${x},${y - 7} ${x + 12},${topY} ${x + bodyHalf},${topY} ${x + bodyHalf},${y + 74} ${x + 14},${y + 88} ${x - 14},${y + 88} ${x - bodyHalf},${y + 74}`;
 
     // Nameplate
-    const displayName = playerName.length > 22 ? playerName.slice(0, 20) + '..' : playerName;
+    const safeName = String(playerName || positionLabel);
+    const displayName = safeName.length > 22 ? safeName.slice(0, 20) + '..' : safeName;
     const approxTextLen = displayName.length * 9;
     const plateWidth = Math.max(104, Math.min(164, approxTextLen + 28));
     const plateHeight = 34;

@@ -52,7 +52,9 @@ export interface DiscordMemberInfo {
   id: string;
   username: string;
   displayName: string;
+  display_name: string;
   avatarUrl: string;
+  avatar_url: string;
 }
 
 @Injectable()
@@ -326,44 +328,66 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getGuildMembers(guildId: string): Promise<DiscordMemberInfo[]> {
+    const result: DiscordMemberInfo[] = [];
+
+    // 1. Try Discord Gateway Cache / Fetch
     const guild =
       this.client.guilds.cache.get(guildId) ||
       (await this.client.guilds.fetch(guildId).catch(() => null));
-    if (!guild) {
-      return [];
-    }
 
-    let memberCollection = guild.members.cache;
-    try {
-      const fetched = await guild.members.fetch({ limit: 1000 }).catch(() => null);
-      if (fetched && fetched.size > 0) {
-        memberCollection = fetched;
-      }
-    } catch (fetchErr) {
-      this.logger.warn(`Could not fetch live members for guild ${guildId}: ${fetchErr}`);
-    }
-
-    const result: DiscordMemberInfo[] = [];
-    for (const [, member] of memberCollection) {
-      if (!member.user.bot) {
-        result.push({
-          id: member.id,
-          username: member.user.username,
-          displayName: member.displayName || member.user.globalName || member.user.username,
-          avatarUrl: member.displayAvatarURL(),
-        });
+    if (guild) {
+      try {
+        const fetched = await guild.members.fetch({ limit: 1000 }).catch(() => null);
+        const memberCollection = (fetched && fetched.size > 0) ? fetched : guild.members.cache;
+        for (const [, member] of memberCollection) {
+          if (!member.user.bot) {
+            const dName = member.displayName || member.user.globalName || member.user.username || 'Member';
+            const aUrl = member.displayAvatarURL();
+            result.push({
+              id: member.id,
+              username: member.user.username,
+              displayName: dName,
+              display_name: dName,
+              avatarUrl: aUrl,
+              avatar_url: aUrl,
+            });
+          }
+        }
+      } catch (err) {
+        this.logger.warn(`Gateway member fetch failed for ${guildId}: ${err}`);
       }
     }
 
-    // If all members were bots or empty, include non-system users as fallback
-    if (result.length === 0 && memberCollection.size > 0) {
-      for (const [, member] of memberCollection) {
-        result.push({
-          id: member.id,
-          username: member.user.username,
-          displayName: member.displayName || member.user.globalName || member.user.username,
-          avatarUrl: member.displayAvatarURL(),
-        });
+    // 2. If Gateway returned no members, fallback to Discord REST API directly
+    if (result.length === 0) {
+      try {
+        const rest = new REST({ version: '10' }).setToken(this.configService.discordToken);
+        const restMembers = (await rest.get(Routes.guildMembers(guildId), {
+          query: new URLSearchParams({ limit: '1000' }),
+        })) as any[];
+
+        if (Array.isArray(restMembers)) {
+          for (const m of restMembers) {
+            if (m.user && !m.user.bot) {
+              const dName = m.nick || m.user.global_name || m.user.username || 'Member';
+              const avatarHash = m.avatar || m.user.avatar;
+              const aUrl = avatarHash
+                ? `https://cdn.discordapp.com/avatars/${m.user.id}/${avatarHash}.png`
+                : `https://cdn.discordapp.com/embed/avatars/${Number(BigInt(m.user.id) % 5n)}.png`;
+
+              result.push({
+                id: m.user.id,
+                username: m.user.username,
+                displayName: dName,
+                display_name: dName,
+                avatarUrl: aUrl,
+                avatar_url: aUrl,
+              });
+            }
+          }
+        }
+      } catch (restErr) {
+        this.logger.warn(`REST member fetch fallback failed for ${guildId}: ${restErr}`);
       }
     }
 

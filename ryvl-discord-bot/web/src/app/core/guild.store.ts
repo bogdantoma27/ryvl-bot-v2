@@ -181,15 +181,24 @@ export class GuildStore {
     try {
       const members = await this.api.getGuildMembers(targetGuildId);
       const current = this.activeGuild();
-      if (current && current.id === targetGuildId) {
-        const updated = { ...current, members };
-        this.activeGuild.set(updated);
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(
-            `${STORAGE_BOOTSTRAP_PREFIX}${targetGuildId}`,
-            JSON.stringify(updated),
-          );
-        }
+      const updated: GuildBootstrap =
+        current && current.id === targetGuildId
+          ? { ...current, members }
+          : {
+              id: targetGuildId,
+              name: current?.name || 'Server',
+              iconUrl: current?.iconUrl || null,
+              channels: current?.channels || [],
+              roles: current?.roles || [],
+              members,
+            };
+
+      this.activeGuild.set(updated);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(
+          `${STORAGE_BOOTSTRAP_PREFIX}${targetGuildId}`,
+          JSON.stringify(updated),
+        );
       }
       return members;
     } catch (err) {

@@ -22,7 +22,6 @@ import {
 } from './lineup.service';
 
 @Controller('api/guilds/:guildId/lineup')
-@UseGuards(AuthGuard)
 export class LineupController {
   constructor(private readonly lineupService: LineupService) {}
 
@@ -55,6 +54,7 @@ export class LineupController {
   }
 
   @Post('post')
+  @UseGuards(AuthGuard)
   async postLineup(
     @Param('guildId') guildId: string,
     @Body() dto: LineupPostDto,
@@ -63,11 +63,13 @@ export class LineupController {
   }
 
   @Get('drafts')
+  @UseGuards(AuthGuard)
   async listDrafts(@Param('guildId') guildId: string) {
     return this.lineupService.listDrafts(guildId);
   }
 
   @Get('drafts/:draftId')
+  @UseGuards(AuthGuard)
   async getDraft(
     @Param('guildId') guildId: string,
     @Param('draftId') draftId: string,
