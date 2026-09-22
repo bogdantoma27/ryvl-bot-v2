@@ -19,7 +19,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, RsvpBadgeComponent],
   template: `
-    <div class="space-y-8 animate-fadeIn">
+    <div class="max-w-7xl w-full mx-auto space-y-8 animate-fadeIn">
       <!-- Welcome Header -->
       <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 p-6 rounded-xl bg-gradient-to-r from-[#16213e] to-[#0f3460] border border-slate-700/50 shadow-lg">
         <div>
@@ -36,7 +36,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
 
         <div class="flex items-center gap-3">
           <a
-            routerLink="/events/new"
+            routerLink="/admin/events/new"
             class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white text-sm font-bold shadow-md hover:shadow-indigo-500/25 transition duration-150 active:scale-95 cursor-pointer"
           >
             <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -45,7 +45,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
             <span class="text-white">Create Event</span>
           </a>
           <a
-            routerLink="/events"
+            routerLink="/admin/events"
             class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-600 hover:border-slate-500 text-white text-sm font-semibold transition active:scale-95 cursor-pointer"
           >
             <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -111,7 +111,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
       <div class="space-y-4">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold text-white">Upcoming Highlights</h2>
-          <a routerLink="/events" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold hover:underline cursor-pointer">
+          <a routerLink="/admin/events" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold hover:underline cursor-pointer">
             View all →
           </a>
         </div>
@@ -129,7 +129,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
               Get started by creating your first community scrim, match, or practice session.
             </p>
             <a
-              routerLink="/events/new"
+              routerLink="/admin/events/new"
               class="inline-block px-5 py-2.5 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white text-xs font-bold shadow-md hover:shadow-indigo-500/25 transition cursor-pointer"
             >
               Create New Event
@@ -139,7 +139,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             @for (event of recentEvents(); track event.id) {
               <a
-                [routerLink]="['/events', event.id]"
+                [routerLink]="['/admin/events', event.id]"
                 class="group p-4 rounded-xl bg-[#16213e] border border-slate-700/60 hover:border-[#5865F2]/50 hover:bg-[#1b264a] transition flex flex-col justify-between"
               >
                 <div class="space-y-2">

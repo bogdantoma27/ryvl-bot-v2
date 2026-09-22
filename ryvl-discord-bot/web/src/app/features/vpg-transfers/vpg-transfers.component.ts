@@ -34,7 +34,7 @@ interface VpgTransfer {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="space-y-6 pb-12">
+    <div class="max-w-7xl w-full mx-auto space-y-6 pb-12">
       <!-- Toast Notification -->
       @if (toast()) {
         <div

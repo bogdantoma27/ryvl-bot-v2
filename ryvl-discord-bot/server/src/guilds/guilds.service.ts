@@ -104,6 +104,11 @@ export class GuildsService {
         iconUrl: realIconUrl,
         timezone: guild.timezone || 'Europe/Bucharest',
         defaultChannelId,
+        defaultLineupChannelId: guild.defaultLineupChannelId || null,
+        defaultTransfersChannelId: guild.defaultTransfersChannelId || null,
+        defaultFixturesChannelId: guild.defaultFixturesChannelId || null,
+        defaultStandingsChannelId: guild.defaultStandingsChannelId || null,
+        defaultLiveResultsChannelId: guild.defaultLiveResultsChannelId || null,
       },
       channels,
       roles,
@@ -111,6 +116,11 @@ export class GuildsService {
       settings: {
         timezone: guild.timezone || 'Europe/Bucharest',
         defaultChannelId,
+        defaultLineupChannelId: guild.defaultLineupChannelId || null,
+        defaultTransfersChannelId: guild.defaultTransfersChannelId || null,
+        defaultFixturesChannelId: guild.defaultFixturesChannelId || null,
+        defaultStandingsChannelId: guild.defaultStandingsChannelId || null,
+        defaultLiveResultsChannelId: guild.defaultLiveResultsChannelId || null,
         botActive: true,
       },
     };
@@ -129,30 +139,65 @@ export class GuildsService {
       iconUrl: clientGuild?.iconURL({ extension: 'png', size: 256 }) || guild.iconUrl,
       timezone: guild.timezone || 'Europe/Bucharest',
       defaultChannelId: guild.defaultChannelId || null,
+      defaultLineupChannelId: guild.defaultLineupChannelId || null,
+      defaultTransfersChannelId: guild.defaultTransfersChannelId || null,
+      defaultFixturesChannelId: guild.defaultFixturesChannelId || null,
+      defaultStandingsChannelId: guild.defaultStandingsChannelId || null,
+      defaultLiveResultsChannelId: guild.defaultLiveResultsChannelId || null,
       botStatus: 'online',
     };
   }
 
   async updateSettings(
     guildId: string,
-    data: { name?: string; timezone?: string; defaultChannelId?: string | null },
+    data: {
+      name?: string;
+      timezone?: string;
+      defaultChannelId?: string | null;
+      defaultLineupChannelId?: string | null;
+      defaultTransfersChannelId?: string | null;
+      defaultFixturesChannelId?: string | null;
+      defaultStandingsChannelId?: string | null;
+      defaultLiveResultsChannelId?: string | null;
+    },
   ): Promise<any> {
     const guild = await this.prisma.guild.upsert({
       where: { id: guildId },
       update: {
         ...(data.name ? { name: data.name } : {}),
         ...(data.timezone ? { timezone: data.timezone } : {}),
-        ...(data.defaultChannelId !== undefined
-          ? { defaultChannelId: data.defaultChannelId }
-          : {}),
+        ...(data.defaultChannelId !== undefined ? { defaultChannelId: data.defaultChannelId } : {}),
+        ...(data.defaultLineupChannelId !== undefined ? { defaultLineupChannelId: data.defaultLineupChannelId } : {}),
+        ...(data.defaultTransfersChannelId !== undefined ? { defaultTransfersChannelId: data.defaultTransfersChannelId } : {}),
+        ...(data.defaultFixturesChannelId !== undefined ? { defaultFixturesChannelId: data.defaultFixturesChannelId } : {}),
+        ...(data.defaultStandingsChannelId !== undefined ? { defaultStandingsChannelId: data.defaultStandingsChannelId } : {}),
+        ...(data.defaultLiveResultsChannelId !== undefined ? { defaultLiveResultsChannelId: data.defaultLiveResultsChannelId } : {}),
       },
       create: {
         id: guildId,
         name: data.name || 'Discord Server',
         timezone: data.timezone || 'Europe/Bucharest',
         defaultChannelId: data.defaultChannelId || null,
+        defaultLineupChannelId: data.defaultLineupChannelId || null,
+        defaultTransfersChannelId: data.defaultTransfersChannelId || null,
+        defaultFixturesChannelId: data.defaultFixturesChannelId || null,
+        defaultStandingsChannelId: data.defaultStandingsChannelId || null,
+        defaultLiveResultsChannelId: data.defaultLiveResultsChannelId || null,
       },
     });
+
+    // If defaultTransfersChannelId is updated, synchronize vpgTransferConfig
+    if (data.defaultTransfersChannelId !== undefined) {
+      await this.prisma.vpgTransferConfig.upsert({
+        where: { guildId },
+        update: { channelId: data.defaultTransfersChannelId },
+        create: {
+          guildId,
+          channelId: data.defaultTransfersChannelId,
+          enabled: true,
+        },
+      });
+    }
 
     const clientGuild = this.discordService.client.guilds.cache.get(guildId);
     return {
@@ -161,6 +206,11 @@ export class GuildsService {
       iconUrl: clientGuild?.iconURL({ extension: 'png', size: 256 }) || guild.iconUrl,
       timezone: guild.timezone,
       defaultChannelId: guild.defaultChannelId,
+      defaultLineupChannelId: guild.defaultLineupChannelId,
+      defaultTransfersChannelId: guild.defaultTransfersChannelId,
+      defaultFixturesChannelId: guild.defaultFixturesChannelId,
+      defaultStandingsChannelId: guild.defaultStandingsChannelId,
+      defaultLiveResultsChannelId: guild.defaultLiveResultsChannelId,
       botStatus: 'online',
     };
   }

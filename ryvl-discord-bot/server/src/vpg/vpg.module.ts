@@ -5,6 +5,7 @@ import { DiscordModule } from '../discord/discord.module';
 import { AuthModule } from '../auth/auth.module';
 import { VpgService } from './vpg.service';
 import { VpgPollerService } from './vpg-poller.service';
+import { VpgSuperligaPollerService } from './vpg-superliga-poller.service';
 import { VpgController } from './vpg.controller';
 
 @Module({
@@ -14,8 +15,8 @@ import { VpgController } from './vpg.controller';
     AuthModule,
     forwardRef(() => DiscordModule),
   ],
-  providers: [VpgService, VpgPollerService],
+  providers: [VpgService, VpgPollerService, VpgSuperligaPollerService],
   controllers: [VpgController],
-  exports: [VpgService, VpgPollerService],
+  exports: [VpgService, VpgPollerService, VpgSuperligaPollerService],
 })
 export class VpgModule {}

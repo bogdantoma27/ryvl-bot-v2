@@ -13,6 +13,11 @@ model Guild {
   iconUrl          String?  @map("icon_url")
   timezone         String   @default("Europe/Bucharest")
   defaultChannelId String?  @map("default_channel_id")
+  defaultLineupChannelId      String?  @map("default_lineup_channel_id")
+  defaultTransfersChannelId   String?  @map("default_transfers_channel_id")
+  defaultFixturesChannelId    String?  @map("default_fixtures_channel_id")
+  defaultStandingsChannelId   String?  @map("default_standings_channel_id")
+  defaultLiveResultsChannelId String?  @map("default_live_results_channel_id")
   joinedAt           DateTime            @default(now()) @map("joined_at")
   events             Event[]
   lineupDrafts       LineupDraft[]
@@ -20,6 +25,7 @@ model Guild {
   processedEaMatches ProcessedEaMatch[]
   vpgTransferConfig      VpgTransferConfig?
   processedVpgTransfers  ProcessedVpgTransfer[]
+  processedVpgMatches    ProcessedVpgMatch[]
 
   @@map("guilds")
 }
@@ -198,3 +204,23 @@ model ProcessedVpgTransfer {
   @@unique([guildId, transferId])
   @@map("processed_vpg_transfers")
 }
+
+model ProcessedVpgMatch {
+  id               String   @id @default(uuid())
+  vpgMatchId       Int      @map("vpg_match_id")
+  guildId          String   @map("guild_id")
+  guild            Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  homeName         String   @map("home_name")
+  awayName         String   @map("away_name")
+  homeScore        Int      @map("home_score")
+  awayScore        Int      @map("away_score")
+  matchDay         Int?     @map("match_day")
+  datetime         DateTime
+  discordMessageId String?  @map("discord_message_id")
+  channelId        String?  @map("channel_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([guildId, vpgMatchId])
+  @@map("processed_vpg_matches")
+}
+

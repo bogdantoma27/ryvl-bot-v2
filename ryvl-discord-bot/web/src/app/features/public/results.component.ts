@@ -1,0 +1,261 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnInit,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { ApiService } from '../../core/api.service';
+import { VpgMatchItem } from '../../core/models';
+
+@Component({
+  selector: 'app-public-results',
+  standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CommonModule, FormsModule],
+  template: `
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-8">
+      <!-- Header -->
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-[#EAE905]/15 pb-6">
+        <div>
+          <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">Virtual Pro Gaming România</div>
+          <h1 class="text-4xl font-black text-white uppercase tracking-tight">Superliga Match Results</h1>
+          <p class="text-xs sm:text-sm text-slate-400 mt-2">
+            Official confirmed match results pulled directly from the VPG Superliga API feed.
+          </p>
+        </div>
+
+        <!-- Controls: Season & Filter -->
+        <div class="flex flex-wrap items-center gap-3">
+          <!-- Filter Toggle: RYVL Only vs All -->
+          <div class="bg-[#121214] p-1 rounded-xl border border-white/10 flex items-center">
+            <button
+              type="button"
+              (click)="onlyRyvl.set(false)"
+              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase transition cursor-pointer"
+              [class.bg-[#EAE905]]="!onlyRyvl()"
+              [class.text-black]="!onlyRyvl()"
+              [class.text-slate-300]="onlyRyvl()"
+            >
+              All Matches
+            </button>
+            <button
+              type="button"
+              (click)="onlyRyvl.set(true)"
+              class="px-3.5 py-1.5 rounded-lg text-xs font-bold uppercase transition cursor-pointer flex items-center gap-1.5"
+              [class.bg-[#EAE905]]="onlyRyvl()"
+              [class.text-black]="onlyRyvl()"
+              [class.text-slate-300]="!onlyRyvl()"
+            >
+              <span class="text-xs">⭐</span>
+              <span>RYVL Only</span>
+            </button>
+          </div>
+
+          <!-- Season Selector -->
+          <select
+            [ngModel]="selectedSeason()"
+            (ngModelChange)="onSeasonChange($event)"
+            class="bg-[#121214] border border-white/10 text-white rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-[#EAE905] cursor-pointer"
+          >
+            @for (s of seasons(); track s) {
+              <option [value]="s">Sezonul {{ s }}</option>
+            }
+          </select>
+
+          <!-- Refresh Button -->
+          <button
+            type="button"
+            (click)="loadResults()"
+            [disabled]="isLoading()"
+            class="p-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:text-white transition disabled:opacity-50 cursor-pointer"
+            title="Refresh results"
+          >
+            <svg class="w-4 h-4" [class.animate-spin]="isLoading()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Results Feed -->
+      @if (isLoading()) {
+        <div class="space-y-4">
+          @for (i of [1, 2, 3, 4, 5]; track i) {
+            <div class="h-28 rounded-2xl bg-white/5 border border-white/10 animate-pulse"></div>
+          }
+        </div>
+      } @else if (filteredMatches().length === 0) {
+        <div class="p-16 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-3">
+          <div class="text-3xl">⚽</div>
+          <h3 class="text-lg font-bold text-white">No Match Results Found</h3>
+          <p class="text-xs text-slate-400 max-w-sm mx-auto">
+            {{ onlyRyvl() ? 'No RYVL matches recorded for this season yet.' : 'No completed results returned from the VPG Superliga API.' }}
+          </p>
+          @if (onlyRyvl()) {
+            <button
+              (click)="onlyRyvl.set(false)"
+              class="px-4 py-2 rounded-xl bg-[#EAE905] text-black text-xs font-bold uppercase mt-2 cursor-pointer"
+            >
+              Show All League Results
+            </button>
+          }
+        </div>
+      } @else {
+        <div class="space-y-4">
+          @for (m of filteredMatches(); track m.id) {
+            <div
+              class="p-5 sm:p-6 rounded-2xl bg-[#0c0c0e] border transition group hover:border-[#EAE905]/40"
+              [class.border-[#EAE905]/50]="isRyvlMatch(m)"
+              [class.bg-[#121214]]="isRyvlMatch(m)"
+              [class.border-white-10]="!isRyvlMatch(m)"
+            >
+              <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+                <!-- Matchday & Time -->
+                <div class="flex md:flex-col items-center md:items-start justify-between w-full md:w-44 shrink-0 text-left">
+                  <div class="flex items-center gap-2">
+                    <span class="px-2.5 py-0.5 rounded bg-[#EAE905]/10 border border-[#EAE905]/30 text-[#EAE905] font-mono text-[11px] font-bold">
+                      MD {{ m.matchDay || '?' }}
+                    </span>
+                    @if (isRyvlMatch(m)) {
+                      <span class="text-[10px] font-bold text-[#EAE905] uppercase tracking-wider">RYVL MATCH</span>
+                    }
+                  </div>
+                  <div class="text-[11px] text-slate-400 mt-1">{{ m.dateFormattedRo }}</div>
+                </div>
+
+                <!-- Scoreboard (Home - Score - Away) -->
+                <div class="flex-1 w-full flex items-center justify-center gap-4 sm:gap-8">
+                  <!-- Home Team -->
+                  <div class="flex items-center justify-end gap-3 flex-1 min-w-0 text-right">
+                    <span class="text-sm sm:text-base font-bold text-white truncate" [class.text-[#EAE905]]="/ryvl|rival/i.test(m.homeName)">
+                      {{ m.homeName }}
+                    </span>
+                    @if (m.homeLogoUrl) {
+                      <img [src]="m.homeLogoUrl" alt="" class="w-9 h-9 sm:w-11 sm:h-11 object-contain shrink-0" />
+                    } @else {
+                      <div class="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-xs font-black text-slate-400 shrink-0">FC</div>
+                    }
+                  </div>
+
+                  <!-- Scores -->
+                  <div class="flex flex-col items-center shrink-0">
+                    <div class="px-5 py-2 rounded-xl bg-black/80 border border-white/15 font-mono font-black text-xl sm:text-2xl text-white shadow-inner tracking-widest">
+                      {{ m.homeScore ?? '-' }} : {{ m.awayScore ?? '-' }}
+                    </div>
+
+                    <!-- Outcome Badge if RYVL -->
+                    @if (isRyvlMatch(m)) {
+                      @let outcome = getRyvlOutcome(m);
+                      <span
+                        class="text-[10px] font-mono font-bold uppercase mt-1 px-2 py-0.5 rounded"
+                        [class.bg-emerald-500-20]="outcome === 'WIN'"
+                        [class.text-emerald-400]="outcome === 'WIN'"
+                        [class.bg-rose-500-20]="outcome === 'LOSS'"
+                        [class.text-rose-400]="outcome === 'LOSS'"
+                        [class.bg-slate-500-20]="outcome === 'DRAW'"
+                        [class.text-slate-300]="outcome === 'DRAW'"
+                      >
+                        {{ outcome === 'WIN' ? 'VICTORIE' : outcome === 'LOSS' ? 'ÎNFRÂNGERE' : 'EGAL' }}
+                      </span>
+                    }
+                  </div>
+
+                  <!-- Away Team -->
+                  <div class="flex items-center justify-start gap-3 flex-1 min-w-0 text-left">
+                    @if (m.awayLogoUrl) {
+                      <img [src]="m.awayLogoUrl" alt="" class="w-9 h-9 sm:w-11 sm:h-11 object-contain shrink-0" />
+                    } @else {
+                      <div class="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-xs font-black text-slate-400 shrink-0">FC</div>
+                    }
+                    <span class="text-sm sm:text-base font-bold text-white truncate" [class.text-[#EAE905]]="/ryvl|rival/i.test(m.awayName)">
+                      {{ m.awayName }}
+                    </span>
+                  </div>
+                </div>
+
+                <!-- Match Details / VPG Link -->
+                <div class="shrink-0 w-full md:w-auto text-center md:text-right">
+                  <a
+                    [href]="'https://virtualprogaming.com/match/' + m.id"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/5 hover:bg-[#EAE905] hover:text-black border border-white/10 text-xs font-bold text-slate-300 transition cursor-pointer"
+                  >
+                    <span>VPG Stats</span>
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                  </a>
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  `,
+})
+export class ResultsComponent implements OnInit {
+  private readonly api = inject(ApiService);
+
+  readonly seasons = signal<number[]>([2, 1]);
+  readonly selectedSeason = signal<number>(2);
+  readonly onlyRyvl = signal<boolean>(false);
+  readonly matches = signal<VpgMatchItem[]>([]);
+  readonly isLoading = signal<boolean>(true);
+
+  readonly filteredMatches = computed(() => {
+    const list = this.matches();
+    if (!this.onlyRyvl()) return list;
+    return list.filter((m) => this.isRyvlMatch(m));
+  });
+
+  async ngOnInit(): Promise<void> {
+    await this.initSeasons();
+    await this.loadResults();
+  }
+
+  async initSeasons(): Promise<void> {
+    try {
+      const data = await this.api.getSuperligaSeasons();
+      if (data?.seasons?.length) {
+        this.seasons.set(data.seasons);
+        this.selectedSeason.set(data.latest || data.seasons[0]);
+      }
+    } catch {
+      // fallback to [2, 1]
+    }
+  }
+
+  async loadResults(): Promise<void> {
+    this.isLoading.set(true);
+    try {
+      const data = await this.api.getSuperligaResults(this.selectedSeason(), 40);
+      this.matches.set(data?.results || []);
+    } catch (err) {
+      console.error('Failed to load Superliga results:', err);
+    } finally {
+      this.isLoading.set(false);
+    }
+  }
+
+  onSeasonChange(newSeason: number): void {
+    this.selectedSeason.set(Number(newSeason));
+    this.loadResults();
+  }
+
+  isRyvlMatch(m: VpgMatchItem): boolean {
+    return /ryvl|rival/i.test(m.homeName) || /ryvl|rival/i.test(m.awayName);
+  }
+
+  getRyvlOutcome(m: VpgMatchItem): 'WIN' | 'LOSS' | 'DRAW' {
+    const isHome = /ryvl|rival/i.test(m.homeName);
+    const hs = m.homeScore ?? 0;
+    const as = m.awayScore ?? 0;
+    if (hs === as) return 'DRAW';
+    if (isHome) return hs > as ? 'WIN' : 'LOSS';
+    return as > hs ? 'WIN' : 'LOSS';
+  }
+}

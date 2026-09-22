@@ -54,19 +54,19 @@ const TIMEZONES = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, FormsModule, TitleCasePipe],
   template: `
-    <div class="max-w-4xl mx-auto space-y-6">
+    <div class="max-w-7xl w-full mx-auto space-y-6">
       <!-- Breadcrumb & Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-700/60 pb-4">
         <div>
           <nav class="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
-            <a routerLink="/events" class="hover:text-slate-200">Events</a>
+            <a routerLink="/admin/events" class="hover:text-slate-200">Events</a>
             <span>/</span>
             <span class="text-[#5865F2]">New Event</span>
           </nav>
           <h1 class="text-2xl font-bold text-white tracking-tight">Create Guild Event</h1>
         </div>
         <a
-          routerLink="/events"
+          routerLink="/admin/events"
           class="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 self-start sm:self-center transition"
         >
           Cancel

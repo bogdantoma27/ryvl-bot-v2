@@ -36,7 +36,17 @@ export class GuildsController {
   @Patch(':guildId/settings')
   async updateSettings(
     @Param('guildId') guildId: string,
-    @Body() body: { name?: string; timezone?: string; defaultChannelId?: string | null },
+    @Body()
+    body: {
+      name?: string;
+      timezone?: string;
+      defaultChannelId?: string | null;
+      defaultLineupChannelId?: string | null;
+      defaultTransfersChannelId?: string | null;
+      defaultFixturesChannelId?: string | null;
+      defaultStandingsChannelId?: string | null;
+      defaultLiveResultsChannelId?: string | null;
+    },
   ) {
     return this.guildsService.updateSettings(guildId, body);
   }

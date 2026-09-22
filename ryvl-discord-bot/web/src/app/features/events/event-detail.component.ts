@@ -24,10 +24,10 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, FormsModule, RsvpBadgeComponent],
   template: `
-    <div class="space-y-6 max-w-5xl mx-auto animate-fadeIn">
+    <div class="space-y-6 max-w-7xl w-full mx-auto animate-fadeIn">
       <!-- Breadcrumb Navigation -->
       <nav class="flex items-center gap-2 text-xs text-slate-400">
-        <a routerLink="/events" class="hover:text-slate-200">Guild Events</a>
+        <a routerLink="/admin/events" class="hover:text-slate-200">Guild Events</a>
         <span>/</span>
         <span class="text-white font-medium truncate max-w-xs">{{ event()?.title || 'Event Details' }}</span>
       </nav>
@@ -42,7 +42,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
           <div class="text-4xl">⚠️</div>
           <h2 class="text-lg font-bold text-white">Event Not Found</h2>
           <p class="text-xs text-slate-400">The event could not be found or was deleted.</p>
-          <a routerLink="/events" class="inline-block px-4 py-2 rounded-lg bg-[#5865F2] text-white text-xs font-semibold">
+          <a routerLink="/admin/events" class="inline-block px-4 py-2 rounded-lg bg-[#5865F2] text-white text-xs font-semibold">
             Return to Events
           </a>
         </div>

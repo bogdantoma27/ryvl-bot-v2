@@ -7,6 +7,9 @@ import {
   VpgPlayerContract,
   VpgTransferItem,
   UpdateVpgConfigDto,
+  VpgStandingsRow,
+  VpgMatchItem,
+  VpgLeaderboardEntry,
 } from './vpg.types';
 
 @Injectable()
@@ -286,6 +289,179 @@ export class VpgService {
         toLogo: params.toLogo,
         amount: params.amount || 0,
         occurredAt: params.occurredAt,
+        discordMessageId: params.discordMessageId,
+        channelId: params.channelId,
+      },
+      update: {
+        discordMessageId: params.discordMessageId,
+        channelId: params.channelId,
+      },
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Superliga Romania Competitions, Standings, Fixtures, Results, Leaderboards
+  // ---------------------------------------------------------------------------
+
+  async fetchSeasons(): Promise<number[]> {
+    try {
+      const res = await fetch(`${this.API_BASE}/leagues/Superliga-Romania/seasons/`, {
+        signal: AbortSignal.timeout(15000),
+        headers: { 'User-Agent': 'RYVLBot/2.0' },
+      });
+      if (!res.ok) return [2];
+      const data = await res.json();
+      const seasons = Array.isArray(data) ? data.map(Number).sort((a, b) => b - a) : [2];
+      return seasons.length > 0 ? seasons : [2];
+    } catch {
+      return [2];
+    }
+  }
+
+  async fetchLatestSeason(): Promise<number> {
+    const seasons = await this.fetchSeasons();
+    return seasons[0] || 2;
+  }
+
+  async fetchStandings(season?: number): Promise<VpgStandingsRow[]> {
+    const targetSeason = season || (await this.fetchLatestSeason());
+    const url = `${this.API_BASE}/leagues/Superliga-Romania/table/?season=${targetSeason}&is_history=false`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(15000),
+      headers: { 'User-Agent': 'RYVLBot/2.0' },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} fetching standings`);
+    const raw = await res.json();
+    const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+
+    return list.map((item: any, idx: number) => ({
+      position: idx + 1,
+      teamName: item.team_name || 'Unknown Team',
+      teamAbbr: item.team_abbr,
+      teamSlug: item.team_slug,
+      teamLogoUrl: this.buildLogoUrl(item.team_logo),
+      played: Number(item.played || 0),
+      wins: Number(item.wins || 0),
+      draws: Number(item.draws || 0),
+      losses: Number(item.losses || 0),
+      scoreFor: Number(item.score_for || 0),
+      scoreAgainst: Number(item.score_against || 0),
+      goalDifference: Number(item.goal_difference || (item.score_for - item.score_against) || 0),
+      points: Number(item.points || 0),
+    }));
+  }
+
+  async fetchMatches(
+    status: 'complete' | 'scheduled',
+    season?: number,
+    limit = 20,
+    offset = 0,
+  ): Promise<VpgMatchItem[]> {
+    const targetSeason = season || (await this.fetchLatestSeason());
+    const url = `${this.API_BASE}/leagues/Superliga-Romania/matches/?status=${status}&season=${targetSeason}&limit=${limit}&offset=${offset}`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(15000),
+      headers: { 'User-Agent': 'RYVLBot/2.0' },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${status} matches`);
+    const json = await res.json();
+    const list = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+
+    return list.map((m: any) => ({
+      id: Number(m.id),
+      datetime: m.datetime,
+      dateFormattedRo: this.formatDateRo(m.datetime),
+      status: m.status || status,
+      matchDay: Number(m.match_day || 0),
+      homeName: m.home_name || 'Home Team',
+      awayName: m.away_name || 'Away Team',
+      homeScore: m.home_score != null ? Number(m.home_score) : null,
+      awayScore: m.away_score != null ? Number(m.away_score) : null,
+      homeLogoUrl: this.buildLogoUrl(m.home_logo),
+      awayLogoUrl: this.buildLogoUrl(m.away_logo),
+    }));
+  }
+
+  async fetchLeaderboard(
+    category: 'strikers' | 'cam' | 'gk' | 'cb' | 'cdm' | 'wingers' = 'strikers',
+    season?: number,
+  ): Promise<VpgLeaderboardEntry[]> {
+    const targetSeason = season || (await this.fetchLatestSeason());
+    const lbNameMap: Record<string, string> = {
+      strikers: 'top_strikers',
+      cam: 'top_cam',
+      gk: 'top_gk',
+      cb: 'top_cb',
+      cdm: 'top_cdm',
+      wingers: 'top_wingers',
+    };
+    const lbName = lbNameMap[category] || 'top_strikers';
+    const url = `${this.API_BASE}/leagues/Superliga-Romania/leaderboard/?leaderboard=${lbName}&weekly=false&season=${targetSeason}&limit=25&offset=0`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(15000),
+      headers: { 'User-Agent': 'RYVLBot/2.0' },
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    const list = Array.isArray(json?.data) ? json.data : [];
+
+    return list.map((entry: any, index: number) => ({
+      rank: index + 1,
+      username: (entry.username || '').trim(),
+      userAvatarUrl: entry.user_avatar ? `${this.VPG_CDN}/${entry.user_avatar}/public` : null,
+      nationality: entry.user_nationality || 'RO',
+      teamName: entry.team_name || 'Team',
+      teamLogoUrl: this.buildLogoUrl(entry.team_logo),
+      goals: Number(entry.goals || 0),
+      assists: Number(entry.assists || 0),
+      shots: entry.shots != null ? Number(entry.shots) : null,
+      cleanSheets: entry.clean_sheet != null ? Number(entry.clean_sheet) : null,
+      matchesPlayed: Number(entry.matches_played || 0),
+      rating: entry.match_rating != null ? Number(entry.match_rating) : null,
+      points: entry.points != null ? Number(entry.points) : null,
+    }));
+  }
+
+  async isMatchProcessed(guildId: string, vpgMatchId: number): Promise<boolean> {
+    const existing = await this.prisma.processedVpgMatch.findUnique({
+      where: {
+        guildId_vpgMatchId: {
+          guildId,
+          vpgMatchId,
+        },
+      },
+    });
+    return !!existing;
+  }
+
+  async recordProcessedMatch(params: {
+    guildId: string;
+    vpgMatchId: number;
+    homeName: string;
+    awayName: string;
+    homeScore: number;
+    awayScore: number;
+    matchDay?: number;
+    datetime: Date;
+    discordMessageId?: string | null;
+    channelId?: string | null;
+  }) {
+    return this.prisma.processedVpgMatch.upsert({
+      where: {
+        guildId_vpgMatchId: {
+          guildId: params.guildId,
+          vpgMatchId: params.vpgMatchId,
+        },
+      },
+      create: {
+        guildId: params.guildId,
+        vpgMatchId: params.vpgMatchId,
+        homeName: params.homeName,
+        awayName: params.awayName,
+        homeScore: params.homeScore,
+        awayScore: params.awayScore,
+        matchDay: params.matchDay,
+        datetime: params.datetime,
         discordMessageId: params.discordMessageId,
         channelId: params.channelId,
       },

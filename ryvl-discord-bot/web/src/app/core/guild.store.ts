@@ -143,17 +143,48 @@ export class GuildStore {
         raw.guild?.defaultChannelId ||
         (raw.channels?.length > 0 ? raw.channels[0].id : null);
 
+      const defaultLineupChannelId =
+        raw.settings?.defaultLineupChannelId ||
+        raw.guild?.defaultLineupChannelId ||
+        null;
+      const defaultTransfersChannelId =
+        raw.settings?.defaultTransfersChannelId ||
+        raw.guild?.defaultTransfersChannelId ||
+        null;
+      const defaultFixturesChannelId =
+        raw.settings?.defaultFixturesChannelId ||
+        raw.guild?.defaultFixturesChannelId ||
+        null;
+      const defaultStandingsChannelId =
+        raw.settings?.defaultStandingsChannelId ||
+        raw.guild?.defaultStandingsChannelId ||
+        null;
+      const defaultLiveResultsChannelId =
+        raw.settings?.defaultLiveResultsChannelId ||
+        raw.guild?.defaultLiveResultsChannelId ||
+        null;
+
       const data: GuildBootstrap = {
         id: raw.id || raw.guild?.id || guildId,
         name: raw.name || raw.guild?.name || 'Discord Server',
         iconUrl: raw.iconUrl || raw.guild?.iconUrl || null,
         defaultTimezone: raw.defaultTimezone || raw.guild?.timezone || 'Europe/Bucharest',
+        defaultLineupChannelId,
+        defaultTransfersChannelId,
+        defaultFixturesChannelId,
+        defaultStandingsChannelId,
+        defaultLiveResultsChannelId,
         channels: raw.channels || [],
         roles: raw.roles || [],
         members: raw.members || [],
         settings: {
           timezone: raw.settings?.timezone || raw.defaultTimezone || raw.guild?.timezone || 'Europe/Bucharest',
           defaultChannelId,
+          defaultLineupChannelId,
+          defaultTransfersChannelId,
+          defaultFixturesChannelId,
+          defaultStandingsChannelId,
+          defaultLiveResultsChannelId,
           botActive: raw.settings?.botActive ?? true,
         },
       };
@@ -209,6 +240,11 @@ export class GuildStore {
 
   updateActiveGuildSettings(updated: {
     defaultChannelId?: string | null;
+    defaultLineupChannelId?: string | null;
+    defaultTransfersChannelId?: string | null;
+    defaultFixturesChannelId?: string | null;
+    defaultStandingsChannelId?: string | null;
+    defaultLiveResultsChannelId?: string | null;
     timezone?: string;
     name?: string;
   }): void {
@@ -219,6 +255,26 @@ export class GuildStore {
       ...current,
       name: updated.name ?? current.name,
       defaultTimezone: updated.timezone ?? current.defaultTimezone,
+      defaultLineupChannelId:
+        updated.defaultLineupChannelId !== undefined
+          ? updated.defaultLineupChannelId
+          : current.defaultLineupChannelId,
+      defaultTransfersChannelId:
+        updated.defaultTransfersChannelId !== undefined
+          ? updated.defaultTransfersChannelId
+          : current.defaultTransfersChannelId,
+      defaultFixturesChannelId:
+        updated.defaultFixturesChannelId !== undefined
+          ? updated.defaultFixturesChannelId
+          : current.defaultFixturesChannelId,
+      defaultStandingsChannelId:
+        updated.defaultStandingsChannelId !== undefined
+          ? updated.defaultStandingsChannelId
+          : current.defaultStandingsChannelId,
+      defaultLiveResultsChannelId:
+        updated.defaultLiveResultsChannelId !== undefined
+          ? updated.defaultLiveResultsChannelId
+          : current.defaultLiveResultsChannelId,
       settings: current.settings
         ? {
             ...current.settings,
@@ -226,11 +282,36 @@ export class GuildStore {
               updated.defaultChannelId !== undefined
                 ? updated.defaultChannelId
                 : current.settings.defaultChannelId,
+            defaultLineupChannelId:
+              updated.defaultLineupChannelId !== undefined
+                ? updated.defaultLineupChannelId
+                : current.settings.defaultLineupChannelId,
+            defaultTransfersChannelId:
+              updated.defaultTransfersChannelId !== undefined
+                ? updated.defaultTransfersChannelId
+                : current.settings.defaultTransfersChannelId,
+            defaultFixturesChannelId:
+              updated.defaultFixturesChannelId !== undefined
+                ? updated.defaultFixturesChannelId
+                : current.settings.defaultFixturesChannelId,
+            defaultStandingsChannelId:
+              updated.defaultStandingsChannelId !== undefined
+                ? updated.defaultStandingsChannelId
+                : current.settings.defaultStandingsChannelId,
+            defaultLiveResultsChannelId:
+              updated.defaultLiveResultsChannelId !== undefined
+                ? updated.defaultLiveResultsChannelId
+                : current.settings.defaultLiveResultsChannelId,
             timezone: updated.timezone ?? current.settings.timezone,
           }
         : {
             timezone: updated.timezone || 'Europe/Bucharest',
             defaultChannelId: updated.defaultChannelId || null,
+            defaultLineupChannelId: updated.defaultLineupChannelId || null,
+            defaultTransfersChannelId: updated.defaultTransfersChannelId || null,
+            defaultFixturesChannelId: updated.defaultFixturesChannelId || null,
+            defaultStandingsChannelId: updated.defaultStandingsChannelId || null,
+            defaultLiveResultsChannelId: updated.defaultLiveResultsChannelId || null,
             botActive: true,
           },
     };

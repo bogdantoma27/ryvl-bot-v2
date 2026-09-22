@@ -36,7 +36,7 @@ function getTodayDateString(): string {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, FormsModule],
   template: `
-    <div class="max-w-6xl mx-auto space-y-6">
+    <div class="max-w-7xl w-full mx-auto space-y-6">
       <!-- Breadcrumb & Top Bar -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-700/60 pb-4">
         <div>
@@ -56,7 +56,7 @@ function getTodayDateString(): string {
 
         <div class="flex items-center gap-2 self-start sm:self-center">
           <a
-            routerLink="/lineup/drafts"
+            routerLink="/admin/lineup/drafts"
             class="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 transition flex items-center gap-1.5"
           >
             <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -764,7 +764,13 @@ export class LineupComponent implements OnInit {
       const active = this.guildStore.activeGuild();
       const guildId = this.guildStore.activeGuildId();
       if (active && (!this.channelId() || guildId !== this.lastLoadedGuildId)) {
-        this.channelId.set(active.settings?.defaultChannelId || active.channels?.[0]?.id || '');
+        const preferred =
+          active.settings?.defaultLineupChannelId ||
+          active.defaultLineupChannelId ||
+          active.settings?.defaultChannelId ||
+          active.channels?.[0]?.id ||
+          '';
+        this.channelId.set(preferred);
       }
       if (guildId && guildId !== this.lastLoadedGuildId) {
         this.lastLoadedGuildId = guildId;

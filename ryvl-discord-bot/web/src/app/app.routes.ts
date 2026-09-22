@@ -5,7 +5,7 @@ import { ApiService } from './core/api.service';
 export const authGuard: CanMatchFn = async (route: Route, segments: UrlSegment[]) => {
   const api = inject(ApiService);
 
-  // On the root path or any entry, check for ?token= query param to consume the JWT from OAuth callback
+  // On any route, check for ?token= query param to consume the JWT from OAuth callback
   if (typeof window !== 'undefined') {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
@@ -30,62 +30,172 @@ export const authGuard: CanMatchFn = async (route: Route, segments: UrlSegment[]
 };
 
 export const routes: Routes = [
+  // ---------------------------------------------------------------------------
+  // Public Organization Website (Official RYVL Esports Shell & Pages)
+  // ---------------------------------------------------------------------------
   {
     path: '',
+    loadComponent: () =>
+      import('./features/public/public-shell.component').then((m) => m.PublicShellComponent),
+    children: [
+      {
+        path: '',
+        pathMatch: 'full',
+        loadComponent: () =>
+          import('./features/public/home.component').then((m) => m.HomeComponent),
+      },
+      {
+        path: 'team',
+        loadComponent: () =>
+          import('./features/public/team.component').then((m) => m.TeamComponent),
+      },
+      {
+        path: 'competitions',
+        loadComponent: () =>
+          import('./features/public/competitions.component').then((m) => m.CompetitionsComponent),
+      },
+      {
+        path: 'results',
+        loadComponent: () =>
+          import('./features/public/results.component').then((m) => m.ResultsComponent),
+      },
+      {
+        path: 'fixtures',
+        loadComponent: () =>
+          import('./features/public/fixtures.component').then((m) => m.FixturesComponent),
+      },
+      {
+        path: 'standings',
+        loadComponent: () =>
+          import('./features/public/standings.component').then((m) => m.StandingsComponent),
+      },
+      {
+        path: 'live',
+        loadComponent: () =>
+          import('./features/public/live.component').then((m) => m.LiveComponent),
+      },
+      {
+        path: 'recruitment',
+        loadComponent: () =>
+          import('./features/public/recruitment.component').then((m) => m.RecruitmentComponent),
+      },
+      {
+        path: 'about',
+        loadComponent: () =>
+          import('./features/public/about.component').then((m) => m.AboutComponent),
+      },
+      {
+        path: 'contact',
+        loadComponent: () =>
+          import('./features/public/contact.component').then((m) => m.ContactComponent),
+      },
+      // Public viewer access to Club & Transfers from website
+      {
+        path: 'club',
+        loadComponent: () =>
+          import('./features/ea-tracker/ea-tracker.component').then((m) => m.EaTrackerComponent),
+      },
+      {
+        path: 'transfers',
+        loadComponent: () =>
+          import('./features/vpg-transfers/vpg-transfers.component').then((m) => m.VpgTransfersComponent),
+      },
+    ],
+  },
+
+  // ---------------------------------------------------------------------------
+  // Admin Management Console (Bot, Events, Lineups, Settings)
+  // ---------------------------------------------------------------------------
+  {
+    path: 'admin',
     pathMatch: 'full',
-    redirectTo: 'dashboard',
+    redirectTo: 'admin/dashboard',
   },
   {
-    path: 'dashboard',
+    path: 'admin/dashboard',
     canMatch: [authGuard],
     loadComponent: () =>
       import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent),
   },
   {
-    path: 'events',
+    path: 'admin/events',
     canMatch: [authGuard],
     loadComponent: () =>
       import('./features/events/event-list.component').then((m) => m.EventListComponent),
   },
   {
-    path: 'events/new',
+    path: 'admin/events/new',
     canMatch: [authGuard],
     loadComponent: () =>
       import('./features/events/event-create.component').then((m) => m.EventCreateComponent),
   },
   {
-    path: 'events/:eventId',
+    path: 'admin/events/:eventId',
     canMatch: [authGuard],
     loadComponent: () =>
       import('./features/events/event-detail.component').then((m) => m.EventDetailComponent),
   },
   {
-    path: 'lineup',
+    path: 'admin/lineup',
     canMatch: [authGuard],
     loadComponent: () =>
       import('./features/lineup/lineup.component').then((m) => m.LineupComponent),
   },
   {
-    path: 'lineup/drafts',
+    path: 'admin/lineup/drafts',
     canMatch: [authGuard],
     loadComponent: () =>
       import('./features/lineup/lineup-drafts.component').then((m) => m.LineupDraftsComponent),
   },
   {
-    path: 'club',
+    path: 'admin/club',
+    canMatch: [authGuard],
     loadComponent: () =>
       import('./features/ea-tracker/ea-tracker.component').then((m) => m.EaTrackerComponent),
   },
   {
-    path: 'transfers',
+    path: 'admin/transfers',
+    canMatch: [authGuard],
     loadComponent: () =>
       import('./features/vpg-transfers/vpg-transfers.component').then((m) => m.VpgTransfersComponent),
   },
   {
-    path: 'settings',
+    path: 'admin/settings',
     canMatch: [authGuard],
     loadComponent: () =>
       import('./features/settings/settings.component').then((m) => m.SettingsComponent),
+  },
+
+  // ---------------------------------------------------------------------------
+  // Legacy Direct Redirects (for backwards compatibility)
+  // ---------------------------------------------------------------------------
+  {
+    path: 'dashboard',
+    redirectTo: 'admin/dashboard',
+  },
+  {
+    path: 'events',
+    redirectTo: 'admin/events',
+  },
+  {
+    path: 'events/new',
+    redirectTo: 'admin/events/new',
+  },
+  {
+    path: 'events/:eventId',
+    redirectTo: 'admin/events/:eventId',
+  },
+  {
+    path: 'lineup',
+    redirectTo: 'admin/lineup',
+  },
+  {
+    path: 'lineup/drafts',
+    redirectTo: 'admin/lineup/drafts',
+  },
+  {
+    path: 'settings',
+    redirectTo: 'admin/settings',
   },
 
   {

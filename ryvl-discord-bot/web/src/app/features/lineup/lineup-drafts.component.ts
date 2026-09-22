@@ -18,12 +18,12 @@ import { LineupDraft } from '../../core/models';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, DatePipe],
   template: `
-    <div class="max-w-5xl mx-auto space-y-6">
+    <div class="max-w-7xl w-full mx-auto space-y-6">
       <!-- Breadcrumb & Top Bar -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-700/60 pb-4">
         <div>
           <nav class="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
-            <a routerLink="/lineup" class="hover:text-slate-200">Lineup</a>
+            <a routerLink="/admin/lineup" class="hover:text-slate-200">Lineup</a>
             <span>/</span>
             <span class="text-[#EAE905] font-bold">Saved Drafts</span>
           </nav>
@@ -37,7 +37,7 @@ import { LineupDraft } from '../../core/models';
         </div>
 
         <a
-          routerLink="/lineup"
+          routerLink="/admin/lineup"
           class="btn-yellow text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 self-start sm:self-center"
           style="background-color: #EAE905 !important; color: #111111 !important;"
         >
@@ -70,7 +70,7 @@ import { LineupDraft } from '../../core/models';
               Build a custom formation on the visual pitch and click "Save Draft" to keep it here for later.
             </p>
             <a
-              routerLink="/lineup"
+              routerLink="/admin/lineup"
               class="inline-block mt-2 text-xs font-bold text-[#EAE905] hover:underline"
             >
               Start a new lineup &rarr;
@@ -111,7 +111,7 @@ import { LineupDraft } from '../../core/models';
                     </td>
                     <td class="py-3.5 px-4 text-right space-x-2">
                       <a
-                        [routerLink]="['/lineup']"
+                        [routerLink]="['/admin/lineup']"
                         [queryParams]="{ draftId: draft.id }"
                         class="text-xs font-bold text-[#EAE905] hover:underline px-2.5 py-1 rounded hover:bg-slate-800 transition"
                       >

@@ -14,9 +14,12 @@ import {
   LineupDraft,
   LineupRenderPayload,
   LineupPostPayload,
+  VpgStandingsRow,
+  VpgMatchItem,
+  VpgLeaderboardEntry,
 } from './models';
 
-const PRODUCTION_API_BASE_URL = 'https://ryvl-bot-api.onrender.com';
+const DEFAULT_PRODUCTION_API_BASE_URL = 'https://ryvl-bot-api.onrender.com';
 const DEVELOPMENT_API_BASE_URL = 'http://localhost:3000';
 
 @Injectable({ providedIn: 'root' })
@@ -30,8 +33,13 @@ export class ApiService {
       if (hostname === 'localhost' || hostname === '127.0.0.1') {
         return DEVELOPMENT_API_BASE_URL;
       }
+      const customApi = (window as unknown as { __RYVL_API_URL__?: string }).__RYVL_API_URL__
+        || localStorage.getItem('ryvl_api_url');
+      if (customApi) {
+        return customApi.replace(/\/+$/, '');
+      }
     }
-    return PRODUCTION_API_BASE_URL;
+    return DEFAULT_PRODUCTION_API_BASE_URL;
   })();
 
   getSessionToken(): string | null {
@@ -402,6 +410,124 @@ export class ApiService {
       this.http.post<{ success: boolean; messageId?: string }>(
         `${this.baseUrl}/api/guilds/${guildId}/vpg/post-latest`,
         {},
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  // ----------------------------------------------------
+  // Superliga România API (Public & Admin)
+  // ----------------------------------------------------
+
+  getSuperligaSeasons(): Promise<{ seasons: number[]; latest: number }> {
+    return firstValueFrom(
+      this.http.get<{ seasons: number[]; latest: number }>(
+        `${this.baseUrl}/api/vpg/superliga/seasons`,
+      ),
+    );
+  }
+
+  getSuperligaStandings(
+    season?: number,
+  ): Promise<{ season: number; standings: VpgStandingsRow[]; total: number }> {
+    const params = season ? { season: String(season) } : undefined;
+    return firstValueFrom(
+      this.http.get<{ season: number; standings: VpgStandingsRow[]; total: number }>(
+        `${this.baseUrl}/api/vpg/superliga/standings`,
+        { params },
+      ),
+    );
+  }
+
+  getSuperligaFixtures(
+    season?: number,
+    limit = 20,
+  ): Promise<{ season: number; fixtures: VpgMatchItem[]; total: number }> {
+    const params: Record<string, string> = { limit: String(limit) };
+    if (season) params['season'] = String(season);
+    return firstValueFrom(
+      this.http.get<{ season: number; fixtures: VpgMatchItem[]; total: number }>(
+        `${this.baseUrl}/api/vpg/superliga/fixtures`,
+        { params },
+      ),
+    );
+  }
+
+  getSuperligaResults(
+    season?: number,
+    limit = 20,
+  ): Promise<{ season: number; results: VpgMatchItem[]; total: number }> {
+    const params: Record<string, string> = { limit: String(limit) };
+    if (season) params['season'] = String(season);
+    return firstValueFrom(
+      this.http.get<{ season: number; results: VpgMatchItem[]; total: number }>(
+        `${this.baseUrl}/api/vpg/superliga/results`,
+        { params },
+      ),
+    );
+  }
+
+  getSuperligaLeaderboard(
+    category: 'strikers' | 'cam' | 'gk' | 'cb' | 'cdm' | 'wingers' = 'strikers',
+    season?: number,
+  ): Promise<{ category: string; season: number; leaderboard: VpgLeaderboardEntry[]; total: number }> {
+    const params: Record<string, string> = { category };
+    if (season) params['season'] = String(season);
+    return firstValueFrom(
+      this.http.get<{ category: string; season: number; leaderboard: VpgLeaderboardEntry[]; total: number }>(
+        `${this.baseUrl}/api/vpg/superliga/leaderboard`,
+        { params },
+      ),
+    );
+  }
+
+  pollSuperligaNow(guildId: string): Promise<{ success: boolean; postedCount: number }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; postedCount: number }>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/poll-now`,
+        {},
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  postSuperligaStandings(
+    guildId: string,
+    channelId?: string,
+    season?: number,
+  ): Promise<{ success: boolean; messageId?: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; messageId?: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/post-standings`,
+        { channelId, season },
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  postSuperligaFixtures(
+    guildId: string,
+    channelId?: string,
+    season?: number,
+  ): Promise<{ success: boolean; messageId?: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; messageId?: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/post-fixtures`,
+        { channelId, season },
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  postSuperligaResults(
+    guildId: string,
+    channelId?: string,
+    season?: number,
+  ): Promise<{ success: boolean; messageId?: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; messageId?: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/post-results`,
+        { channelId, season },
         { headers: this.headers() },
       ),
     );

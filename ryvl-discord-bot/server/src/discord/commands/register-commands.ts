@@ -132,6 +132,105 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .setDescription('Check for new VPG transfers right now'),
     );
 
+  const superligaCommand = new SlashCommandBuilder()
+    .setName('superliga')
+    .setDescription('VPG Superliga România — Standings, Fixtures, Results & Leaderboards')
+    .addSubcommand((sub) =>
+      sub
+        .setName('standings')
+        .setDescription('Display the official Superliga standings table')
+        .addIntegerOption((opt) =>
+          opt
+            .setName('season')
+            .setDescription('Season number (e.g. 2)')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('fixtures')
+        .setDescription('Display upcoming scheduled matches')
+        .addIntegerOption((opt) =>
+          opt
+            .setName('count')
+            .setDescription('Number of fixtures to show (default 10)')
+            .setRequired(false),
+        )
+        .addIntegerOption((opt) =>
+          opt
+            .setName('season')
+            .setDescription('Season number (e.g. 2)')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('results')
+        .setDescription('Display recent completed match results')
+        .addIntegerOption((opt) =>
+          opt
+            .setName('count')
+            .setDescription('Number of results to show (default 10)')
+            .setRequired(false),
+        )
+        .addIntegerOption((opt) =>
+          opt
+            .setName('season')
+            .setDescription('Season number (e.g. 2)')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('leaderboard')
+        .setDescription('Display top player leaderboards for Superliga')
+        .addStringOption((opt) =>
+          opt
+            .setName('category')
+            .setDescription('Category of the leaderboard')
+            .setRequired(true)
+            .addChoices(
+              { name: 'Golgheteri (Top Strikers)', value: 'strikers' },
+              { name: 'Creatori de Joc (Top CAM)', value: 'cam' },
+              { name: 'Extreme (Top Wingers)', value: 'wingers' },
+              { name: 'Mijlocași Defensivi (Top CDM)', value: 'cdm' },
+              { name: 'Fundași Centrali (Top CB)', value: 'cb' },
+              { name: 'Portari (Top Portari)', value: 'gk' },
+            ),
+        )
+        .addIntegerOption((opt) =>
+          opt
+            .setName('season')
+            .setDescription('Season number (e.g. 2)')
+            .setRequired(false),
+        ),
+    );
+
+  const liveResultsCommand = new SlashCommandBuilder()
+    .setName('live_results')
+    .setDescription('VPG Superliga România live results monitor & alerts')
+    .addSubcommand((sub) =>
+      sub
+        .setName('today')
+        .setDescription('Show all completed matches played today in Bucharest time'),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('check')
+        .setDescription('Manually trigger a check for new completed matches'),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('setup')
+        .setDescription('Configure default channel for live results')
+        .addChannelOption((opt) =>
+          opt
+            .setName('channel')
+            .setDescription('Text channel for auto-posting completed match results')
+            .setRequired(true),
+        ),
+    );
+
   return [
     eventCommand.toJSON(),
     lineupPostCommand.toJSON(),
@@ -139,6 +238,8 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     eaStatsCommand.toJSON(),
     eaLatestCommand.toJSON(),
     vpgTransfersCommand.toJSON(),
+    superligaCommand.toJSON(),
+    liveResultsCommand.toJSON(),
   ];
 }
 

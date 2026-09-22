@@ -13,6 +13,7 @@ import { EventsModule } from '../events/events.module';
 import { EaModule } from '../ea/ea.module';
 import { VpgModule } from '../vpg/vpg.module';
 import { VpgCommands } from './commands/vpg-commands';
+import { SuperligaCommands } from './commands/superliga-commands';
 
 @Global()
 @Module({
@@ -33,6 +34,7 @@ import { VpgCommands } from './commands/vpg-commands';
     LineupPostCommand,
     EaCommands,
     VpgCommands,
+    SuperligaCommands,
   ],
   exports: [DiscordService],
 })

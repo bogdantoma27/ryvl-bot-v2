@@ -32,7 +32,7 @@ const TIMEZONES = [
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, UpperCasePipe],
   template: `
-    <div class="max-w-3xl mx-auto space-y-6 animate-fadeIn">
+    <div class="max-w-7xl w-full mx-auto space-y-6 animate-fadeIn">
       <!-- Header -->
       <div class="border-b border-slate-700/60 pb-4">
         <h1 class="text-2xl font-bold text-white tracking-tight">Guild Settings</h1>
@@ -122,11 +122,11 @@ const TIMEZONES = [
           </div>
         </div>
 
-        <!-- Card 2: Configuration & Channel Defaults -->
+        <!-- Card 2: General & Timezone Settings -->
         <div class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-5">
           <div class="border-b border-slate-700/50 pb-3">
-            <h2 class="text-base font-bold text-white">Event Defaults</h2>
-            <p class="text-xs text-slate-400">Default settings pre-selected during new event creation.</p>
+            <h2 class="text-base font-bold text-white">Regional & Event Defaults</h2>
+            <p class="text-xs text-slate-400">Default timezone and fallback channel for general guild events.</p>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -143,9 +143,10 @@ const TIMEZONES = [
                   <option [value]="tz">{{ tz }}</option>
                 }
               </select>
+              <p class="text-[11px] text-slate-400 mt-1">Default is Bucharest time (Europe/Bucharest).</p>
             </div>
 
-            <!-- Default Channel -->
+            <!-- Default Event Channel -->
             <div>
               <label class="block text-xs font-semibold text-slate-300 mb-1">Default Event Channel</label>
               <select
@@ -155,6 +156,122 @@ const TIMEZONES = [
                 class="w-full bg-[#1a1a2e] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#5865F2] transition"
               >
                 <option value="">Select a default channel</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+              <p class="text-[11px] text-slate-400 mt-1">Target channel for match event sign-ups and reminders.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Dedicated Feature Channels -->
+        <div class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-5">
+          <div class="border-b border-slate-700/50 pb-3">
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="text-[#EAE905]">⚡</span>
+              <span>Dedicated Feature Channels</span>
+            </h2>
+            <p class="text-xs text-slate-400">
+              Set default announcement channels for lineups, transfers, fixtures, standings, and live results.
+            </p>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            <!-- Default Lineup Channel -->
+            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
+              <div class="flex items-center gap-2 text-xs font-bold text-white">
+                <span class="text-[#EAE905]">📋</span>
+                <span>Default Lineup Channel</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Pre-selected in the lineup builder (can be changed before posting).</p>
+              <select
+                [ngModel]="defaultLineupChannelId()"
+                (ngModelChange)="defaultLineupChannelId.set($event)"
+                name="defaultLineupChannelId"
+                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
+              >
+                <option value="">None (prompt every time)</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- Default Transfers Channel -->
+            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
+              <div class="flex items-center gap-2 text-xs font-bold text-white">
+                <span class="text-[#EAE905]">🔄</span>
+                <span>Default Transfers Channel</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Channel where automated VPG Superliga transfers are published.</p>
+              <select
+                [ngModel]="defaultTransfersChannelId()"
+                (ngModelChange)="defaultTransfersChannelId.set($event)"
+                name="defaultTransfersChannelId"
+                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
+              >
+                <option value="">None (disabled)</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- Default Fixtures Channel -->
+            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
+              <div class="flex items-center gap-2 text-xs font-bold text-white">
+                <span class="text-[#EAE905]">📅</span>
+                <span>Default Fixtures Channel</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Channel where upcoming Superliga match schedules are published.</p>
+              <select
+                [ngModel]="defaultFixturesChannelId()"
+                (ngModelChange)="defaultFixturesChannelId.set($event)"
+                name="defaultFixturesChannelId"
+                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
+              >
+                <option value="">None (disabled)</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- Default Standings Channel -->
+            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
+              <div class="flex items-center gap-2 text-xs font-bold text-white">
+                <span class="text-[#EAE905]">🏆</span>
+                <span>Default Standings Channel</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Channel where official Superliga table & standings updates are posted.</p>
+              <select
+                [ngModel]="defaultStandingsChannelId()"
+                (ngModelChange)="defaultStandingsChannelId.set($event)"
+                name="defaultStandingsChannelId"
+                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
+              >
+                <option value="">None (disabled)</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+            </div>
+
+            <!-- Default Live Results Channel -->
+            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
+              <div class="flex items-center gap-2 text-xs font-bold text-white">
+                <span class="text-emerald-400">⚽</span>
+                <span>Default Live Results Channel</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Channel where completed Superliga match cards are posted automatically.</p>
+              <select
+                [ngModel]="defaultLiveResultsChannelId()"
+                (ngModelChange)="defaultLiveResultsChannelId.set($event)"
+                name="defaultLiveResultsChannelId"
+                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400 transition"
+              >
+                <option value="">None (disabled)</option>
                 @for (ch of channels(); track ch.id) {
                   <option [value]="ch.id"># {{ ch.name }}</option>
                 }
@@ -196,6 +313,13 @@ export class SettingsComponent implements OnInit {
   readonly guildIconUrl = signal<string | null>(null);
   readonly timezone = signal<string>('Europe/Bucharest');
   readonly defaultChannelId = signal<string>('');
+
+  readonly defaultLineupChannelId = signal<string>('');
+  readonly defaultTransfersChannelId = signal<string>('');
+  readonly defaultFixturesChannelId = signal<string>('');
+  readonly defaultStandingsChannelId = signal<string>('');
+  readonly defaultLiveResultsChannelId = signal<string>('');
+
   readonly botStatus = signal<'online' | 'offline' | 'idle'>('online');
 
   readonly channels = computed(() => this.guildStore.activeGuild()?.channels ?? []);
@@ -225,6 +349,37 @@ export class SettingsComponent implements OnInit {
         } else if (active.channels.length > 0 && !this.defaultChannelId()) {
           this.defaultChannelId.set(active.channels[0].id);
         }
+
+        const lineupCh =
+          active.settings?.defaultLineupChannelId ||
+          active.defaultLineupChannelId ||
+          '';
+        this.defaultLineupChannelId.set(lineupCh);
+
+        const transCh =
+          active.settings?.defaultTransfersChannelId ||
+          active.defaultTransfersChannelId ||
+          '';
+        this.defaultTransfersChannelId.set(transCh);
+
+        const fixCh =
+          active.settings?.defaultFixturesChannelId ||
+          active.defaultFixturesChannelId ||
+          '';
+        this.defaultFixturesChannelId.set(fixCh);
+
+        const stdCh =
+          active.settings?.defaultStandingsChannelId ||
+          active.defaultStandingsChannelId ||
+          '';
+        this.defaultStandingsChannelId.set(stdCh);
+
+        const liveCh =
+          active.settings?.defaultLiveResultsChannelId ||
+          active.defaultLiveResultsChannelId ||
+          '';
+        this.defaultLiveResultsChannelId.set(liveCh);
+
         this.botStatus.set(active.settings?.botActive ? 'online' : 'offline');
       }
     });
@@ -244,6 +399,11 @@ export class SettingsComponent implements OnInit {
       this.guildIconUrl.set(s.iconUrl);
       this.timezone.set(s.timezone);
       this.defaultChannelId.set(s.defaultChannelId || '');
+      this.defaultLineupChannelId.set(s.defaultLineupChannelId || '');
+      this.defaultTransfersChannelId.set(s.defaultTransfersChannelId || '');
+      this.defaultFixturesChannelId.set(s.defaultFixturesChannelId || '');
+      this.defaultStandingsChannelId.set(s.defaultStandingsChannelId || '');
+      this.defaultLiveResultsChannelId.set(s.defaultLiveResultsChannelId || '');
       this.botStatus.set(s.botStatus);
     } catch {
       // Keep loaded bootstrap values as fallback
@@ -265,14 +425,24 @@ export class SettingsComponent implements OnInit {
       name: this.guildName(),
       timezone: this.timezone(),
       defaultChannelId: this.defaultChannelId() || null,
+      defaultLineupChannelId: this.defaultLineupChannelId() || null,
+      defaultTransfersChannelId: this.defaultTransfersChannelId() || null,
+      defaultFixturesChannelId: this.defaultFixturesChannelId() || null,
+      defaultStandingsChannelId: this.defaultStandingsChannelId() || null,
+      defaultLiveResultsChannelId: this.defaultLiveResultsChannelId() || null,
     };
 
     try {
-      const updated = await this.api.updateSettings(guildId, payload);
+      await this.api.updateSettings(guildId, payload);
       this.guildStore.updateActiveGuildSettings({
         name: this.guildName(),
         timezone: this.timezone(),
         defaultChannelId: this.defaultChannelId() || null,
+        defaultLineupChannelId: this.defaultLineupChannelId() || null,
+        defaultTransfersChannelId: this.defaultTransfersChannelId() || null,
+        defaultFixturesChannelId: this.defaultFixturesChannelId() || null,
+        defaultStandingsChannelId: this.defaultStandingsChannelId() || null,
+        defaultLiveResultsChannelId: this.defaultLiveResultsChannelId() || null,
       });
       this.successMessage.set('Settings saved successfully!');
     } catch (err: unknown) {

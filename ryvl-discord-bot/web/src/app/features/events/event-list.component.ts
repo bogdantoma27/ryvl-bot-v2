@@ -22,7 +22,7 @@ type FilterTab = 'all' | 'active' | 'draft' | 'archived';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, FormsModule, RsvpBadgeComponent],
   template: `
-    <div class="space-y-6">
+    <div class="max-w-7xl w-full mx-auto space-y-6">
       <!-- Header -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -33,7 +33,7 @@ type FilterTab = 'all' | 'active' | 'draft' | 'archived';
         </div>
 
         <a
-          routerLink="/events/new"
+          routerLink="/admin/events/new"
           class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white text-sm font-bold shadow-md hover:shadow-indigo-500/25 transition active:scale-95 cursor-pointer"
         >
           <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -130,7 +130,7 @@ type FilterTab = 'all' | 'active' | 'draft' | 'archived';
             }
           </p>
           <a
-            routerLink="/events/new"
+            routerLink="/admin/events/new"
             class="inline-block px-5 py-2.5 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white text-xs font-bold shadow-md hover:shadow-indigo-500/25 transition cursor-pointer"
           >
             Create Event
@@ -284,7 +284,7 @@ export class EventListComponent implements OnInit {
   }
 
   openDetail(eventId: string): void {
-    this.router.navigate(['/events', eventId]);
+    this.router.navigate(['/admin/events', eventId]);
   }
 
   async loadEvents(guildId: string): Promise<void> {

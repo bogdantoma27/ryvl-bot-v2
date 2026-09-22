@@ -49,12 +49,22 @@ export interface GuildBootstrap {
   name: string;
   iconUrl: string | null;
   defaultTimezone?: string;
+  defaultLineupChannelId?: string | null;
+  defaultTransfersChannelId?: string | null;
+  defaultFixturesChannelId?: string | null;
+  defaultStandingsChannelId?: string | null;
+  defaultLiveResultsChannelId?: string | null;
   channels: ChannelOption[];
   roles: RoleOption[];
   members?: GuildMemberOption[];
   settings?: {
     timezone: string;
     defaultChannelId: string | null;
+    defaultLineupChannelId?: string | null;
+    defaultTransfersChannelId?: string | null;
+    defaultFixturesChannelId?: string | null;
+    defaultStandingsChannelId?: string | null;
+    defaultLiveResultsChannelId?: string | null;
     botActive: boolean;
   };
 }
@@ -138,7 +148,58 @@ export interface GuildSettings {
   iconUrl: string | null;
   timezone: string;
   defaultChannelId: string | null;
+  defaultLineupChannelId?: string | null;
+  defaultTransfersChannelId?: string | null;
+  defaultFixturesChannelId?: string | null;
+  defaultStandingsChannelId?: string | null;
+  defaultLiveResultsChannelId?: string | null;
   botStatus: 'online' | 'offline' | 'idle';
+}
+
+export interface VpgStandingsRow {
+  position: number;
+  teamName: string;
+  teamAbbr?: string | null;
+  teamSlug?: string | null;
+  teamLogoUrl?: string | null;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  scoreFor: number;
+  scoreAgainst: number;
+  goalDifference: number;
+  points: number;
+}
+
+export interface VpgMatchItem {
+  id: number;
+  datetime: string;
+  dateFormattedRo: string;
+  status: 'complete' | 'scheduled' | string;
+  matchDay: number;
+  homeName: string;
+  awayName: string;
+  homeScore?: number | null;
+  awayScore?: number | null;
+  homeLogoUrl?: string | null;
+  awayLogoUrl?: string | null;
+}
+
+export interface VpgLeaderboardEntry {
+  rank: number;
+  username: string;
+  userAvatarUrl?: string | null;
+  nationality?: string | null;
+  teamName: string;
+  teamLogoUrl?: string | null;
+  goals: number;
+  assists: number;
+  shots?: number | null;
+  cleanSheets?: number | null;
+  matchesPlayed: number;
+  rating?: number | null;
+  points?: number | null;
 }
 
 export interface LineupFormationsResponse {
