@@ -9,6 +9,10 @@ import {
   GuildBootstrap,
   GuildSettings,
   GuildSummary,
+  LineupFormationsResponse,
+  LineupDraft,
+  LineupRenderPayload,
+  LineupPostPayload,
 } from './models';
 
 const PRODUCTION_API_BASE_URL = 'https://ryvl-bot-api.onrender.com';
@@ -172,5 +176,85 @@ export class ApiService {
 
   getDiscordLoginUrl(): string {
     return `${this.baseUrl}/api/auth/discord/start`;
+  }
+
+  getLineupFormations(guildId: string): Promise<LineupFormationsResponse> {
+    return firstValueFrom(
+      this.http.get<LineupFormationsResponse>(
+        `${this.baseUrl}/api/guilds/${guildId}/lineup/formations`,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  renderLineup(guildId: string, payload: LineupRenderPayload): Promise<{ svg: string }> {
+    return firstValueFrom(
+      this.http.post<{ svg: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/lineup/render`,
+        payload,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  postLineup(
+    guildId: string,
+    payload: LineupPostPayload,
+  ): Promise<{ ok: boolean; channel_id: string; message_id: string }> {
+    return firstValueFrom(
+      this.http.post<{ ok: boolean; channel_id: string; message_id: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/lineup/post`,
+        payload,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  getLineupDrafts(guildId: string): Promise<LineupDraft[]> {
+    return firstValueFrom(
+      this.http.get<LineupDraft[]>(
+        `${this.baseUrl}/api/guilds/${guildId}/lineup/drafts`,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  createLineupDraft(
+    guildId: string,
+    payload: Partial<LineupDraft>,
+  ): Promise<LineupDraft> {
+    return firstValueFrom(
+      this.http.post<LineupDraft>(
+        `${this.baseUrl}/api/guilds/${guildId}/lineup/drafts`,
+        payload,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  updateLineupDraft(
+    guildId: string,
+    draftId: string,
+    payload: Partial<LineupDraft>,
+  ): Promise<LineupDraft> {
+    return firstValueFrom(
+      this.http.patch<LineupDraft>(
+        `${this.baseUrl}/api/guilds/${guildId}/lineup/drafts/${draftId}`,
+        payload,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  deleteLineupDraft(
+    guildId: string,
+    draftId: string,
+  ): Promise<{ ok: boolean; id: string }> {
+    return firstValueFrom(
+      this.http.delete<{ ok: boolean; id: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/lineup/drafts/${draftId}`,
+        { headers: this.headers() },
+      ),
+    );
   }
 }

@@ -7,6 +7,7 @@ import { GuildsModule } from './guilds/guilds.module';
 import { EventsModule } from './events/events.module';
 import { DiscordModule } from './discord/discord.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
+import { LineupModule } from './lineup/lineup.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SchedulerModule } from './scheduler/scheduler.module';
     EventsModule,
     DiscordModule,
     SchedulerModule,
+    LineupModule,
   ],
 })
 export class AppModule {}

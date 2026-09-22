@@ -138,3 +138,43 @@ export interface GuildSettings {
   defaultChannelId: string | null;
   botStatus: 'online' | 'offline' | 'idle';
 }
+
+export interface LineupFormationsResponse {
+  formations: string[];
+  labels_by_formation: Record<string, string>;
+  slots_by_formation: Record<string, string[]>;
+  coords_by_formation: Record<string, Record<string, [number, number]>>;
+  canvas_width: number;
+  canvas_height: number;
+}
+
+export interface LineupDraft {
+  id: string;
+  guildId: string;
+  title: string;
+  channelId: string | null;
+  formation: string;
+  kickoffAt: string | null;
+  timezone: string;
+  mentionRoleIds: string[];
+  assignments: Record<string, string>;
+  createdByDiscordId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LineupRenderPayload {
+  formation: string;
+  title: string;
+  players: Record<string, string>;
+  kickoff_at?: string | null;
+  primary_color?: string;
+  secondary_color?: string;
+  show_slot_tags?: boolean;
+}
+
+export interface LineupPostPayload extends LineupRenderPayload {
+  channel_id: string;
+  mention_role_ids?: string[];
+}
+

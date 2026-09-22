@@ -60,6 +60,18 @@ export const routes: Routes = [
       import('./features/events/event-detail.component').then((m) => m.EventDetailComponent),
   },
   {
+    path: 'lineup',
+    canMatch: [authGuard],
+    loadComponent: () =>
+      import('./features/lineup/lineup.component').then((m) => m.LineupComponent),
+  },
+  {
+    path: 'lineup/drafts',
+    canMatch: [authGuard],
+    loadComponent: () =>
+      import('./features/lineup/lineup-drafts.component').then((m) => m.LineupDraftsComponent),
+  },
+  {
     path: 'settings',
     canMatch: [authGuard],
     loadComponent: () =>

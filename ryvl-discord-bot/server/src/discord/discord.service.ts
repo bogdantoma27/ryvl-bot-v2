@@ -17,6 +17,7 @@ import {
   ChannelType,
   TextChannel,
   Message,
+  AttachmentBuilder,
 } from 'discord.js';
 import { ConfigService } from '../config/config.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -25,6 +26,11 @@ import { EventCreateCommand, EVENT_CREATE_MODAL_ID } from './commands/event-crea
 import { EventListCommand } from './commands/event-list.command';
 import { EventDeleteCommand } from './commands/event-delete.command';
 import { EventEditCommand, EVENT_EDIT_MODAL_PREFIX } from './commands/event-edit.command';
+import {
+  LineupPostCommand,
+  LINEUP_MODAL_SETUP_PREFIX,
+  LINEUP_MODAL_CUSTOM_PREFIX,
+} from './commands/lineup-post.command';
 import { RsvpButtonHandler } from './interactions/rsvp-button.handler';
 
 export interface DiscordChannelInfo {
@@ -62,6 +68,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     private readonly eventDeleteCommand: EventDeleteCommand,
     private readonly eventEditCommand: EventEditCommand,
     private readonly rsvpButtonHandler: RsvpButtonHandler,
+    private readonly lineupPostCommand: LineupPostCommand,
   ) {
     this.client = new Client({
       intents: [
@@ -151,6 +158,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             } else if (subcommand === 'delete') {
               await this.eventDeleteCommand.execute(interaction);
             }
+          } else if (interaction.commandName === 'lineup_post') {
+            await this.lineupPostCommand.execute(interaction);
           }
         } else if (interaction.isAutocomplete()) {
           if (interaction.commandName === 'event') {
@@ -158,6 +167,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             if (subcommand === 'delete') {
               await this.eventDeleteCommand.handleAutocomplete(interaction);
             }
+          } else if (interaction.commandName === 'lineup_post') {
+            await this.lineupPostCommand.handleAutocomplete(interaction);
           }
         } else if (interaction.isModalSubmit()) {
           if (interaction.customId === EVENT_CREATE_MODAL_ID) {
@@ -165,10 +176,20 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
           } else if (interaction.customId.startsWith(EVENT_EDIT_MODAL_PREFIX)) {
             const eventId = interaction.customId.replace(EVENT_EDIT_MODAL_PREFIX, '');
             await this.eventEditCommand.handleModalSubmit(interaction, eventId);
+          } else if (interaction.customId.startsWith(LINEUP_MODAL_SETUP_PREFIX)) {
+            await this.lineupPostCommand.handleSetupModalSubmit(interaction);
+          } else if (interaction.customId.startsWith(LINEUP_MODAL_CUSTOM_PREFIX)) {
+            await this.lineupPostCommand.handleCustomNameModalSubmit(interaction);
+          }
+        } else if (interaction.isUserSelectMenu()) {
+          if (interaction.customId.startsWith('lineup:user:')) {
+            await this.lineupPostCommand.handleUserSelect(interaction);
           }
         } else if (interaction.isButton()) {
           if (interaction.customId.startsWith('rsvp:')) {
             await this.rsvpButtonHandler.handle(interaction);
+          } else if (interaction.customId.startsWith('lineup:')) {
+            await this.lineupPostCommand.handleButton(interaction);
           } else if (interaction.customId.startsWith('event:edit:')) {
             const eventId = interaction.customId.replace('event:edit:', '');
             await this.eventEditCommand.showModal(interaction, eventId);
@@ -312,6 +333,25 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       content: content && content.trim() ? content : undefined,
       embeds: [embed],
       components: components || [],
+    });
+  }
+
+  async sendImageMessageToChannel(
+    channelId: string,
+    imageBuffer: Buffer,
+    fileName: string,
+    content?: string,
+  ): Promise<Message> {
+    const channel = await this.client.channels.fetch(channelId).catch(() => null);
+    if (!channel || !('send' in channel)) {
+      throw new NotFoundException(`Text channel with ID "${channelId}" not found or cannot receive messages`);
+    }
+
+    const textChannel = channel as TextChannel;
+    const attachment = new AttachmentBuilder(imageBuffer, { name: fileName });
+    return textChannel.send({
+      content: content && content.trim() ? content : undefined,
+      files: [attachment],
     });
   }
 
