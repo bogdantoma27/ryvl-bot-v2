@@ -29,7 +29,7 @@ import { RosterPlayer } from '../../core/models';
             </span>
           </h1>
           <p class="text-xs sm:text-sm text-slate-400 mt-2 max-w-2xl">
-            Live player roster and competitive statistics pulled directly from the EA Sports Pro Clubs API for RYVL Esports.
+            Live player roster and competitive statistics pulled directly from the EA SPORTS FC 27 Pro Clubs API for RYVL Esports.
           </p>
         </div>
 

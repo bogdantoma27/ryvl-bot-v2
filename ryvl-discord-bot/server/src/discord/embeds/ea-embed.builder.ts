@@ -39,7 +39,7 @@ export function buildEaMatchEmbed(
     .setColor(color)
     .setDescription(`🎮 **${matchTypeLabel}** • Match ended <t:${timestampUnix}:R> (<t:${timestampUnix}:t>)`)
     .setFooter({
-      text: 'EA Sports FC Pro Clubs Match Tracker • RYVL',
+      text: 'EA SPORTS FC 27 Pro Clubs Match Tracker • RYVL',
     });
 
   if (opponent.crestUrl) {

@@ -13,7 +13,6 @@ import { isRyvlName, romanianMatchDate } from './presentation';
       @if(matches().length === 0) {
         <div class="public-empty" role="status">
           <p class="font-medium text-slate-200">{{ emptyMessage() }}</p>
-          <p class="mt-1 text-sm text-slate-400">This section updates when VPG publishes new information.</p>
         </div>
       } @else {
         <div class="space-y-3">

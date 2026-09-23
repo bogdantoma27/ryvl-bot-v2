@@ -51,14 +51,14 @@ export class EaPollerService implements OnModuleInit, OnModuleDestroy {
       );
     }, 90000);
 
-    this.logger.log('EA Sports Pro Clubs match poller initialized (90s interval).');
+    this.logger.log('EA SPORTS FC 27 Pro Clubs match poller initialized (90s interval).');
   }
 
   private stopPolling(): void {
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
-      this.logger.log('EA Sports Pro Clubs match poller stopped.');
+      this.logger.log('EA SPORTS FC 27 Pro Clubs match poller stopped.');
     }
   }
 

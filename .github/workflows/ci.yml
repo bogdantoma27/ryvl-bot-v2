@@ -99,3 +99,4 @@ jobs:
           node ryvl-discord-bot/web/test/browser-smoke.cjs
           node ryvl-discord-bot/web/test/ui-review-regressions.cjs
           node ryvl-discord-bot/web/test/admin-access.cjs
+          node ryvl-discord-bot/web/test/public-content-regressions.cjs

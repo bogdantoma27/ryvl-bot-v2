@@ -211,7 +211,7 @@ import { GuildStore } from '../../core/guild.store';
         @if (isLoadingMatches()) {
           <div class="py-16 text-center text-slate-400 space-y-3">
             <div class="w-8 h-8 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p class="text-xs font-medium">Fetching recent matches from EA Sports Pro Clubs servers...</p>
+            <p class="text-xs font-medium">Fetching recent matches from EA SPORTS FC 27 Pro Clubs servers...</p>
           </div>
         } @else if (matches().length === 0) {
           <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-12 text-center text-slate-400 space-y-3">
@@ -521,7 +521,7 @@ import { GuildStore } from '../../core/guild.store';
                 <span>Track a Different Club</span>
               </h3>
               <p class="text-xs text-slate-400 mt-1">
-                Search for any EA Sports Pro Clubs team name across global leaderboards.
+                Search for any EA SPORTS FC 27 Pro Clubs team name across global leaderboards.
               </p>
             </div>
 

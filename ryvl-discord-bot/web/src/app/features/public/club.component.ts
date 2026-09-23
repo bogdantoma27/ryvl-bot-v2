@@ -1,15 +1,17 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   OnInit,
   computed,
   inject,
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { distinctUntilChanged, map } from 'rxjs';
 import { ApiService } from '../../core/api.service';
-import { GuildStore } from '../../core/guild.store';
 
 @Component({
   selector: 'app-public-club',
@@ -17,21 +19,21 @@ import { GuildStore } from '../../core/guild.store';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, RouterLink],
   template: `
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12 animate-fadeIn">
+    <div class="w-full min-w-0 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12 animate-fadeIn">
       <!-- Section Header -->
       <div class="border-b border-[#EAE905]/15 pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">
-            EA Sports FC 25 Pro Clubs
+            EA SPORTS FC 27 Pro Clubs
           </div>
-          <h1 class="text-4xl font-black text-white uppercase tracking-tight flex items-center gap-3">
+          <h1 class="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight flex flex-wrap items-center gap-3">
             <span>RYVL Club Tracker</span>
             <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[#EAE905]/15 text-[#EAE905] border border-[#EAE905]/30">
               11v11
             </span>
           </h1>
           <p class="text-xs sm:text-sm text-slate-400 mt-2 max-w-2xl">
-            Live telemetry, recent match clashes, and competitive campaign performance pulled directly from the EA Sports Pro Clubs API for RYVL Esports.
+            Live telemetry, recent match clashes, and competitive campaign performance pulled directly from the EA SPORTS FC 27 Pro Clubs API for RYVL Esports.
           </p>
         </div>
 
@@ -54,12 +56,20 @@ import { GuildStore } from '../../core/guild.store';
         </button>
       </div>
 
+      <!-- Distinguish outages from a valid empty match/member feed. -->
+      @if(errorMessage()) {
+        <div class="public-error" role="alert">
+          <p>{{ errorMessage() }}</p>
+          <button type="button" class="public-button mt-3" (click)="refreshData()" [disabled]="isLoadingConfig()">Try again</button>
+        </div>
+      }
+
       <!-- Club Showcase Hero Card -->
-      <div class="p-8 sm:p-10 rounded-3xl bg-gradient-to-br from-[#0c0c0e] via-[#111116] to-[#0c0c0e] border-2 border-[#EAE905]/30 relative overflow-hidden shadow-2xl">
+      <div class="p-5 sm:p-10 rounded-3xl bg-gradient-to-br from-[#0c0c0e] via-[#111116] to-[#0c0c0e] border-2 border-[#EAE905]/30 relative overflow-hidden shadow-2xl">
         <div class="absolute -right-20 -top-20 w-80 h-80 bg-[#EAE905]/10 rounded-full blur-3xl pointer-events-none"></div>
 
         <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8 relative z-10">
-          <div class="flex items-center gap-6">
+          <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 min-w-0 max-w-full">
             <!-- Club Crest -->
             <div class="w-24 h-24 rounded-2xl bg-black/80 border-2 border-[#EAE905]/40 p-2 flex items-center justify-center shrink-0 shadow-2xl">
               @if(clubCrestUrl()) {
@@ -78,11 +88,11 @@ import { GuildStore } from '../../core/guild.store';
                   {{ bestDivision() }}
                 </span>
                 <span class="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  Verified EA Bridge
+                  EA SPORTS FC 27
                 </span>
               </div>
 
-              <h2 class="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight">
+              <h2 class="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight break-words">
                 {{ clubName() }}
               </h2>
 
@@ -160,7 +170,7 @@ import { GuildStore } from '../../core/guild.store';
       </div>
 
       <!-- Navigation Tabs -->
-      <div class="flex items-center gap-2 border-b border-white/10 pb-2">
+      <div class="flex flex-wrap items-center gap-2 border-b border-white/10 pb-2">
         <button
           type="button"
           (click)="activeTab.set('matches')"
@@ -203,11 +213,13 @@ import { GuildStore } from '../../core/guild.store';
 
       <!-- Tab 1: Recent Matches Feed -->
       @if(activeTab() === 'matches') {
-        @if(isLoadingMatches()) {
+        @if(isLoadingConfig() || isLoadingMatches()) {
           <div class="py-20 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-4">
             <div class="w-10 h-10 border-2 border-[#EAE905] border-t-transparent rounded-full animate-spin mx-auto"></div>
             <p class="text-sm font-bold text-slate-300">Loading...</p>
           </div>
+        } @else if (configError() || matchesError()) {
+          <!-- The error and retry action are presented above, not as empty data. -->
         } @else if (matches().length === 0) {
           <div class="p-16 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-3">
             <div class="text-4xl">⚽</div>
@@ -388,11 +400,13 @@ import { GuildStore } from '../../core/guild.store';
 
       <!-- Tab 2: Squad Leaderboard & Member Statistics -->
       @if(activeTab() === 'roster') {
-        @if(isLoadingMembers()) {
+        @if(isLoadingConfig() || isLoadingMembers()) {
           <div class="py-20 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-4">
             <div class="w-10 h-10 border-2 border-[#EAE905] border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p class="text-sm font-bold text-slate-300">Loading club member leaderboard...</p>
+            <p class="text-sm font-bold text-slate-300">Loading...</p>
           </div>
+        } @else if (configError() || membersError()) {
+          <!-- A failed member request must not be described as no member records. -->
         } @else if (members().length === 0) {
           <div class="p-16 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-3">
             <div class="text-4xl">👥</div>
@@ -457,7 +471,7 @@ import { GuildStore } from '../../core/guild.store';
             <div class="text-xs font-mono text-[#EAE905] uppercase tracking-wider">Win Efficiency</div>
             <div class="text-4xl font-black text-white">{{ winRate() }}%</div>
             <p class="text-xs text-slate-400 leading-relaxed">
-              Calculated across {{ totalMatches() }} competitive 11v11 fixtures recorded on EA Sports FC Pro Clubs.
+              Calculated across {{ totalMatches() }} competitive 11v11 fixtures recorded on EA SPORTS FC 27 Pro Clubs.
             </p>
             <div class="h-2 w-full bg-white/10 rounded-full overflow-hidden">
               <div class="h-full bg-[#EAE905]" [style.width.%]="winRate()"></div>
@@ -486,7 +500,15 @@ import { GuildStore } from '../../core/guild.store';
 })
 export class PublicClubComponent implements OnInit {
   private readonly api = inject(ApiService);
-  readonly guildStore = inject(GuildStore);
+  private readonly route = inject(ActivatedRoute);
+  private readonly destroy = inject(DestroyRef);
+  private requestVersion = 0;
+  private disposed = false;
+  private targetGuildId = 'default';
+  readonly configError = signal<string | null>(null);
+  readonly matchesError = signal<string | null>(null);
+  readonly membersError = signal<string | null>(null);
+  readonly errorMessage = computed(() => this.configError() || this.matchesError() || this.membersError());
 
   readonly defaultCrest =
     'https://media.contentapi.ea.com/content/dam/ea/fc/common/global/tertiary-logo.svg';
@@ -505,7 +527,7 @@ export class PublicClubComponent implements OnInit {
 
   // Computed properties
   readonly clubName = computed(() => this.config()?.clubName || 'RYVL Esports');
-  readonly clubId = computed(() => this.config()?.clubId || '128199');
+  readonly clubId = computed(() => this.config()?.clubId || '—');
   readonly platform = computed(() => this.config()?.platform || 'common-gen5');
 
   readonly platformLabel = computed(() => {
@@ -518,7 +540,8 @@ export class PublicClubComponent implements OnInit {
     const info = this.clubInfo();
     const id = this.clubId();
     const clubData = info?.[id] || info || {};
-    const identifier = clubData.teamId || clubData.customKit?.crestAssetId || '22';
+    const identifier = clubData.teamId || clubData.customKit?.crestAssetId;
+    if (!identifier) return null;
     return `https://eafc24.content.easports.com/fifa/fltOnlineAssets/24B23FDE-7835-41C2-87A2-F453DFDB2E82/2024/fcweb/crests/256x256/l${identifier}.png`;
   });
 
@@ -550,13 +573,13 @@ export class PublicClubComponent implements OnInit {
   readonly skillRating = computed(() => {
     const s = this.overallStats();
     const data = Array.isArray(s) && s.length > 0 ? s[0] : s;
-    return data?.skillRating || '1689';
+    return data?.skillRating ?? '—';
   });
 
   readonly bestDivision = computed(() => {
     const s = this.overallStats();
     const data = Array.isArray(s) && s.length > 0 ? s[0] : s;
-    return data?.bestDivision != null ? `Div ${data.bestDivision}` : 'Division 1';
+    return data?.bestDivision != null ? `Div ${data.bestDivision}` : '—';
   });
 
   readonly goals = computed(() => {
@@ -580,54 +603,80 @@ export class PublicClubComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    const gid = this.guildStore.activeGuildId() || 'default';
-    this.loadAllData(gid);
+    this.destroy.onDestroy(() => { this.disposed = true; this.requestVersion++; });
+    // Bot buttons include a guildId. Honour it without borrowing another club
+    // from a staff member's cached admin selection; ordinary visits use default.
+    this.route.queryParamMap.pipe(
+      map(params => {
+        const id = params.get('guildId');
+        return id && /^\d{17,20}$/.test(id) ? id : 'default';
+      }),
+      distinctUntilChanged(),
+      takeUntilDestroyed(this.destroy),
+    ).subscribe(guildId => { void this.loadAllData(guildId); });
+  }
+
+  private isCurrent(request: number): boolean {
+    return !this.disposed && request === this.requestVersion;
   }
 
   async loadAllData(guildId: string): Promise<void> {
+    const request = ++this.requestVersion;
+    if (this.targetGuildId !== guildId) {
+      // A new deep link must never briefly show the previous club's data.
+      this.config.set(null); this.clubInfo.set(null); this.overallStats.set(null);
+      this.matches.set([]); this.members.set([]); this.expandedMatchId.set(null);
+    }
+    this.targetGuildId = guildId;
+    this.configError.set(null); this.matchesError.set(null); this.membersError.set(null);
     this.isLoadingConfig.set(true);
+    this.isLoadingMatches.set(false); this.isLoadingMembers.set(false);
     try {
-      const configRes = await this.api.getEaConfig(guildId);
-      this.config.set(configRes.config);
-      this.clubInfo.set(configRes.clubInfo);
-      this.overallStats.set(configRes.overallStats);
-
-      await Promise.all([this.loadMatches(guildId), this.loadMembers(guildId)]);
-    } catch (err: any) {
-      console.warn('Error loading public EA club telemetry:', err);
+      const data = await this.api.getEaConfig(guildId);
+      if (!this.isCurrent(request)) return;
+      if (!data?.config?.clubId) throw new Error('Missing club configuration');
+      this.config.set(data.config); this.clubInfo.set(data.clubInfo); this.overallStats.set(data.overallStats);
+      await Promise.all([this.loadMatches(guildId, request), this.loadMembers(guildId, request)]);
+    } catch {
+      if (this.isCurrent(request)) this.configError.set('Club details could not be loaded. Please try again.');
     } finally {
-      this.isLoadingConfig.set(false);
+      if (this.isCurrent(request)) this.isLoadingConfig.set(false);
     }
   }
 
-  async loadMatches(guildId: string): Promise<void> {
+  private async loadMatches(guildId: string, request: number): Promise<void> {
     this.isLoadingMatches.set(true);
     try {
       const list = await this.api.getEaMatches(guildId, 15);
-      this.matches.set(list || []);
-    } catch (err: any) {
-      console.warn('Failed to load EA matches:', err);
+      if (!this.isCurrent(request)) return;
+      if (!Array.isArray(list)) throw new Error('Invalid match response');
+      this.matches.set(list);
+    } catch {
+      if (this.isCurrent(request)) this.matchesError.set('Recent matches could not be loaded. Please try again.');
     } finally {
-      this.isLoadingMatches.set(false);
+      if (this.isCurrent(request)) this.isLoadingMatches.set(false);
     }
   }
 
-  async loadMembers(guildId: string): Promise<void> {
+  private async loadMembers(guildId: string, request: number): Promise<void> {
     this.isLoadingMembers.set(true);
     try {
-      const res = await this.api.getEaMembers(guildId);
-      const membersList = res?.members || (Array.isArray(res) ? res : []);
-      this.members.set(membersList);
-    } catch (err: any) {
-      console.warn('Failed to load EA members:', err);
+      const data = await this.api.getEaMembers(guildId);
+      if (!this.isCurrent(request)) return;
+      const list = data?.members ?? data;
+      if (!Array.isArray(list)) throw new Error('Invalid member response');
+      this.members.set(list);
+    } catch {
+      if (this.isCurrent(request)) this.membersError.set('Club member statistics could not be loaded. Please try again.');
     } finally {
-      this.isLoadingMembers.set(false);
+      if (this.isCurrent(request)) this.isLoadingMembers.set(false);
     }
   }
 
   refreshData(): void {
-    const gid = this.guildStore.activeGuildId() || 'default';
-    this.loadAllData(gid);
+    // Avoid overlapping manual refreshes. Version checks above also protect
+    // against late replies when Angular reuses the route for a new guildId.
+    if (!this.isLoadingConfig() && !this.disposed) void this.loadAllData(this.targetGuildId);
   }
 
   toggleExpandMatch(matchId: string): void {

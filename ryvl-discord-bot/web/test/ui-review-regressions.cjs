@@ -131,7 +131,9 @@ const server = http.createServer((req, res) => {
       await loadingPage.route('**/api/**', async route => {
         const pathname = new URL(route.request().url()).pathname;
         if (pathname.includes('matches')) { await gate; return route.fulfill({ json: [] }).catch(() => {}); }
-        if (pathname.includes('config')) return route.fulfill({ json: { config: { clubId: '128199', clubName: 'RYVL Esports' }, clubInfo: {}, overallStats: {} } });
+        // Public visits use the default endpoint; both config routes must return a valid contract.
+        if (pathname.includes('config') || pathname === '/api/ea/default') return route.fulfill({ json: { config: { clubId: '128199', clubName: 'RYVL Esports' }, clubInfo: {}, overallStats: {} } });
+        if (pathname.includes('members')) return route.fulfill({ json: { members: [] } });
         return route.fulfill({ json: {} });
       });
       try {
