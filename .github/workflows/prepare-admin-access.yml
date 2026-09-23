@@ -1,0 +1,50 @@
+name: Reproduce and verify admin access
+on:
+  push:
+    branches: [fix/admin-access]
+permissions:
+  contents: write
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          check-latest: true
+      - name: Build unchanged baseline and prepare browser runtime
+        run: |
+          (cd ryvl-discord-bot/server && npm ci && npm run build)
+          (cd ryvl-discord-bot/web && npm ci && npm run build)
+          npm install --prefix "$RUNNER_TEMP/ryvl-browser" --no-save @playwright/test@1.56.1
+      - name: Reproduce guest admin and session failures
+        id: web_red
+        continue-on-error: true
+        run: PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules" node ryvl-discord-bot/web/test/admin-access.cjs
+      - name: Reproduce wrong OAuth return destination
+        id: oauth_red
+        continue-on-error: true
+        run: node --test ryvl-discord-bot/server/test/auth-callback.test.cjs
+      - name: Apply focused correction only after reproducing both failures
+        if: hashFiles('.maintenance/fix_admin_access.py') != ''
+        run: |
+          test '${{ steps.web_red.outcome }}' = failure
+          test '${{ steps.oauth_red.outcome }}' = failure
+          python3 .maintenance/fix_admin_access.py
+          (cd ryvl-discord-bot/server && npm test)
+          (cd ryvl-discord-bot/web && npm run build)
+          export PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules"
+          node ryvl-discord-bot/web/test/admin-access.cjs
+          node ryvl-discord-bot/web/test/browser-smoke.cjs
+          node ryvl-discord-bot/web/test/ui-review-regressions.cjs
+      - name: Commit tested correction to temporary branch only
+        if: hashFiles('.maintenance/fix_admin_access.py') != ''
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ryvl-discord-bot/web/src/app/app.ts ryvl-discord-bot/web/src/app/app.routes.ts ryvl-discord-bot/web/src/app/features/auth/admin-login.component.ts ryvl-discord-bot/server/src/auth/auth.controller.ts .github/workflows/ci.yml
+          git diff --cached --check
+          git commit -m 'fix(auth): restore admin sign-in routing and OAuth return'
+          git push origin HEAD:fix/admin-access
