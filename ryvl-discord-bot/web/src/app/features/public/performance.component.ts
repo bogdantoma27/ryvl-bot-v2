@@ -1,456 +1,105 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  OnInit,
-  computed,
-  inject,
-  signal,
-} from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/api.service';
-import {
-  RyvlPerformanceResponse,
-  RyvlPerformanceStats,
-  RyvlCompetition,
-  VpgMatchItem,
-} from '../../core/models';
-
+import { RyvlPerformanceResponse } from '../../core/models';
+import { MatchesPanelComponent } from './matches-panel.component';
+import { StandingsPanelComponent } from './standings-panel.component';
+type PerformanceTab = 'overview' | 'results' | 'fixtures' | 'standings';
 @Component({
-  selector: 'app-public-performance',
-  standalone: true,
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, RouterLink],
+  selector: 'app-public-performance', standalone: true, changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [MatchesPanelComponent, StandingsPanelComponent],
   template: `
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
-      <!-- Section Header -->
-      <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-[#EAE905]/15 pb-6">
+    <div class="public-page space-y-8">
+      <header class="flex flex-col lg:flex-row lg:items-end justify-between gap-5 border-b border-white/10 pb-6">
         <div>
-          <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">Squad Telemetry & Analytics</div>
-          <h1 class="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight flex items-center gap-3">
-            <span>RYVL Team Performance</span>
-            <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[#EAE905]/15 text-[#EAE905] border border-[#EAE905]/30">
-              11v11 PRO
-            </span>
-          </h1>
-          <p class="text-xs sm:text-sm text-slate-400 mt-2 max-w-2xl leading-relaxed">
-            Live match analytics, form progression, and competitive outcomes for RYVL Esports across official tournaments.
-          </p>
+          <p class="public-eyebrow">RYVL Esports</p>
+          <h1 class="public-title">Team performance</h1>
+          <p class="public-intro">Results, fixtures and league progress from our VPG competitions.</p>
         </div>
-
-        <!-- Competition Filter Selector -->
-        <div class="flex flex-wrap items-center gap-2">
-          @for (comp of competitions(); track comp.slug) {
-            <button
-              type="button"
-              (click)="selectCompetition(comp.slug)"
-              class="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer flex items-center gap-2"
-              [ngClass]="selectedCompSlug() === comp.slug ? 'bg-[#EAE905] !text-black shadow-lg shadow-[#EAE905]/20 font-black' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
-            >
-              <span [class.!text-black]="selectedCompSlug() === comp.slug">{{ comp.name }}</span>
-              @if (!comp.active) {
-                <span
-                  class="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold"
-                  [ngClass]="selectedCompSlug() === comp.slug ? 'bg-black/20 !text-black border border-black/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'"
-                >
-                  TBA
-                </span>
-              }
-            </button>
-          }
-        </div>
-      </div>
-
-      <!-- Navigation Sub-Tabs: Performance & Detailed Feeds -->
-      <div class="flex flex-wrap items-center gap-2 border-b border-white/10 pb-4">
-        <span class="px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-[#EAE905] !text-black shadow-md shadow-[#EAE905]/15 flex items-center gap-1.5 cursor-default">
-          <span>📊</span>
-          <span class="!text-black">RYVL Telemetry</span>
-        </span>
-        <a
-          routerLink="/results"
-          class="px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#121214] text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition flex items-center gap-1.5 cursor-pointer"
-        >
-          <span>📋</span>
-          <span>Match Results</span>
-        </a>
-        <a
-          routerLink="/fixtures"
-          class="px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#121214] text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition flex items-center gap-1.5 cursor-pointer"
-        >
-          <span>📅</span>
-          <span>Fixtures Schedule</span>
-        </a>
-        <a
-          routerLink="/standings"
-          class="px-3.5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider bg-[#121214] text-slate-300 hover:text-white hover:bg-white/5 border border-white/10 transition flex items-center gap-1.5 cursor-pointer"
-        >
-          <span>🏆</span>
-          <span>League Table & Standings</span>
-        </a>
-      </div>
-
-      @if (isLoading()) {
-        <div class="p-16 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-4">
-          <div class="w-10 h-10 border-2 border-[#EAE905] border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p class="text-sm font-bold text-slate-300">Retrieving RYVL performance metrics...</p>
-        </div>
-      } @else if (error()) {
-        <div class="p-12 rounded-3xl bg-rose-950/30 border border-rose-600/40 text-center space-y-3">
-          <div class="text-3xl">⚠️</div>
-          <h3 class="text-base font-bold text-rose-300">Unable to load telemetry</h3>
-          <p class="text-xs text-slate-400">{{ error() }}</p>
-          <button
-            type="button"
-            (click)="loadPerformance()"
-            class="btn-yellow px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer"
-          >
-            Retry Telemetry
+        <button type="button" class="public-button" (click)="loadPerformance()" [disabled]="isLoading()">{{ isLoading() ? 'Refreshing…' : 'Refresh' }}</button>
+      </header>
+      <div class="flex flex-wrap gap-2" aria-label="Select a competition">
+        @for (comp of competitions(); track comp.slug) {
+          <button type="button" class="public-button" [class.public-button-active]="selectedCompSlug() === comp.slug" [attr.aria-pressed]="selectedCompSlug() === comp.slug" [disabled]="!comp.active" (click)="selectCompetition(comp.slug)">
+            {{ comp.name }} @if(!comp.active) { <span class="ml-2 text-xs opacity-70">Coming soon</span> }
           </button>
-        </div>
-      } @else {
-        <!-- Main Performance Dashboard -->
-        <div class="space-y-12">
-          <!-- Hero Metrics Cards Grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <!-- Win Rate Card -->
-            <div class="p-6 rounded-3xl bg-gradient-to-br from-[#0c0c0e] via-[#111116] to-[#0c0c0e] border border-[#EAE905]/30 shadow-xl relative overflow-hidden group">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-mono text-slate-400 uppercase tracking-widest">Victory Rate</span>
-                <span class="text-xl">🏆</span>
-              </div>
-              <div class="mt-4 flex items-baseline gap-2">
-                <span class="text-4xl sm:text-5xl font-black text-[#EAE905] tracking-tight">
-                  {{ stats()?.winRate || 0 }}%
-                </span>
-                <span class="text-xs text-slate-400 font-semibold">win ratio</span>
-              </div>
-              <div class="mt-3 w-full bg-white/10 rounded-full h-2 overflow-hidden">
-                <div
-                  class="bg-[#EAE905] h-full rounded-full transition-all duration-700"
-                  [style.width.%]="stats()?.winRate || 0"
-                ></div>
-              </div>
-              <div class="text-[11px] text-slate-400 mt-2 font-mono">
-                {{ stats()?.wins || 0 }} Wins in {{ stats()?.played || 0 }} Matches
-              </div>
-            </div>
-
-            <!-- Campaign Record -->
-            <div class="p-6 rounded-3xl bg-[#0c0c0e] border border-white/10 shadow-xl relative overflow-hidden hover:border-[#EAE905]/40 transition">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-mono text-slate-400 uppercase tracking-widest">Match Record</span>
-                <span class="text-xl">⚔️</span>
-              </div>
-              <div class="mt-4 flex items-baseline gap-3">
-                <div class="text-center">
-                  <span class="text-2xl font-black text-emerald-400">{{ stats()?.wins || 0 }}</span>
-                  <div class="text-[10px] text-slate-400 uppercase font-mono">W</div>
-                </div>
-                <span class="text-slate-600 font-bold">-</span>
-                <div class="text-center">
-                  <span class="text-2xl font-black text-slate-300">{{ stats()?.draws || 0 }}</span>
-                  <div class="text-[10px] text-slate-400 uppercase font-mono">D</div>
-                </div>
-                <span class="text-slate-600 font-bold">-</span>
-                <div class="text-center">
-                  <span class="text-2xl font-black text-rose-400">{{ stats()?.losses || 0 }}</span>
-                  <div class="text-[10px] text-slate-400 uppercase font-mono">L</div>
-                </div>
-              </div>
-              <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs">
-                <span class="text-slate-400">Total Points</span>
-                <span class="font-black text-white">{{ stats()?.points || 0 }} PTS</span>
-              </div>
-            </div>
-
-            <!-- Goal Dynamics -->
-            <div class="p-6 rounded-3xl bg-[#0c0c0e] border border-white/10 shadow-xl relative overflow-hidden hover:border-[#EAE905]/40 transition">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-mono text-slate-400 uppercase tracking-widest">Goal Dynamics</span>
-                <span class="text-xl">⚽</span>
-              </div>
-              <div class="mt-4 flex items-baseline gap-2">
-                <span class="text-4xl font-black text-white">
-                  {{ stats()?.goalsFor || 0 }}
-                </span>
-                <span class="text-xs text-emerald-400 font-mono">
-                  ({{ stats()?.goalsPerMatch || 0 }}/game)
-                </span>
-              </div>
-              <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs">
-                <span class="text-slate-400">Goal Difference</span>
-                <span
-                  class="font-black font-mono"
-                  [ngClass]="(stats()?.goalDifference || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'"
-                >
-                  {{ (stats()?.goalDifference || 0) > 0 ? '+' : '' }}{{ stats()?.goalDifference || 0 }}
-                </span>
-              </div>
-            </div>
-
-            <!-- Defensive Discipline -->
-            <div class="p-6 rounded-3xl bg-[#0c0c0e] border border-white/10 shadow-xl relative overflow-hidden hover:border-[#EAE905]/40 transition">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-mono text-slate-400 uppercase tracking-widest">Defensive Wall</span>
-                <span class="text-xl">🛡️</span>
-              </div>
-              <div class="mt-4 flex items-baseline gap-2">
-                <span class="text-4xl font-black text-white">
-                  {{ stats()?.cleanSheets || 0 }}
-                </span>
-                <span class="text-xs text-slate-400 font-mono">clean sheets</span>
-              </div>
-              <div class="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs">
-                <span class="text-slate-400">Goals Conceded</span>
-                <span class="font-black text-rose-400 font-mono">{{ stats()?.goalsAgainst || 0 }} ({{ stats()?.concededPerMatch || 0 }}/game)</span>
-              </div>
-            </div>
+        }
+      </div>
+      <div class="public-tabs" role="tablist" aria-label="Performance sections">
+        @for (tab of tabs; track tab.id; let index = $index) {
+          <button type="button" role="tab" class="public-tab" [id]="'performance-tab-' + tab.id" [attr.aria-selected]="selectedTab() === tab.id" [attr.aria-controls]="'performance-panel-' + tab.id" [attr.tabindex]="selectedTab() === tab.id ? 0 : -1" [class.public-tab-active]="selectedTab() === tab.id" (click)="selectedTab.set(tab.id)" (keydown)="onTabKey($event, index)">{{ tab.label }}</button>
+        }
+      </div>
+      <section role="tabpanel" tabindex="0" [id]="'performance-panel-' + selectedTab()" [attr.aria-labelledby]="'performance-tab-' + selectedTab()" [attr.aria-busy]="isLoading()" class="space-y-6">
+        @if(isLoading()) {
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" role="status" aria-label="Loading performance">
+            @for (item of [1,2,3,4]; track item) { <div class="public-card h-36 animate-pulse bg-white/5"></div> }
           </div>
-
-          <!-- Form Guide & Venue Breakdown -->
-          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <!-- Form Guide Banner -->
-            <div class="lg:col-span-2 p-6 sm:p-8 rounded-3xl bg-[#0c0c0e] border border-white/10 space-y-4">
-              <div class="flex items-center justify-between">
-                <div class="text-xs font-mono text-[#EAE905] uppercase tracking-wider">Form Guide</div>
-                <div class="text-xs text-slate-400">Most Recent 5 Clashes</div>
-              </div>
-
-              @if ((stats()?.currentStreak || []).length === 0) {
-                <div class="py-6 text-center text-xs text-slate-500 font-mono">
-                  No completed matches recorded yet for this championship.
-                </div>
-              } @else {
-                <div class="flex items-center gap-3">
-                  @for (s of stats()?.currentStreak || []; track $index) {
-                    <div
-                      class="w-11 h-11 rounded-2xl flex items-center justify-center font-black font-mono text-sm shadow-md"
-                      [ngClass]="{
-                        'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40': s === 'W',
-                        'bg-rose-500/20 text-rose-400 border border-rose-500/40': s === 'L',
-                        'bg-slate-500/20 text-slate-300 border border-slate-500/40': s === 'D'
-                      }"
-                    >
-                      {{ s }}
-                    </div>
-                  }
-                  <span class="text-xs text-slate-400 ml-2">Recent &rarr; Oldest</span>
-                </div>
-              }
-
-              <!-- League Position Status -->
-              <div class="pt-4 border-t border-white/10 flex items-center justify-between text-xs">
-                <div class="text-slate-400">
-                  Current Competition: <strong class="text-white">{{ stats()?.competitionName }}</strong>
-                </div>
-                @if (stats()?.standingsPosition) {
-                  <div class="text-[#EAE905] font-bold">
-                    Ranked #{{ stats()?.standingsPosition }} in {{ stats()?.competitionName || 'Active Competition' }}
-                  </div>
-                }
-              </div>
+        } @else if(error()) {
+          <div class="public-error" role="alert"><h2 class="font-semibold text-white">We could not load the competition</h2><p class="mt-2 text-sm">{{ error() }}</p><button type="button" class="public-button mt-4" (click)="loadPerformance()">Try again</button></div>
+        } @else if(performanceData(); as data) {
+          @if(data.warnings?.length) { <div class="public-notice" role="status">@for (warning of data.warnings || []; track warning) { <p>{{ warning }}</p> }</div> }
+          @if(selectedTab() === 'overview') {
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="public-card p-5 sm:p-6"><p class="public-metric-label">Win rate</p><p class="public-metric-value ryvl-highlight">{{ statsUnavailable() ? '—' : data.stats.winRate + '%' }}</p><p class="mt-2 text-xs text-slate-400">Across {{ data.stats.played }} completed matches</p></div>
+              <div class="public-card p-5 sm:p-6"><p class="public-metric-label">Match record</p><p class="public-metric-value text-xl sm:text-2xl">{{ statsUnavailable() ? '—' : data.stats.wins + ' / ' + data.stats.draws + ' / ' + data.stats.losses }}</p><p class="mt-2 text-xs text-slate-400">Wins / draws / losses</p></div>
+              <div class="public-card p-5 sm:p-6"><p class="public-metric-label">Goals scored</p><p class="public-metric-value">{{ statsUnavailable() ? '—' : data.stats.goalsFor }}</p><p class="mt-2 text-xs text-slate-400">{{ data.stats.goalsPerMatch }} per match</p></div>
+              <div class="public-card p-5 sm:p-6"><p class="public-metric-label">League position</p><p class="public-metric-value ryvl-highlight">{{ data.stats.standingsPosition ? '#' + data.stats.standingsPosition : '—' }}</p><p class="mt-2 text-xs text-slate-400">{{ data.stats.competitionName }}</p></div>
             </div>
-
-            <!-- Home vs Away Snapshot -->
-            <div class="p-6 sm:p-8 rounded-3xl bg-[#0c0c0e] border border-white/10 space-y-4">
-              <div class="text-xs font-mono text-[#EAE905] uppercase tracking-wider">Venue Analysis</div>
-
-              <div class="space-y-3">
-                <div class="p-3 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-between text-xs">
-                  <div class="flex items-center gap-2">
-                    <span>🏠</span>
-                    <span class="font-bold text-white">Home Record</span>
-                  </div>
-                  <span class="font-mono text-emerald-400 font-bold">
-                    {{ stats()?.homeRecord?.wins || 0 }}W - {{ stats()?.homeRecord?.draws || 0 }}D - {{ stats()?.homeRecord?.losses || 0 }}L
-                  </span>
-                </div>
-
-                <div class="p-3 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-between text-xs">
-                  <div class="flex items-center gap-2">
-                    <span>✈️</span>
-                    <span class="font-bold text-white">Away Record</span>
-                  </div>
-                  <span class="font-mono text-emerald-400 font-bold">
-                    {{ stats()?.awayRecord?.wins || 0 }}W - {{ stats()?.awayRecord?.draws || 0 }}D - {{ stats()?.awayRecord?.losses || 0 }}L
-                  </span>
-                </div>
-              </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <section class="public-card p-6 space-y-4"><h2 class="font-semibold text-white">Recent form</h2><div class="flex flex-wrap items-center gap-2">@for (result of data.stats.currentStreak; track $index) { <span class="rounded-lg border border-white/10 bg-white/5 px-3 py-2 font-semibold" [class.text-emerald-400]="result === 'W'" [class.text-rose-400]="result === 'L'" [attr.aria-label]="result === 'W' ? 'Win' : result === 'L' ? 'Loss' : 'Draw'">{{ result }}</span> } @if(!data.stats.currentStreak.length) { <span class="text-sm text-slate-400">No completed matches yet.</span> }</div><p class="text-xs text-slate-400">Newest result first</p></section>
+              <section class="public-card p-6 space-y-4"><h2 class="font-semibold text-white">Home and away</h2><dl class="grid grid-cols-2 gap-4 text-sm"><div><dt class="text-slate-400 mb-2">Home</dt><dd>{{ data.stats.homeRecord.wins }} W · {{ data.stats.homeRecord.draws }} D · {{ data.stats.homeRecord.losses }} L</dd></div><div><dt class="text-slate-400 mb-2">Away</dt><dd>{{ data.stats.awayRecord.wins }} W · {{ data.stats.awayRecord.draws }} D · {{ data.stats.awayRecord.losses }} L</dd></div></dl><p class="text-xs text-slate-400">{{ data.stats.cleanSheets }} clean sheets · {{ data.stats.goalsAgainst }} goals conceded</p></section>
             </div>
-          </div>
-
-          <!-- Upcoming RYVL Clashes -->
-          <div class="space-y-6">
-            <div class="flex items-center justify-between border-b border-[#EAE905]/15 pb-4">
-              <div>
-                <h2 class="text-2xl font-black text-white uppercase tracking-tight">Upcoming RYVL Matches</h2>
-                <p class="text-xs text-slate-400 mt-0.5">Next scheduled fixtures for RYVL Esports</p>
-              </div>
-              <a
-                routerLink="/fixtures"
-                class="text-xs font-bold text-[#EAE905] hover:underline"
-              >
-                Full Calendar &rarr;
-              </a>
-            </div>
-
-            @if (upcoming().length === 0) {
-              <div class="p-8 rounded-2xl bg-[#0c0c0e] border border-white/10 text-center text-xs text-slate-400">
-                No upcoming fixtures scheduled in the immediate calendar. Check back on match days.
-              </div>
-            } @else {
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                @for (m of upcoming(); track m.id) {
-                  <div class="p-5 rounded-2xl bg-[#0c0c0e] border border-white/10 hover:border-[#EAE905]/40 transition space-y-3">
-                    <div class="flex items-center justify-between text-[11px]">
-                      <span class="px-2 py-0.5 rounded bg-[#EAE905]/10 text-[#EAE905] font-mono font-bold">
-                        MATCHDAY {{ m.matchDay }}
-                      </span>
-                      <span class="text-slate-400">{{ m.dateFormattedEn || m.dateFormattedRo }}</span>
-                    </div>
-
-                    <div class="flex items-center justify-between gap-4 pt-1">
-                      <div class="flex items-center gap-2 flex-1 min-w-0">
-                        @if (m.homeLogoUrl) {
-                          <img [src]="m.homeLogoUrl" alt="" class="w-8 h-8 object-contain shrink-0" />
-                        }
-                        <span class="text-sm font-bold text-white truncate" [class.text-[#EAE905]]="/ryvl|rival/i.test(m.homeName)">
-                          {{ m.homeName }}
-                        </span>
-                      </div>
-
-                      <div class="text-xs font-mono font-black text-slate-500 px-2">VS</div>
-
-                      <div class="flex items-center justify-end gap-2 flex-1 min-w-0 text-right">
-                        <span class="text-sm font-bold text-white truncate" [class.text-[#EAE905]]="/ryvl|rival/i.test(m.awayName)">
-                          {{ m.awayName }}
-                        </span>
-                        @if (m.awayLogoUrl) {
-                          <img [src]="m.awayLogoUrl" alt="" class="w-8 h-8 object-contain shrink-0" />
-                        }
-                      </div>
-                    </div>
-                  </div>
-                }
-              </div>
-            }
-          </div>
-
-          <!-- Recent RYVL Results Feed -->
-          <div class="space-y-6">
-            <div class="flex items-center justify-between border-b border-[#EAE905]/15 pb-4">
-              <div>
-                <h2 class="text-2xl font-black text-white uppercase tracking-tight">Recent RYVL Match Results</h2>
-                <p class="text-xs text-slate-400 mt-0.5">Completed clashes and scorelines</p>
-              </div>
-              <a
-                routerLink="/results"
-                class="text-xs font-bold text-[#EAE905] hover:underline"
-              >
-                All Results &rarr;
-              </a>
-            </div>
-
-            @if (recent().length === 0) {
-              <div class="p-8 rounded-2xl bg-[#0c0c0e] border border-white/10 text-center text-xs text-slate-400">
-                No completed results found for this competition yet.
-              </div>
-            } @else {
-              <div class="space-y-3">
-                @for (m of recent(); track m.id) {
-                  @let isHome = /ryvl|rival/i.test(m.homeName);
-                  @let ryvlScore = isHome ? (m.homeScore ?? 0) : (m.awayScore ?? 0);
-                  @let oppScore = isHome ? (m.awayScore ?? 0) : (m.homeScore ?? 0);
-                  @let outcome = ryvlScore > oppScore ? 'WIN' : ryvlScore < oppScore ? 'LOSS' : 'DRAW';
-
-                  <div class="p-5 rounded-2xl bg-[#0c0c0e] border border-white/10 hover:border-[#EAE905]/40 transition flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div class="flex items-center gap-3">
-                      <span
-                        class="px-2.5 py-1 rounded-md text-[11px] font-mono font-bold uppercase tracking-wider"
-                        [ngClass]="{
-                          'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40': outcome === 'WIN',
-                          'bg-rose-500/20 text-rose-400 border border-rose-500/40': outcome === 'LOSS',
-                          'bg-slate-500/20 text-slate-300 border border-slate-500/40': outcome === 'DRAW'
-                        }"
-                      >
-                        {{ outcome }}
-                      </span>
-                      <span class="text-xs font-mono text-slate-400">MD {{ m.matchDay }}</span>
-                      <span class="text-xs text-slate-500">•</span>
-                      <span class="text-xs text-slate-400">{{ m.dateFormattedEn || m.dateFormattedRo }}</span>
-                    </div>
-
-                    <div class="flex items-center gap-4 text-center">
-                      <div class="flex items-center gap-2 justify-end min-w-[120px]">
-                        <span class="text-sm font-bold text-white truncate" [class.text-[#EAE905]]="/ryvl|rival/i.test(m.homeName)">
-                          {{ m.homeName }}
-                        </span>
-                        @if (m.homeLogoUrl) {
-                          <img [src]="m.homeLogoUrl" alt="" class="w-6 h-6 object-contain" />
-                        }
-                      </div>
-
-                      <div class="px-3 py-1 rounded-lg bg-black/80 font-mono font-black text-sm text-white border border-white/15">
-                        {{ m.homeScore ?? '-' }} : {{ m.awayScore ?? '-' }}
-                      </div>
-
-                      <div class="flex items-center gap-2 justify-start min-w-[120px]">
-                        @if (m.awayLogoUrl) {
-                          <img [src]="m.awayLogoUrl" alt="" class="w-6 h-6 object-contain" />
-                        }
-                        <span class="text-sm font-bold text-white truncate" [class.text-[#EAE905]]="/ryvl|rival/i.test(m.awayName)">
-                          {{ m.awayName }}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                }
-              </div>
-            }
-          </div>
-        </div>
-      }
+            <app-matches-panel [matches]="data.upcomingFixtures.slice(0, 4)" heading="Next RYVL fixtures" emptyMessage="No upcoming RYVL fixtures have been announced." />
+            <app-matches-panel [matches]="data.recentResults.slice(0, 4)" heading="Recent RYVL results" emptyMessage="No RYVL results have been published yet." />
+          } @else if(selectedTab() === 'results') {
+            <app-matches-panel [matches]="data.recentResults" heading="RYVL match results" emptyMessage="No completed RYVL matches in this competition yet." />
+          } @else if(selectedTab() === 'fixtures') {
+            <app-matches-panel [matches]="data.upcomingFixtures" heading="RYVL fixtures" emptyMessage="No upcoming RYVL fixtures in this competition yet." />
+          } @else {
+            <app-standings-panel [rows]="data.standings || []" />
+          }
+        }
+      </section>
     </div>
   `,
 })
 export class PerformanceComponent implements OnInit {
   private readonly api = inject(ApiService);
-
-  readonly isLoading = signal<boolean>(true);
+  private requestId = 0;
+  readonly isLoading = signal(true);
   readonly error = signal<string | null>(null);
-
   readonly performanceData = signal<RyvlPerformanceResponse | null>(null);
-  readonly selectedCompSlug = signal<string>('Superliga-Romania');
-
-  readonly stats = computed(() => this.performanceData()?.stats || null);
+  readonly selectedCompSlug = signal('Superliga-Romania');
+  readonly selectedTab = signal<PerformanceTab>('overview');
   readonly competitions = computed(() => this.performanceData()?.competitions || []);
-  readonly recent = computed(() => this.performanceData()?.recentResults || []);
-  readonly upcoming = computed(() => this.performanceData()?.upcomingFixtures || []);
-
-  ngOnInit(): void {
-    this.loadPerformance();
+  readonly statsUnavailable = computed(() => this.performanceData()?.warnings?.some(w => w.startsWith('Completed matches')) || false);
+  readonly tabs: readonly { id: PerformanceTab; label: string }[] = [
+    { id: 'overview', label: 'Overview' }, { id: 'results', label: 'Match Results' },
+    { id: 'fixtures', label: 'Fixtures' }, { id: 'standings', label: 'League Table' },
+  ];
+  ngOnInit(): void { void this.loadPerformance(); }
+  selectCompetition(slug: string): void { this.selectedCompSlug.set(slug); void this.loadPerformance(); }
+  onTabKey(event: KeyboardEvent, index: number): void {
+    let next: number;
+    if (event.key === 'ArrowRight') next = (index + 1) % this.tabs.length;
+    else if (event.key === 'ArrowLeft') next = (index + this.tabs.length - 1) % this.tabs.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = this.tabs.length - 1;
+    else return;
+    event.preventDefault();
+    this.selectedTab.set(this.tabs[next].id);
+    (event.currentTarget as HTMLElement | null)?.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
   }
-
-  selectCompetition(slug: string): void {
-    this.selectedCompSlug.set(slug);
-    this.loadPerformance(slug);
-  }
-
-  async loadPerformance(slug?: string): Promise<void> {
-    this.isLoading.set(true);
-    this.error.set(null);
+  async loadPerformance(): Promise<void> {
+    const request = ++this.requestId;
+    this.isLoading.set(true); this.error.set(null);
     try {
-      const data = await this.api.getRyvlPerformance(slug || this.selectedCompSlug());
-      this.performanceData.set(data);
-      if (data.activeCompetition) {
-        this.selectedCompSlug.set(data.activeCompetition);
-      }
-    } catch (err: any) {
-      console.error('Failed to load RYVL team performance:', err);
-      this.error.set(err.message || 'Error communicating with telemetry service.');
-    } finally {
-      this.isLoading.set(false);
-    }
+      const response = await this.api.getRyvlPerformance(this.selectedCompSlug());
+      if (request !== this.requestId) return;
+      this.performanceData.set(response);
+      this.selectedCompSlug.set(response.activeCompetition);
+    } catch {
+      if (request === this.requestId) this.error.set('The VPG data service is temporarily unavailable. Please try again.');
+    } finally { if (request === this.requestId) this.isLoading.set(false); }
   }
 }

@@ -66,7 +66,7 @@ import { ApiService } from '../../core/api.service';
             <p class="text-xs text-slate-400 mt-1">Our captaincy team reviews submissions within 24–48 hours.</p>
           </div>
 
-          @if (submitted()) {
+          @if(submitted()) {
             <div class="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3 animate-fadeIn">
               <div class="text-3xl">✅</div>
               <h3 class="text-lg font-bold text-emerald-300">Application Received!</h3>
@@ -195,7 +195,7 @@ import { ApiService } from '../../core/api.service';
                 ></textarea>
               </div>
 
-              @if (error()) {
+              @if(error()) {
                 <div class="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs">
                   {{ error() }}
                 </div>
@@ -208,7 +208,7 @@ import { ApiService } from '../../core/api.service';
                   [disabled]="isSubmitting()"
                   class="btn-yellow px-8 py-3.5 rounded-xl disabled:opacity-50 font-black text-xs uppercase tracking-wider shadow-lg shadow-[#EAE905]/15 transition transform hover:scale-105 cursor-pointer flex items-center gap-2"
                 >
-                  @if (isSubmitting()) {
+                  @if(isSubmitting()) {
                     <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
                     <span>Submitting Application...</span>
                   } @else {

@@ -16,9 +16,9 @@ import { VpgMatchItem } from '../../core/models';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, RouterLink],
   template: `
-    <div class="space-y-24 pb-20 overflow-hidden">
+    <div class="space-y-16 pb-12 overflow-hidden">
       <!-- Hero Section -->
-      <section class="relative min-h-[85vh] flex items-center justify-center border-b border-[#EAE905]/15 px-4 sm:px-6 lg:px-8">
+      <section class="relative min-h-[70vh] flex items-center justify-center border-b border-[#EAE905]/15 px-4 sm:px-6 lg:px-8">
         <!-- Hero Background Artwork with Obsidian Gradient Overlays -->
         <div class="absolute inset-0 z-0">
           <img
@@ -35,11 +35,7 @@ import { VpgMatchItem } from '../../core/models';
 
         <!-- Hero Content -->
         <div class="max-w-5xl mx-auto text-center relative z-10 space-y-8 pt-12">
-          <!-- Slogan Badge -->
-          <div class="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-[#EAE905]/10 border border-[#EAE905]/30 text-[#EAE905] text-xs font-mono font-bold tracking-widest uppercase shadow-lg shadow-[#EAE905]/5">
-            <span class="w-2 h-2 rounded-full bg-[#EAE905] animate-ping"></span>
-            <span>#WERYVL • VPG SUPERLIGA ROMÂNIA</span>
-          </div>
+
 
           <!-- Main Hero Headline -->
           <div class="space-y-2">
@@ -57,7 +53,7 @@ import { VpgMatchItem } from '../../core/models';
           <!-- Subtitle / Motto -->
           <p class="text-base sm:text-lg text-slate-400 font-medium max-w-2xl mx-auto leading-relaxed">
             <span class="text-white font-bold tracking-wide">DRIVEN. RELENTLESS. UNCOMPROMISING.</span><br />
-            Official competitive organization dominating EA FC 11v11 Pro Clubs and premier Romanian esports circuits.
+            EA SPORTS FC 11v11 Pro Clubs, competitive teamwork and a community that keeps improving.
           </p>
 
           <!-- Action Buttons -->
@@ -71,7 +67,7 @@ import { VpgMatchItem } from '../../core/models';
             </a>
 
             <a
-              routerLink="/live"
+              routerLink="/match-center"
               class="px-7 py-4 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-sm uppercase tracking-wider transition duration-200 backdrop-blur-sm flex items-center gap-2.5 cursor-pointer"
             >
               <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
@@ -91,41 +87,13 @@ import { VpgMatchItem } from '../../core/models';
         </div>
       </section>
 
-      <!-- Stats Bar Section -->
-      <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
-          <div class="p-6 rounded-2xl bg-[#0d0d0e] border border-white/10 shadow-lg relative overflow-hidden group hover:border-[#EAE905]/40 transition">
-            <div class="text-[11px] font-mono text-slate-400 uppercase tracking-widest">Division</div>
-            <div class="text-3xl sm:text-4xl font-black text-[#EAE905] mt-1">VPG TIER 1</div>
-            <div class="text-xs text-slate-400 mt-1">Virtual Pro Gaming</div>
-          </div>
-
-          <div class="p-6 rounded-2xl bg-[#0d0d0e] border border-white/10 shadow-lg relative overflow-hidden group hover:border-[#EAE905]/40 transition">
-            <div class="text-[11px] font-mono text-slate-400 uppercase tracking-widest">Rivalry Mode</div>
-            <div class="text-3xl sm:text-4xl font-black text-white mt-1">11v11</div>
-            <div class="text-xs text-slate-400 mt-1">Full Manual Competitive Squad</div>
-          </div>
-
-          <div class="p-6 rounded-2xl bg-[#0d0d0e] border border-white/10 shadow-lg relative overflow-hidden group hover:border-[#EAE905]/40 transition">
-            <div class="text-[11px] font-mono text-slate-400 uppercase tracking-widest">Match Nights</div>
-            <div class="text-3xl sm:text-4xl font-black text-[#EAE905] mt-1">MON / TUE / THU</div>
-            <div class="text-xs text-slate-400 mt-1">22:00 Bucharest Time</div>
-          </div>
-
-          <div class="p-6 rounded-2xl bg-[#0d0d0e] border border-white/10 shadow-lg relative overflow-hidden group hover:border-[#EAE905]/40 transition">
-            <div class="text-[11px] font-mono text-slate-400 uppercase tracking-widest">Organization</div>
-            <div class="text-3xl sm:text-4xl font-black text-white mt-1">RYVL</div>
-            <div class="text-xs text-slate-400 mt-1">Elite Esports Tier</div>
-          </div>
-        </div>
-      </section>
 
       <!-- Latest Matches Teaser (Live API Data) -->
       <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
         <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/10 pb-4">
           <div>
             <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest">Official VPG Feed</div>
-            <h2 class="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">Recent Match Results</h2>
+            <h2 class="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">Recent RYVL Results</h2>
           </div>
           <a routerLink="/results" class="text-xs font-bold text-[#EAE905] hover:underline flex items-center gap-1">
             <span>View All Match Results</span>
@@ -133,7 +101,7 @@ import { VpgMatchItem } from '../../core/models';
           </a>
         </div>
 
-        @if (isLoadingResults()) {
+        @if(isLoadingResults()) {
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             @for (i of [1,2,3]; track i) {
               <div class="h-32 rounded-2xl bg-white/5 animate-pulse border border-white/10"></div>
@@ -141,7 +109,7 @@ import { VpgMatchItem } from '../../core/models';
           </div>
         } @else if (recentMatches().length === 0) {
           <div class="p-8 rounded-2xl bg-[#0d0d0e] border border-white/10 text-center text-slate-400 text-sm">
-            No completed matches found for current Superliga season.
+            No completed RYVL matches have been published for this competition yet.
           </div>
         } @else {
           <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -155,10 +123,10 @@ import { VpgMatchItem } from '../../core/models';
                 <div class="flex items-center justify-between gap-3 pt-1">
                   <!-- Home Team -->
                   <div class="flex items-center gap-2 min-w-0 flex-1">
-                    @if (m.homeLogoUrl) {
+                    @if(m.homeLogoUrl) {
                       <img [src]="m.homeLogoUrl" alt="" class="w-7 h-7 object-contain shrink-0" />
                     }
-                    <span class="text-xs font-bold text-white truncate" [class.text-[#EAE905]]="/ryvl|rival/i.test(m.homeName)">
+                    <span class="text-xs font-bold text-white truncate" [class.text-[#EAE905]]="/^\s*ryvl(?:\s+esports)?\s*$/i.test(m.homeName)">
                       {{ m.homeName }}
                     </span>
                   </div>
@@ -170,10 +138,10 @@ import { VpgMatchItem } from '../../core/models';
 
                   <!-- Away Team -->
                   <div class="flex items-center justify-end gap-2 min-w-0 flex-1 text-right">
-                    <span class="text-xs font-bold text-white truncate" [class.text-[#EAE905]]="/ryvl|rival/i.test(m.awayName)">
+                    <span class="text-xs font-bold text-white truncate" [class.text-[#EAE905]]="/^\s*ryvl(?:\s+esports)?\s*$/i.test(m.awayName)">
                       {{ m.awayName }}
                     </span>
-                    @if (m.awayLogoUrl) {
+                    @if(m.awayLogoUrl) {
                       <img [src]="m.awayLogoUrl" alt="" class="w-7 h-7 object-contain shrink-0" />
                     }
                   </div>
@@ -273,8 +241,8 @@ export class HomeComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     try {
-      const res = await this.api.getSuperligaResults(undefined, 3);
-      this.recentMatches.set(res?.results || []);
+      const res = await this.api.getRyvlPerformance();
+      this.recentMatches.set((res?.recentResults || []).slice(0, 3));
     } catch (err) {
       console.warn('Could not load recent results for home hero:', err);
     } finally {

@@ -1105,3 +1105,63 @@ To test the bridge manually:
 cd ~/ryvl-bot-v2/ryvl-discord-bot/server
 .venv/bin/python src/ea/scripts/ea_bridge.py search common-gen5 "RYVL Esports"
 ```
+
+
+---
+
+## 26. VPG notifications, public website and current deployment safeguards
+
+The current feature overview and feed/channel mapping are maintained in [README.md](README.md). The public site now includes VPG Romania transfers, Match Center, in-page RYVL Performance tabs and working `/privacy` and `/terms` routes. The public Competitions page is removed; its URL redirects to Performance. The admin competition slots are not removed.
+
+### Administration
+
+1. Keep your existing channel selections in **Admin → Settings**.
+2. Open **Admin → RYVL Performance → VPG automatic posting**.
+3. Enable the desired general and/or RYVL-only feeds. A missing channel means that feed will not post.
+4. Set the results polling interval (default 2 minutes) and daily fixture time (default 10:00).
+5. Weekly standings use Sunday 10:00 **Europe/Bucharest**. This does not depend on the VM's UTC timezone.
+
+A newly configured result destination saves a baseline without replaying old results. It will announce future newly confirmed entries. Failed sends remain retryable, and separate destinations have independent receipts. Fixture updates edit the day's tracked messages; no scheduled matches means no empty-day post. The background process records errors and applies retry backoff. API pagination is checked before any baseline advances.
+
+### Updating existing databases
+
+The notification upgrade is in `server/prisma/deploy/vpg-notifications.sql`. It only creates two new tables and indexes. Existing data and channel settings are not reset. The deploy workflow executes this reviewed, transactional SQL after successful backend/frontend builds and before restarting PM2. It can be run again safely.
+
+For a manual upgrade, from the backend folder with the correct `.env`:
+
+```bash
+npx prisma generate
+npm run build
+npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
+pm2 restart ryvl-backend --update-env
+```
+
+Do not substitute `--force-reset`. This is a narrowly scoped upgrade, not permission to automatically apply arbitrary future destructive schema changes.
+
+### Website buttons and custom domain later
+
+Use `FRONTEND_URL` as the public website base for Discord club buttons. The old `WEB_BASE_URL` localhost fallback has been removed. Example for the existing HTTP deployment:
+
+```env
+FRONTEND_URL=http://130.61.228.100
+DISCORD_OAUTH_REDIRECT_URI=http://130.61.228.100/api/auth/discord/callback
+```
+
+After adding DNS and HTTPS in Caddy, change both URLs to your domain and update the Discord Developer Portal callback. Restart the backend. To repair already-posted buttons, use **Repair old club links** in the notification panel. This explicit action edits known bot-owned messages only, with a 200-message limit; it does not remove or replay match posts.
+
+### Deployment verification
+
+The workflow now serializes deployments, takes a VM-side lock, builds both projects and runs non-network regression tests before restarting PM2. The reviewed additive notification SQL is applied before the new code starts. Frontend files are staged in a release directory and switched into place after validation. The old physical `/var/www/ryvl` directory is retained as a legacy backup on its first conversion to a release symlink. The workflow does not modify the live `.env`.
+
+Verify locally after deployment:
+
+```bash
+curl --fail http://127.0.0.1:3000/api/health
+curl --fail http://127.0.0.1/api/health
+pm2 status ryvl-backend
+sudo systemctl is-active caddy
+```
+
+### Privacy and transport
+
+The legal pages document current app behavior, including Discord authentication, browser token storage, form forwarding and externally requested fonts/images. They are not a substitute for the operator reviewing legal identity/contact details and retention obligations. Public typography loads Inter from the publisher CDN. HTTP is still only the initial IP-based deployment; configure HTTPS before considering the administration environment production-hardened.

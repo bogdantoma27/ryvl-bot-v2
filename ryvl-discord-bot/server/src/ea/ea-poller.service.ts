@@ -1,3 +1,4 @@
+import { buildClubWebUrl } from '../config/public-url';
 import {
   Injectable,
   OnModuleInit,
@@ -177,8 +178,7 @@ export class EaPollerService implements OnModuleInit, OnModuleDestroy {
     }
 
     let postedCount = 0;
-    const webBase = process.env.WEB_BASE_URL || 'http://localhost:4201';
-    const webUrl = `${webBase}/club?guildId=${config.guildId}`;
+    const webUrl = buildClubWebUrl(this.configService.frontendUrl, config.guildId);
 
     // Process from oldest to newest among new matches
     const matchesToProcess = allMatches.slice(0, 5).reverse();
@@ -304,8 +304,7 @@ export class EaPollerService implements OnModuleInit, OnModuleDestroy {
 
     const latest = allMatches[0];
     const parsed = this.eaService.parseMatch(latest, config.clubId);
-    const webBase = process.env.WEB_BASE_URL || 'http://localhost:4201';
-    const webUrl = `${webBase}/club?guildId=${guildId}`;
+    const webUrl = buildClubWebUrl(this.configService.frontendUrl, guildId);
     const { embed, row } = buildEaMatchEmbed(parsed, webUrl);
 
     const sent = await this.discordService.sendMessageToChannel(channelId, embed, [row]);

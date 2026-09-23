@@ -67,7 +67,7 @@ import { RosterPlayer } from '../../core/models';
       </div>
 
       <!-- Loading State -->
-      @if (isLoading()) {
+      @if(isLoading()) {
         <div class="p-16 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-4">
           <div class="w-10 h-10 border-2 border-[#EAE905] border-t-transparent rounded-full animate-spin mx-auto"></div>
           <p class="text-sm font-bold text-slate-300">Synchronizing live roster with EA Pro Clubs API...</p>

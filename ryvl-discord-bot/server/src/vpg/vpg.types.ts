@@ -76,6 +76,8 @@ export interface VpgStandingsRow {
 }
 
 export interface VpgMatchItem {
+  homeSlug?: string | null;
+  awaySlug?: string | null;
   id: number;
   datetime: string;
   dateFormattedRo: string;
@@ -153,6 +155,9 @@ export interface RyvlCompetitionDto {
 }
 
 export interface RyvlPerformanceResponse {
+  standings?: VpgStandingsRow[];
+  season?: number;
+  warnings?: string[];
   teamName: string;
   activeCompetition: string;
   competitions: RyvlCompetitionDto[];

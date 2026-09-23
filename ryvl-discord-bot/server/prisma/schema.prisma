@@ -33,6 +33,8 @@ model Guild {
   processedVpgTransfers  ProcessedVpgTransfer[]
   processedVpgMatches    ProcessedVpgMatch[]
   ryvlCompetitions       RyvlCompetition[]
+  vpgNotificationConfig VpgNotificationConfig?
+  vpgNotificationDeliveries VpgNotificationDelivery[]
 
   @@map("guilds")
 }
@@ -248,3 +250,44 @@ model ProcessedVpgMatch {
   @@map("processed_vpg_matches")
 }
 
+
+
+// Independent from the transfer poller; these switches govern the competition feeds.
+model VpgNotificationConfig {
+  guildId              String   @id @map("guild_id")
+  guild                Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  pollIntervalSec      Int      @default(120) @map("poll_interval_sec")
+  fixturesTime         String   @default("10:00") @map("fixtures_time")
+  resultsEnabled       Boolean  @default(true) @map("results_enabled")
+  ryvlResultsEnabled   Boolean  @default(true) @map("ryvl_results_enabled")
+  fixturesEnabled      Boolean  @default(true) @map("fixtures_enabled")
+  ryvlFixturesEnabled  Boolean  @default(true) @map("ryvl_fixtures_enabled")
+  standingsEnabled     Boolean  @default(true) @map("standings_enabled")
+  ryvlStandingsEnabled Boolean  @default(true) @map("ryvl_standings_enabled")
+  lastPolledAt         DateTime? @map("last_polled_at")
+  lastFixturesPolledAt DateTime? @map("last_fixtures_polled_at")
+  lastSuccessAt        DateTime? @map("last_success_at")
+  lastError            String?  @map("last_error")
+  retryAfter           DateTime? @map("retry_after")
+  leaseToken           String?  @map("lease_token")
+  leaseUntil           DateTime? @map("lease_until")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  @@map("vpg_notification_configs")
+}
+
+model VpgNotificationDelivery {
+  id                   String   @id @default(uuid())
+  guildId              String   @map("guild_id")
+  guild                Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  channelId            String   @map("channel_id")
+  topic                String
+  itemKey              String   @map("item_key")
+  fingerprint          String
+  discordMessageId     String?  @map("discord_message_id")
+  suppressed           Boolean  @default(false)
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  @@unique([guildId, channelId, topic, itemKey], map: "vpg_delivery_destination_key")
+  @@index([guildId, topic])
+  @@map("vpg_notification_deliveries")
+}

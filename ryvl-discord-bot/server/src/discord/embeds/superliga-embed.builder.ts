@@ -46,7 +46,7 @@ export function buildSuperligaStandingsEmbed(
     const gd = (r.goalDifference >= 0 ? `+${r.goalDifference}` : `${r.goalDifference}`).padStart(4, ' ');
     const pts = String(r.points).padStart(3, ' ');
 
-    const isRyvl = /ryvl|rival/i.test(r.teamName);
+    const isRyvl = /^\s*ryvl(?:\s+esports)?\s*$/i.test(r.teamName);
     const prefix = isRyvl ? '►' : ' ';
     return `${prefix}${pos} ${paddedName} ${p}  ${w}  ${d}  ${l} ${gd}  ${pts}`;
   });
@@ -90,7 +90,7 @@ export function buildSuperligaFixturesEmbed(
   const items = matches.slice(0, limit);
   const text = items
     .map((m) => {
-      const isRyvl = /ryvl|rival/i.test(m.homeName) || /ryvl|rival/i.test(m.awayName);
+      const isRyvl = /^\s*ryvl(?:\s+esports)?\s*$/i.test(m.homeName) || /^\s*ryvl(?:\s+esports)?\s*$/i.test(m.awayName);
       const star = isRyvl ? ' ⭐' : '';
       return `⚽ **Etapa ${m.matchDay || '?'}** • ${m.dateFormattedRo}\n` +
              `> **${m.homeName}** 🆚 **${m.awayName}**${star}`;
@@ -130,7 +130,7 @@ export function buildSuperligaResultsEmbed(
     .map((m) => {
       const hs = m.homeScore != null ? m.homeScore : '-';
       const as = m.awayScore != null ? m.awayScore : '-';
-      const isRyvl = /ryvl|rival/i.test(m.homeName) || /ryvl|rival/i.test(m.awayName);
+      const isRyvl = /^\s*ryvl(?:\s+esports)?\s*$/i.test(m.homeName) || /^\s*ryvl(?:\s+esports)?\s*$/i.test(m.awayName);
       const star = isRyvl ? ' ⭐' : '';
       return `📌 **Etapa ${m.matchDay || '?'}** • ${m.dateFormattedRo}\n` +
              `> **${m.homeName}** \`${hs} — ${as}\` **${m.awayName}**${star}`;
@@ -196,8 +196,8 @@ export function buildSuperligaLiveResultCardEmbed(match: VpgMatchItem): EmbedBui
   const hs = match.homeScore != null ? match.homeScore : 0;
   const as = match.awayScore != null ? match.awayScore : 0;
 
-  const isHomeRyvl = /ryvl|rival/i.test(match.homeName);
-  const isAwayRyvl = /ryvl|rival/i.test(match.awayName);
+  const isHomeRyvl = /^\s*ryvl(?:\s+esports)?\s*$/i.test(match.homeName);
+  const isAwayRyvl = /^\s*ryvl(?:\s+esports)?\s*$/i.test(match.awayName);
   let color = RYVL_YELLOW;
 
   if (isHomeRyvl) {
