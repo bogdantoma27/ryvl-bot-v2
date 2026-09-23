@@ -96,3 +96,4 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/ryvl-browser" --no-save @playwright/test@1.56.1
           export PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules"
           node ryvl-discord-bot/web/test/browser-smoke.cjs
+          node ryvl-discord-bot/web/test/ui-review-regressions.cjs

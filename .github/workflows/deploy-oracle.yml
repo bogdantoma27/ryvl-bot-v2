@@ -54,22 +54,22 @@ jobs:
           EXPECTED_REVISION: ${{ github.sha }}
         run: node ryvl-discord-bot/deploy/verify-public-site.mjs
   cleanup:
-    name: Remove this migration's merged validation branch
+    name: Remove this review's merged validation branch
     needs: deploy
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Remove only deploy/ryvl-top when fully merged
+      - name: Remove only fix/public-ui-review when fully merged
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           MAIN_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          REF='heads/deploy/ryvl-top'
-          # This branch was created solely for this migration. Preserve all other branches.
+          REF='heads/fix/public-ui-review'
+          # This branch was created solely for this review. Preserve all other branches.
           if ! BRANCH_SHA="$(gh api "repos/$GH_REPO/git/ref/$REF" --jq '.object.sha' 2>/dev/null)"; then
             echo 'Temporary branch could not be read or is already absent; leaving branches unchanged.'
             exit 0
@@ -82,7 +82,7 @@ jobs:
               exit 0
             fi
             gh api --method DELETE "repos/$GH_REPO/git/refs/$REF"
-            echo 'Removed the fully merged temporary migration branch.'
+            echo 'Removed the fully merged temporary review branch.'
           else
             echo 'Preserving branch because it contains changes not included in this deployment.'
           fi
