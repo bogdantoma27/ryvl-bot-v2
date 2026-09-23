@@ -1,0 +1,59 @@
+name: Deploy backend to Oracle VM
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "ryvl-discord-bot/server/**"
+      - ".github/workflows/deploy-oracle.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: oracle-backend-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy NestJS backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script_stop: true
+          command_timeout: 12m
+          script: |
+            set -e
+
+            echo "Deploying commit from main..."
+            cd /home/ubuntu/ryvl-bot-v2
+
+            # Only deploy fast-forward changes from the canonical main branch.
+            git fetch origin main
+            git checkout main
+            git pull --ff-only origin main
+
+            cd ryvl-discord-bot/server
+
+            # Reproduce the lockfile-defined dependency tree.
+            npm ci
+
+            # Regenerate Prisma Client in case schema/client code changed.
+            # Database schema changes remain an explicit/manual operation.
+            npx prisma generate
+
+            # Compile the NestJS application.
+            npm run build
+
+            # Restart the existing PM2 process with the new build.
+            pm2 restart ryvl-backend --update-env
+            pm2 save
+
+            echo "Deployment complete."
+            pm2 status ryvl-backend
