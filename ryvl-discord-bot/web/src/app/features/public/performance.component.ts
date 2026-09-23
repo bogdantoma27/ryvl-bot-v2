@@ -45,11 +45,14 @@ import {
               type="button"
               (click)="selectCompetition(comp.slug)"
               class="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer flex items-center gap-2"
-              [ngClass]="selectedCompSlug() === comp.slug ? 'bg-[#EAE905] text-black shadow-lg shadow-[#EAE905]/20 font-black' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
+              [ngClass]="selectedCompSlug() === comp.slug ? 'bg-[#EAE905] !text-black shadow-lg shadow-[#EAE905]/20 font-black' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
             >
-              <span>{{ comp.name }}</span>
+              <span [class.!text-black]="selectedCompSlug() === comp.slug">{{ comp.name }}</span>
               @if (!comp.active) {
-                <span class="text-[9px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                <span
+                  class="text-[9px] px-1.5 py-0.2 rounded font-mono font-bold"
+                  [ngClass]="selectedCompSlug() === comp.slug ? 'bg-black/20 !text-black border border-black/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'"
+                >
                   TBA
                 </span>
               }
@@ -60,9 +63,9 @@ import {
 
       <!-- Navigation Sub-Tabs: Performance & Detailed Feeds -->
       <div class="flex flex-wrap items-center gap-2 border-b border-white/10 pb-4">
-        <span class="px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-[#EAE905] text-black shadow-md shadow-[#EAE905]/15 flex items-center gap-1.5 cursor-default">
+        <span class="px-3.5 py-2 rounded-xl text-xs font-black uppercase tracking-wider bg-[#EAE905] !text-black shadow-md shadow-[#EAE905]/15 flex items-center gap-1.5 cursor-default">
           <span>📊</span>
-          <span>RYVL Telemetry</span>
+          <span class="!text-black">RYVL Telemetry</span>
         </span>
         <a
           routerLink="/results"

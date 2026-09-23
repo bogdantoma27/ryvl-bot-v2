@@ -153,9 +153,9 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
                 type="button"
                 (click)="onCategoryChange(cat.key)"
                 class="px-3 py-1.5 rounded-lg text-xs uppercase transition cursor-pointer"
-                [ngClass]="selectedCategory() === cat.key ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'text-slate-300 hover:text-white font-bold'"
+                [ngClass]="selectedCategory() === cat.key ? 'bg-[#EAE905] !text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'text-slate-300 hover:text-white font-bold'"
               >
-                {{ cat.label }}
+                <span [class.!text-black]="selectedCategory() === cat.key">{{ cat.label }}</span>
               </button>
             }
           </div>

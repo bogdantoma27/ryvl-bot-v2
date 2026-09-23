@@ -120,7 +120,7 @@ import { RouterLink } from '@angular/router';
         <div class="flex items-center justify-center gap-4 pt-2">
           <a
             routerLink="/recruitment"
-            class="px-6 py-3 rounded-xl bg-[#EAE905] text-black text-xs font-bold uppercase tracking-wider hover:bg-[#d8d704] transition"
+            class="px-6 py-3 rounded-xl bg-[#EAE905] !text-black text-xs font-bold uppercase tracking-wider hover:bg-[#d8d704] transition"
           >
             Apply For Trials
           </a>

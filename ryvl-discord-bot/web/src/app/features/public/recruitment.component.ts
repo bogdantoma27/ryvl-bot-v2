@@ -206,13 +206,13 @@ import { ApiService } from '../../core/api.service';
                 <button
                   type="submit"
                   [disabled]="isSubmitting()"
-                  class="px-8 py-3.5 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] disabled:opacity-50 text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-[#EAE905]/15 transition transform hover:scale-105 cursor-pointer flex items-center gap-2"
+                  class="px-8 py-3.5 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] disabled:opacity-50 !text-black font-black text-xs uppercase tracking-wider shadow-lg shadow-[#EAE905]/15 transition transform hover:scale-105 cursor-pointer flex items-center gap-2"
                 >
                   @if (isSubmitting()) {
                     <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
-                    <span>Submitting Application...</span>
+                    <span class="!text-black">Submitting Application...</span>
                   } @else {
-                    <span>Submit Trial Request</span>
+                    <span class="!text-black">Submit Trial Request</span>
                   }
                 </button>
               </div>

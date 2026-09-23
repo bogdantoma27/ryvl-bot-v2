@@ -199,7 +199,7 @@ const TIMEZONES = [
                       [title]="preset.name"
                     >
                       @if (color() === preset.hex) {
-                        <span [class.text-black]="preset.hex === '#FFFFFF'" [class.text-white]="preset.hex !== '#FFFFFF'">✓</span>
+                        <span class="font-black" [class.!text-black]="preset.hex === '#FFFFFF' || preset.hex === '#FEE75C' || preset.hex === '#57F287' || preset.hex === '#EAE905'" [class.text-white]="preset.hex !== '#FFFFFF' && preset.hex !== '#FEE75C' && preset.hex !== '#57F287' && preset.hex !== '#EAE905'">✓</span>
                       }
                     </button>
                   }

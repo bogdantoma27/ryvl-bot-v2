@@ -53,12 +53,12 @@ import { RosterPlayer } from '../../core/models';
             type="button"
             (click)="selectedFilter.set(f.key)"
             class="px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer flex items-center gap-1.5"
-            [ngClass]="selectedFilter() === f.key ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
+            [ngClass]="selectedFilter() === f.key ? 'bg-[#EAE905] !text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
           >
-            <span>{{ f.label }}</span>
+            <span [class.!text-black]="selectedFilter() === f.key">{{ f.label }}</span>
             <span
               class="text-[10px] px-1.5 py-0.2 rounded-full font-mono font-bold"
-              [ngClass]="selectedFilter() === f.key ? 'bg-black/20 text-black' : 'bg-white/10 text-slate-400'"
+              [ngClass]="selectedFilter() === f.key ? 'bg-black/20 !text-black' : 'bg-white/10 text-slate-400'"
             >
               {{ getCountForFilter(f.key) }}
             </span>
@@ -80,7 +80,7 @@ import { RosterPlayer } from '../../core/models';
           <button
             type="button"
             (click)="loadRoster()"
-            class="px-5 py-2.5 rounded-xl bg-[#EAE905] text-black text-xs font-extrabold uppercase tracking-wider hover:bg-[#d8d704] transition cursor-pointer"
+            class="px-5 py-2.5 rounded-xl bg-[#EAE905] !text-black text-xs font-extrabold uppercase tracking-wider hover:bg-[#d8d704] transition cursor-pointer"
           >
             Retry Connection
           </button>
@@ -174,7 +174,7 @@ import { RosterPlayer } from '../../core/models';
         </div>
         <a
           routerLink="/recruitment"
-          class="px-6 py-3 rounded-xl bg-[#EAE905] text-black text-xs font-extrabold uppercase tracking-wider hover:bg-[#d8d704] transition shrink-0 cursor-pointer"
+          class="px-6 py-3 rounded-xl bg-[#EAE905] !text-black text-xs font-extrabold uppercase tracking-wider hover:bg-[#d8d704] transition shrink-0 cursor-pointer"
         >
           Apply For Trials
         </a>

@@ -36,18 +36,18 @@ import { VpgMatchItem } from '../../core/models';
               type="button"
               (click)="onlyRyvl.set(false)"
               class="px-3.5 py-1.5 rounded-lg text-xs uppercase transition cursor-pointer"
-              [ngClass]="!onlyRyvl() ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'text-slate-300 hover:text-white font-bold'"
+              [ngClass]="!onlyRyvl() ? 'bg-[#EAE905] !text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'text-slate-300 hover:text-white font-bold'"
             >
-              All Matches
+              <span [class.!text-black]="!onlyRyvl()">All Matches</span>
             </button>
             <button
               type="button"
               (click)="onlyRyvl.set(true)"
               class="px-3.5 py-1.5 rounded-lg text-xs uppercase transition cursor-pointer flex items-center gap-1.5"
-              [ngClass]="onlyRyvl() ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'text-slate-300 hover:text-white font-bold'"
+              [ngClass]="onlyRyvl() ? 'bg-[#EAE905] !text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'text-slate-300 hover:text-white font-bold'"
             >
               <span class="text-xs">⭐</span>
-              <span>RYVL Only</span>
+              <span [class.!text-black]="onlyRyvl()">RYVL Only</span>
             </button>
           </div>
 
@@ -94,7 +94,7 @@ import { VpgMatchItem } from '../../core/models';
           @if (onlyRyvl()) {
             <button
               (click)="onlyRyvl.set(false)"
-              class="px-4 py-2 rounded-xl bg-[#EAE905] text-black text-xs font-black uppercase mt-2 cursor-pointer"
+              class="px-4 py-2 rounded-xl bg-[#EAE905] !text-black text-xs font-black uppercase mt-2 cursor-pointer"
             >
               Show All League Fixtures
             </button>

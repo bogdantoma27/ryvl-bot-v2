@@ -98,10 +98,10 @@ import { GuildStore } from '../../core/guild.store';
           <div class="flex items-center gap-3 flex-wrap">
             <a
               routerLink="/team"
-              class="px-5 py-2.5 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] text-black text-xs font-extrabold uppercase tracking-wider transition shadow-lg shadow-[#EAE905]/15 flex items-center gap-2 cursor-pointer"
+              class="px-5 py-2.5 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] !text-black text-xs font-extrabold uppercase tracking-wider transition shadow-lg shadow-[#EAE905]/15 flex items-center gap-2 cursor-pointer"
             >
-              <span>View Squad Roster</span>
-              <span>&rarr;</span>
+              <span class="!text-black">View Squad Roster</span>
+              <span class="!text-black">&rarr;</span>
             </a>
             <a
               routerLink="/performance"
@@ -165,12 +165,12 @@ import { GuildStore } from '../../core/guild.store';
           type="button"
           (click)="activeTab.set('matches')"
           class="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer flex items-center gap-2"
-          [ngClass]="activeTab() === 'matches' ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
+          [ngClass]="activeTab() === 'matches' ? 'bg-[#EAE905] !text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
         >
-          <span>Recent Match Clashes</span>
+          <span [class.!text-black]="activeTab() === 'matches'">Recent Match Clashes</span>
           <span
             class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold"
-            [ngClass]="activeTab() === 'matches' ? 'bg-black/20 text-black' : 'bg-white/10 text-slate-400'"
+            [ngClass]="activeTab() === 'matches' ? 'bg-black/20 !text-black' : 'bg-white/10 text-slate-400'"
           >
             {{ matches().length }}
           </span>
@@ -180,12 +180,12 @@ import { GuildStore } from '../../core/guild.store';
           type="button"
           (click)="activeTab.set('roster')"
           class="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer flex items-center gap-2"
-          [ngClass]="activeTab() === 'roster' ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
+          [ngClass]="activeTab() === 'roster' ? 'bg-[#EAE905] !text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
         >
-          <span>Squad Leaderboard</span>
+          <span [class.!text-black]="activeTab() === 'roster'">Squad Leaderboard</span>
           <span
             class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold"
-            [ngClass]="activeTab() === 'roster' ? 'bg-black/20 text-black' : 'bg-white/10 text-slate-400'"
+            [ngClass]="activeTab() === 'roster' ? 'bg-black/20 !text-black' : 'bg-white/10 text-slate-400'"
           >
             {{ members().length }}
           </span>
@@ -195,9 +195,9 @@ import { GuildStore } from '../../core/guild.store';
           type="button"
           (click)="activeTab.set('summary')"
           class="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer"
-          [ngClass]="activeTab() === 'summary' ? 'bg-[#EAE905] text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
+          [ngClass]="activeTab() === 'summary' ? 'bg-[#EAE905] !text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
         >
-          Campaign Telemetry
+          <span [class.!text-black]="activeTab() === 'summary'">Campaign Telemetry</span>
         </button>
       </div>
 
