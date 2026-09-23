@@ -37,9 +37,9 @@ import { ApiService } from '../../core/api.service';
             <a
               [href]="social.discord"
               target="_blank"
-              class="inline-flex items-center gap-1.5 text-xs font-bold text-[#5865F2] hover:underline pt-1"
-            >
-              <span>Join discord.gg/ryvl</span>
+              class="social-brand-link inline-flex items-center gap-1.5 text-xs font-bold text-[#5865F2] hover:underline pt-1"
+             rel="noopener noreferrer"><img src="/assets/brands/discord.svg" class="social-brand-icon" width="24" height="24" alt="" aria-hidden="true" />
+              <span>Join our Discord</span>
               <span>↗</span>
             </a>
           </div>

@@ -70,7 +70,7 @@ import { RosterPlayer } from '../../core/models';
       @if(isLoading()) {
         <div class="p-16 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-4">
           <div class="w-10 h-10 border-2 border-[#EAE905] border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p class="text-sm font-bold text-slate-300">Synchronizing live roster with EA Pro Clubs API...</p>
+          <p class="text-sm font-bold text-slate-300">Loading...</p>
         </div>
       } @else if (error()) {
         <div class="p-12 rounded-3xl bg-rose-950/30 border border-rose-600/40 text-center space-y-3">
