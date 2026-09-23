@@ -6,6 +6,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  MessageFlags,
 } from 'discord.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { EventsService } from '../../events/events.service';
@@ -58,7 +59,7 @@ export class EventDeleteCommand {
     if (!guildId) {
       await interaction.reply({
         content: 'This command can only be used inside a server.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -72,7 +73,7 @@ export class EventDeleteCommand {
     if (!event || event.guildId !== guildId) {
       await interaction.reply({
         content: `Event not found or belongs to a different server.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -99,7 +100,7 @@ export class EventDeleteCommand {
     await interaction.reply({
       embeds: [confirmEmbed],
       components: [row],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 
@@ -140,7 +141,7 @@ export class EventDeleteCommand {
     if (!event) {
       await interaction.reply({
         content: 'Event not found or already deleted.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -167,7 +168,7 @@ export class EventDeleteCommand {
     await interaction.reply({
       embeds: [confirmEmbed],
       components: [row],
-      ephemeral: true,
+      flags: MessageFlags.Ephemeral,
     });
   }
 }
