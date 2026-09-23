@@ -1,24 +1,58 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { SOCIAL_LINKS } from './presentation';
+
 @Component({
-  selector: 'app-legal', standalone: true, changeDetection: ChangeDetectionStrategy.OnPush, imports: [RouterLink],
+  selector: 'app-legal',
+  standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink],
   template: `
     <article class="public-page max-w-3xl space-y-7">
-      <header class="border-b border-white/10 pb-6"><p class="public-eyebrow">RYVL Esports</p><h1 class="public-title">{{ privacy ? 'Privacy Policy' : 'Terms of Service' }}</h1><p class="mt-3 text-xs text-slate-500">Last updated: 23 September 2026</p></header>
+      <header class="border-b border-white/10 pb-6">
+        <p class="public-eyebrow">RYVL Esports</p>
+        <h1 class="public-title">{{ privacy ? 'Privacy Policy' : 'Terms of Service' }}</h1>
+        <p class="mt-3 text-xs text-slate-500">Last updated: 23 September 2026</p>
+      </header>
       @if(privacy) {
-        <section class="legal-section"><h2>About this notice</h2><p>This notice describes information handled by the RYVL Esports website and its connected Discord bot. You can browse public match information without signing in. For questions about your information, use our <a routerLink="/contact">contact page</a> or contact the administrators through the <a [href]="social.discord" target="_blank" rel="noopener noreferrer">official Discord server</a>.</p></section>
-        <section class="legal-section"><h2>Information used by the application</h2><p>Discord sign-in provides your account identifier, display name, avatar and server information needed for access to administration features. Event, RSVP and lineup features can store Discord identifiers, display names, attendance choices, channel settings and lineup content. Public VPG and EA integrations display information such as club names, player names, transfers, fixtures, standings and results.</p><p>Contact and recruitment forms send the details you enter to the Discord channels configured by the site administrators. Do not include passwords, payment details or other sensitive information in these forms.</p></section>
-        <section class="legal-section"><h2>Browser storage and third-party requests</h2><p>When you sign in, the application stores an authentication token in your browser's local and session storage under <code>ryvl_token</code>. The current token expires after seven days; signing out removes the stored token. Public browsing does not require this token.</p><p>The site loads the Inter typeface from the font publisher's CDN and may request club images from VPG or EA image services. Those services receive the network information needed to answer the request, including your IP address. Opening Discord, Twitch, YouTube or VPG links takes you to services with their own privacy practices.</p></section>
-        <section class="legal-section"><h2>Hosting, access and retention</h2><p>The application is hosted on an Oracle Cloud VM and uses a PostgreSQL database. Authorized site administrators manage application records and the configured Discord channels. Records and forwarded Discord messages do not currently have a universal automatic deletion schedule. Their retention depends on the feature and administrative management; requests for review or removal can be sent through the contact options above.</p><p>Infrastructure and external service providers can process operational logs and network information under their own terms. This site does not ask for your Discord password; authentication takes place on Discord.</p></section>
-        <section class="legal-section"><h2>Questions, correction and removal</h2><p>Contact the administrators to ask about information relating to you, request a correction or request removal of application-held records. Include enough information to identify the relevant account or submission, but never send an authentication token. Data published by VPG or EA may also need to be corrected with the original provider.</p></section>
+        <section class="legal-section">
+          <h2>About this notice</h2>
+          <p>Public browsing does not require an account.</p>
+          <p>This notice explains how RYVL Esports handles information through its website and connected community tools. For questions, use our <a routerLink="/contact">contact page</a> or contact the administrators through the <a [href]="social.discord" target="_blank" rel="noopener noreferrer">official Discord server</a>.</p>
+        </section>
+        <section class="legal-section">
+          <h2>Information you share</h2>
+          <p>Contact and recruitment forms collect the information you choose to submit, such as your name, contact details and message. These submissions are forwarded to the Discord channels managed by RYVL staff so they can respond to enquiries and applications. Do not send passwords, payment details or other sensitive information.</p>
+          <p>Using the connected event, attendance and lineup tools may record your community identifier, display name, attendance choices and lineup content. Public competition information, including player and club names, transfers, fixtures and results, comes from VPG and EA.</p>
+        </section>
+        <section class="legal-section">
+          <h2>Service providers and external content</h2>
+          <p>Authorized staff and the service providers needed to run the website and its community tools may process relevant records and technical information, such as IP addresses and operational logs, to deliver and protect the service.</p>
+          <p>The website loads fonts and some club images from external providers. These providers receive the network information needed to deliver that content. Discord, Twitch, YouTube and VPG links lead to services with their own privacy practices.</p>
+        </section>
+        <section class="legal-section">
+          <h2>Access and retention</h2>
+          <p>RYVL staff manage access to submissions and community records. Retention depends on the feature and administrative management; there is no single automatic deletion schedule for all records and forwarded messages. Contact us to request a review or removal.</p>
+        </section>
+        <!-- Staff sign-in exists today, so its disclosure stays available without suggesting
+             that public visitors have to register. Future MEMBER sign-in copy belongs here
+             only after that feature is actually implemented and its data use is reviewed. -->
+        <details class="legal-section legal-staff-note">
+          <summary>Information for staff signing in</summary>
+          <p>Discord sign-in is used for the staff area. It provides the account identifier, display name, avatar and server information needed to identify staff and check access. Public visitors do not need to use this sign-in.</p>
+          <p>Staff sign-in stores a temporary authentication token in the browser to maintain the session. Signing out removes the stored token. We do not ask for your Discord password; authentication takes place on Discord.</p>
+        </details>
+        <section class="legal-section">
+          <h2>Questions, correction and removal</h2>
+          <p>Contact the administrators about information relating to you, to request a correction or to request removal of application-held records. Include enough information to identify the relevant submission, but never send an authentication token. Information published by VPG or EA may also need to be corrected with the original provider.</p>
+        </section>
       } @else {
-        <section class="legal-section"><h2>Using the website</h2><p>The RYVL Esports website provides team information, competition data and tools connected to its Discord community. Use the site and bot lawfully and respectfully. Do not attempt to bypass access controls, interfere with the service, submit spam, impersonate other people or upload content that you are not entitled to share.</p></section>
-        <section class="legal-section"><h2>Accounts and administration</h2><p>Discord authentication identifies your account. Administration features are intended for authorized server staff. Keep your accounts and devices secure, and notify the administrators through the <a routerLink="/contact">contact page</a> if you notice unauthorized activity.</p></section>
-        <section class="legal-section"><h2>Competition information</h2><p>Fixtures, transfers, standings and results are obtained from external VPG and EA integrations. They may be delayed, changed or temporarily unavailable. This website's display does not replace the organizer's official competition decisions or rules. Published kickoff times are presented in Europe/Bucharest unless stated otherwise.</p></section>
-        <section class="legal-section"><h2>Submissions and community features</h2><p>Only submit contact, recruitment, lineup and event information that you have permission to provide. Recruitment submissions do not guarantee a place on the team. Administrators may moderate inappropriate content or restrict access to protect the community and service.</p></section>
-        <section class="legal-section"><h2>Availability and external services</h2><p>Features may change, require maintenance or become unavailable. External links and integrations are operated by their respective providers and are subject to their own terms. RYVL does not control the availability of Discord, VPG, EA, Twitch or YouTube.</p></section>
-        <section class="legal-section"><h2>Contact and updates</h2><p>Questions about these terms can be sent through the <a routerLink="/contact">contact page</a> or the <a [href]="social.discord" target="_blank" rel="noopener noreferrer">official Discord server</a>. This page will be updated when the website's features or operating practices change. See the <a routerLink="/privacy">Privacy Policy</a> for information about data handling.</p></section>
+        <section class="legal-section"><h2>Using the website</h2><p>The RYVL Esports website provides team information, competition updates and community tools. Public pages are available without an account. Use the website and bot lawfully and respectfully; do not bypass access controls, interfere with the service, submit spam or impersonate others.</p></section>
+        <section class="legal-section"><h2>Staff access</h2><p>Administration features are reserved for authorized staff. Signing in does not by itself grant administrative permissions. Keep staff accounts and devices secure, and report suspected unauthorized activity through the <a routerLink="/contact">contact page</a>.</p></section>
+        <section class="legal-section"><h2>Competition information</h2><p>Fixtures, transfers, standings and results are obtained from VPG and EA. They may be delayed, corrected or temporarily unavailable. The website does not replace the organizer's official decisions or rules. Kickoff times are presented in Europe/Bucharest unless stated otherwise.</p></section>
+        <section class="legal-section"><h2>Submissions and community features</h2><p>Only submit information and content you have permission to provide. Recruitment applications do not guarantee a team place. Administrators may moderate inappropriate content or restrict access to protect the community and service.</p></section>
+        <section class="legal-section"><h2>Availability and external services</h2><p>Features may change, require maintenance or become unavailable. External links and integrations are operated by their respective providers under their own terms. RYVL does not control the availability of those services.</p></section>
+        <section class="legal-section"><h2>Contact and updates</h2><p>Send questions through our <a routerLink="/contact">contact page</a> or the <a [href]="social.discord" target="_blank" rel="noopener noreferrer">official Discord server</a>. These terms will be updated when features or operating practices change. See the <a routerLink="/privacy">Privacy Policy</a> for information about data handling.</p></section>
       }
     </article>
   `,

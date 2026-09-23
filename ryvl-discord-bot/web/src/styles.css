@@ -99,7 +99,10 @@ button.btn-yellow:hover * {
 .public-empty { padding: 2rem 1.25rem; border: 1px dashed rgb(255 255 255 / 15%); border-radius: 1rem; text-align: center; color: #94a3b8; }
 .public-error { padding: 1.5rem; border: 1px solid rgb(244 63 94 / 30%); background: rgb(244 63 94 / 6%); border-radius: 1rem; color: #fda4af; }
 .public-notice { padding: 1rem 1.25rem; border: 1px solid rgb(250 204 21 / 25%); border-radius: .75rem; color: #fde68a; font-size: .875rem; }
-.public-button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem; padding: .6rem 1rem; border: 1px solid rgb(255 255 255 / 14%); border-radius: .65rem; background: rgb(255 255 255 / 4%); color: #e2e8f0; font-size: .8125rem; font-weight: 500; transition: background-color .15s, border-color .15s; cursor: pointer; }
+@layer components {
+  .public-button { display: inline-flex; align-items: center; justify-content: center; min-height: 2.5rem; padding: .6rem 1rem; border: 1px solid rgb(255 255 255 / 14%); border-radius: .65rem; background: rgb(255 255 255 / 4%); color: #e2e8f0; font-size: .8125rem; font-weight: 500; transition: background-color .15s, border-color .15s; cursor: pointer; }
+}
+
 .public-button:hover { background: rgb(255 255 255 / 8%); border-color: rgb(255 255 255 / 25%); }
 .public-button-active { background: #EAE905; border-color: #EAE905; color: #101012; font-weight: 650; }
 .public-button-active:hover { background: #dedc05; }
@@ -120,3 +123,23 @@ button.btn-yellow:hover * {
 @media (min-width: 640px) { .public-page { padding: 3rem 1.5rem; } }
 @media (min-width: 1024px) { .public-page { padding-left: 2rem; padding-right: 2rem; } }
 @media (prefers-reduced-motion: reduce) { .public-site *, .public-site *::before, .public-site *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
+
+/* Reserve the viewport scrollbar width on ALL routes, including administration.
+   The fallback retains a classic gutter in browsers without scrollbar-gutter. */
+@layer base {
+  html { overflow-y: auto; scrollbar-gutter: stable; }
+  @supports not (scrollbar-gutter: stable) {
+    html { overflow-y: scroll; }
+  }
+}
+@layer components {
+  .social-brand-link { display: inline-flex; align-items: center; gap: .5rem; }
+  .social-brand-icon { display: inline-block; width: 1.5rem; height: 1.5rem; flex-shrink: 0; object-fit: contain; }
+}
+/* Compact spacing at the first desktop breakpoint keeps the full navigation usable. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .public-site header .public-nav-link { padding-inline: .4rem; }
+}
+.legal-staff-note { padding: 1rem 1.25rem; border: 1px solid rgb(255 255 255 / 12%); border-radius: .75rem; }
+.legal-staff-note summary { color: #e2e8f0; cursor: pointer; font-weight: 600; }
+.legal-staff-note summary:focus-visible { outline: 2px solid #EAE905; outline-offset: 4px; }
