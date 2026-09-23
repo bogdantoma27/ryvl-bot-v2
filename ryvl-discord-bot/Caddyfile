@@ -1,0 +1,13 @@
+:80 {
+  # Keep backend traffic private to the VM and expose it through the same origin.
+  handle /api/* {
+    reverse_proxy 127.0.0.1:3000
+  }
+
+  # Serve the Angular production build and fall back to index.html for client-side routes.
+  handle {
+    root * /var/www/ryvl
+    try_files {path} /index.html
+    file_server
+  }
+}
