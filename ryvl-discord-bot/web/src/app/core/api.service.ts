@@ -34,15 +34,30 @@ export class ApiService {
 
   readonly baseUrl: string = (() => {
     if (typeof window !== 'undefined' && window.location) {
-      const hostname = window.location.hostname;
-      if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        return DEVELOPMENT_API_BASE_URL;
-      }
-      const customApi = (window as unknown as { __RYVL_API_URL__?: string }).__RYVL_API_URL__
-        || localStorage.getItem('ryvl_api_url');
+      const { hostname, port } = window.location;
+
+      const customApi =
+        (window as unknown as { __RYVL_API_URL__?: string }).__RYVL_API_URL__ ||
+        localStorage.getItem('ryvl_api_url');
       if (customApi) {
         return customApi.replace(/\/+$/, '');
       }
+
+      if (hostname === 'localhost' || hostname === '127.0.0.1') {
+        return port === '4200' ? DEVELOPMENT_API_BASE_URL : '';
+      }
+
+      // If hosted on separate static hosting like Render static site, Vercel, Netlify
+      if (
+        hostname.endsWith('.onrender.com') ||
+        hostname.endsWith('.vercel.app') ||
+        hostname.endsWith('.netlify.app')
+      ) {
+        return DEFAULT_PRODUCTION_API_BASE_URL;
+      }
+
+      // Deployed via Oracle Cloud / VPS / Custom domain with reverse proxy
+      return '';
     }
     return DEFAULT_PRODUCTION_API_BASE_URL;
   })();

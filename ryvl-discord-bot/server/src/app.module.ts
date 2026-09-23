@@ -11,6 +11,8 @@ import { LineupModule } from './lineup/lineup.module';
 import { EaModule } from './ea/ea.module';
 import { VpgModule } from './vpg/vpg.module';
 
+import { AppController } from './app.controller';
+
 @Module({
   imports: [
     ConfigModule.forRoot(),
@@ -25,6 +27,7 @@ import { VpgModule } from './vpg/vpg.module';
     EaModule,
     VpgModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
 

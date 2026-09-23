@@ -1,18 +1,14 @@
 services:
   - type: web
     name: ryvl-bot-api
-    runtime: python
+    runtime: node
     plan: free
-    rootDir: ryvl-bot/service
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --app-dir . --host 0.0.0.0 --port $PORT
+    rootDir: ryvl-discord-bot/server
+    buildCommand: npm ci && npx prisma generate && npm run build
+    startCommand: npx prisma db push --skip-generate && npm run start:prod
     healthCheckPath: /healthz
     envVars:
       - key: DATABASE_URL
-        sync: false
-      - key: ADMIN_APP_URL
-        sync: false
-      - key: PUBLIC_API_BASE_URL
         sync: false
       - key: DISCORD_TOKEN
         sync: false
@@ -22,28 +18,23 @@ services:
         sync: false
       - key: DISCORD_OAUTH_REDIRECT_URI
         sync: false
-      - key: DISCORD_GUILD_ID
-        sync: false
-      - key: SESSION_SECRET
+      - key: JWT_SECRET
         generateValue: true
-      - key: VPG_API_BASE_URL
-        value: https://api.virtualprogaming.com/public
-      - key: VPG_CDN_BASE_URL
-        value: https://virtualprogaming.com/cdn-cgi/imagedelivery/cl8ocWLdmZDs72LEaQYaYw
-      - key: VPG_USER_AGENT
-        value: RYVLBot/1.0
+      - key: FRONTEND_URL
+        sync: false
+      - key: PORT
+        value: 10000
 
   - type: web
     name: ryvl-bot-web
     runtime: static
-    rootDir: ryvl-bot/webapp
+    rootDir: ryvl-discord-bot/web
     buildCommand: npm ci && npm run build
-    staticPublishPath: dist/webapp/browser
+    staticPublishPath: dist/web/browser
     envVars:
       - key: NODE_VERSION
-        value: 24.15.0
+        value: 22.12.0
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
-
