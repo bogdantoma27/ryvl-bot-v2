@@ -1,4 +1,4 @@
-name: Deploy backend to Oracle VM
+name: Deploy RYVL to Oracle VM
 
 on:
   push:
@@ -6,18 +6,20 @@ on:
       - main
     paths:
       - "ryvl-discord-bot/server/**"
+      - "ryvl-discord-bot/web/**"
+      - "ryvl-discord-bot/Caddyfile"
       - ".github/workflows/deploy-oracle.yml"
   workflow_dispatch:
 
 concurrency:
-  group: oracle-backend-production
+  group: oracle-production
   cancel-in-progress: true
 
 jobs:
   deploy:
-    name: Deploy NestJS backend
+    name: Deploy backend and frontend
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Deploy over SSH
@@ -27,33 +29,57 @@ jobs:
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script_stop: true
-          command_timeout: 12m
+          command_timeout: 17m
           script: |
-            set -e
+            set -euo pipefail
 
-            echo "Deploying commit from main..."
+            echo "Updating repository..."
             cd /home/ubuntu/ryvl-bot-v2
-
-            # Only deploy fast-forward changes from the canonical main branch.
             git fetch origin main
             git checkout main
             git pull --ff-only origin main
 
-            cd ryvl-discord-bot/server
-
-            # Reproduce the lockfile-defined dependency tree.
+            echo "Building backend..."
+            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
             npm ci
-
-            # Regenerate Prisma Client in case schema/client code changed.
-            # Database schema changes remain an explicit/manual operation.
             npx prisma generate
-
-            # Compile the NestJS application.
             npm run build
 
-            # Restart the existing PM2 process with the new build.
+            # Database schema changes are intentionally NOT applied automatically.
+            # Run prisma db push/migrations manually after reviewing schema changes.
+
+            echo "Restarting backend..."
             pm2 restart ryvl-backend --update-env
             pm2 save
 
+            echo "Building frontend..."
+            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/web
+            npm ci
+            npm run build
+
+            # Angular's application builder normally emits browser files here.
+            WEB_DIST="/home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/web/dist/web/browser"
+            if [ ! -d "$WEB_DIST" ]; then
+              WEB_DIST="/home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/web/dist/web"
+            fi
+
+            if [ ! -f "$WEB_DIST/index.html" ]; then
+              echo "Angular build output not found at $WEB_DIST"
+              exit 1
+            fi
+
+            echo "Publishing frontend..."
+            sudo mkdir -p /var/www/ryvl
+            sudo rm -rf /var/www/ryvl/*
+            sudo cp -a "$WEB_DIST"/. /var/www/ryvl/
+            sudo chown -R caddy:caddy /var/www/ryvl
+
+            echo "Updating Caddy..."
+            sudo cp /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/Caddyfile /etc/caddy/Caddyfile
+            sudo caddy validate --config /etc/caddy/Caddyfile
+            sudo systemctl enable caddy
+            sudo systemctl reload caddy
+
             echo "Deployment complete."
             pm2 status ryvl-backend
+            systemctl --no-pager --full status caddy | head -20
