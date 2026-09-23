@@ -1,4 +1,7 @@
-import { ChatInputCommandInteraction, EmbedBuilder   MessageFlags,
+import {
+  ChatInputCommandInteraction,
+  EmbedBuilder,
+  MessageFlags,
 } from 'discord.js';
 import { Injectable } from '@nestjs/common';
 import { EventsService } from '../../events/events.service';
@@ -17,15 +20,18 @@ export class EventListCommand {
       return;
     }
 
+    // Acknowledge immediately before querying the database so the interaction
+    // does not expire if the production database has network latency.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     const events = await this.eventsService.listEvents(guildId, {
       upcoming: true,
       limit: 10,
     });
 
     if (events.length === 0) {
-      await interaction.reply({
+      await interaction.editReply({
         content: 'No upcoming events found for this server.',
-        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -60,6 +66,6 @@ export class EventListCommand {
       });
     }
 
-    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    await interaction.editReply({ embeds: [embed] });
   }
 }
