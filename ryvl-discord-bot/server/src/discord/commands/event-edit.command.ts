@@ -5,6 +5,7 @@ import {
   TextInputStyle,
   ActionRowBuilder,
   ModalSubmitInteraction,
+  MessageFlags,
 } from 'discord.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -36,7 +37,7 @@ export class EventEditCommand {
     if (!event) {
       await interaction.reply({
         content: 'Event not found.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -105,7 +106,7 @@ export class EventEditCommand {
     if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hours) || isNaN(minutes)) {
       await interaction.reply({
         content: '❌ Invalid date or time format. Please use YYYY-MM-DD and HH:mm.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -154,14 +155,14 @@ export class EventEditCommand {
 
       await interaction.reply({
         content: `✅ Event **${title}** updated successfully!`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Error updating event: ${msg}`);
       await interaction.reply({
         content: `❌ Failed to update event: ${msg}`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   }
