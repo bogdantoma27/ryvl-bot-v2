@@ -1049,3 +1049,59 @@ DiscordAPIError[10062]: Unknown interaction
 ```
 
 The bot also uses `MessageFlags.Ephemeral` instead of the deprecated `ephemeral: true` response option for the lineup flow.
+
+
+---
+
+## 25. EA Python bridge runtime on Ubuntu
+
+The EA Pro Clubs integration executes:
+
+```text
+server/src/ea/scripts/ea_bridge.py
+```
+
+from the NestJS backend.
+
+Ubuntu 24.04 may not provide a `python` executable, only `python3`. The bridge also requires the third-party Python package `curl_cffi`.
+
+The production application therefore uses:
+
+```text
+server/.venv/bin/python
+```
+
+with dependencies defined in:
+
+```text
+server/requirements-ea.txt
+```
+
+The GitHub Actions deployment automatically:
+
+```bash
+sudo apt-get install -y python3 python3-venv
+python3 -m venv .venv
+.venv/bin/pip install -r requirements-ea.txt
+```
+
+The NestJS EA service prefers `.venv/bin/python` and falls back to `python3`.
+
+This avoids a common Oracle/Ubuntu production-only failure where EA commands work locally on Windows but fail on the VM with:
+
+```text
+spawn python ENOENT
+```
+
+or:
+
+```text
+ModuleNotFoundError: No module named 'curl_cffi'
+```
+
+To test the bridge manually:
+
+```bash
+cd ~/ryvl-bot-v2/ryvl-discord-bot/server
+.venv/bin/python src/ea/scripts/ea_bridge.py search common-gen5 "RYVL Esports"
+```
