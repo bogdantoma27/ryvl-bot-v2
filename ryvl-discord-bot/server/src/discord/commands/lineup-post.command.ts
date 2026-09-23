@@ -14,6 +14,7 @@ import {
   ButtonStyle,
   TextChannel,
   AttachmentBuilder,
+  MessageFlags,
 } from 'discord.js';
 import { randomUUID } from 'crypto';
 import {
@@ -126,26 +127,13 @@ export class LineupPostCommand {
     if (!guildId) {
       await interaction.reply({
         content: 'This command can only be used in a server.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
     const channelOption = interaction.options.getChannel('channel');
-    let targetChannelId = channelOption?.id;
-
-    const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
-    if (!targetChannelId) {
-      targetChannelId = guild?.defaultChannelId || interaction.channelId;
-    }
-
-    if (!targetChannelId) {
-      await interaction.reply({
-        content: 'No target channel specified and no default channel configured.',
-        ephemeral: true,
-      });
-      return;
-    }
+    const requestedChannelId = channelOption?.id || null;
 
     const formationInput = interaction.options.getString('formation')?.trim().toLowerCase();
     const titleInput = interaction.options.getString('title')?.trim();
@@ -154,10 +142,14 @@ export class LineupPostCommand {
 
     const sessionId = randomUUID();
 
-    // If formation or title is missing, show setup modal
+    // A modal must be the first interaction acknowledgement, so do not perform
+    // network/database work before showing it. Resolve the configured default
+    // channel after the modal is submitted instead.
     if (!formationInput || !titleInput) {
+      const targetChannelHint = requestedChannelId || '';
+
       const modal = new ModalBuilder()
-        .setCustomId(`${LINEUP_MODAL_SETUP_PREFIX}${sessionId}:${targetChannelId}`)
+        .setCustomId(`${LINEUP_MODAL_SETUP_PREFIX}${sessionId}:${targetChannelHint}`)
         .setTitle('Lineup Setup');
 
       const formationField = new TextInputBuilder()
@@ -203,8 +195,19 @@ export class LineupPostCommand {
       return;
     }
 
-    // Direct start
-    await interaction.deferReply({ ephemeral: true });
+    // Acknowledge Discord immediately before any database/network work.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
+    const targetChannelId =
+      requestedChannelId || guild?.defaultChannelId || interaction.channelId;
+
+    if (!targetChannelId) {
+      await interaction.editReply({
+        content: 'No target channel specified and no default channel configured.',
+      });
+      return;
+    }
 
     let kickoffAt: Date | null = null;
     if (dateInput && timeInput) {
@@ -237,18 +240,28 @@ export class LineupPostCommand {
 
   async handleSetupModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
     const raw = interaction.customId.replace(LINEUP_MODAL_SETUP_PREFIX, '');
-    const [sessionId, targetChannelId] = raw.split(':');
+    const [sessionId, requestedChannelId = ''] = raw.split(':');
 
     const formationInput = interaction.fields.getTextInputValue('formation')?.trim().toLowerCase() || '433';
     const titleInput = interaction.fields.getTextInputValue('title')?.trim() || 'RYVL Match Lineup';
     const dateInput = interaction.fields.getTextInputValue('date')?.trim();
     const timeInput = interaction.fields.getTextInputValue('time')?.trim();
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const guild = await this.prisma.guild.findUnique({
       where: { id: interaction.guildId! },
     });
+
+    const targetChannelId =
+      requestedChannelId || guild?.defaultChannelId || interaction.channelId;
+
+    if (!targetChannelId) {
+      await interaction.editReply({
+        content: 'No target channel specified and no default channel configured.',
+      });
+      return;
+    }
 
     let kickoffAt: Date | null = null;
     if (dateInput && timeInput) {
@@ -287,7 +300,7 @@ export class LineupPostCommand {
     if (!session) {
       await interaction.reply({
         content: 'This lineup wizard session has expired. Please run `/lineup_post` again.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -295,7 +308,7 @@ export class LineupPostCommand {
     if (interaction.user.id !== session.userId) {
       await interaction.reply({
         content: 'Only the author who started this wizard can use it.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -322,7 +335,7 @@ export class LineupPostCommand {
     if (!session) {
       await interaction.reply({
         content: 'This lineup wizard session has expired. Please run `/lineup_post` again.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -330,7 +343,7 @@ export class LineupPostCommand {
     if (interaction.user.id !== session.userId) {
       await interaction.reply({
         content: 'Only the author who started this wizard can use it.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -401,7 +414,7 @@ export class LineupPostCommand {
     if (!session) {
       await interaction.reply({
         content: 'This lineup wizard session has expired.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
