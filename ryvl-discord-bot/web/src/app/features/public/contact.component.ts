@@ -1,3 +1,4 @@
+import { SOCIAL_LINKS } from './presentation';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -34,7 +35,7 @@ import { ApiService } from '../../core/api.service';
               Fastest response time for players, scrim inquiries, and community members.
             </p>
             <a
-              href="https://discord.gg"
+              [href]="social.discord"
               target="_blank"
               class="inline-flex items-center gap-1.5 text-xs font-bold text-[#5865F2] hover:underline pt-1"
             >
@@ -67,7 +68,7 @@ import { ApiService } from '../../core/api.service';
           <h2 class="text-xl font-black text-white uppercase tracking-tight mb-1">Send A Message</h2>
           <p class="text-xs text-slate-400 mb-6">Leave us your details and we will reply promptly.</p>
 
-          @if (sent()) {
+          @if(sent()) {
             <div class="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3">
               <div class="text-3xl">📨</div>
               <h3 class="text-base font-bold text-emerald-300">Message Delivered!</h3>
@@ -136,7 +137,7 @@ import { ApiService } from '../../core/api.service';
                 ></textarea>
               </div>
 
-              @if (error()) {
+              @if(error()) {
                 <div class="p-3.5 rounded-xl bg-rose-950/40 border border-rose-500/40 text-rose-300 text-xs">
                   {{ error() }}
                 </div>
@@ -148,7 +149,7 @@ import { ApiService } from '../../core/api.service';
                   [disabled]="isSubmitting()"
                   class="btn-yellow px-8 py-3.5 rounded-xl disabled:opacity-50 font-black text-xs uppercase tracking-wider shadow-lg shadow-[#EAE905]/15 transition transform hover:scale-105 cursor-pointer flex items-center gap-2"
                 >
-                  @if (isSubmitting()) {
+                  @if(isSubmitting()) {
                     <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
                     <span>Transmitting...</span>
                   } @else {
@@ -164,6 +165,7 @@ import { ApiService } from '../../core/api.service';
   `,
 })
 export class ContactComponent {
+  readonly social = SOCIAL_LINKS;
   private readonly api = inject(ApiService);
 
   readonly sent = signal<boolean>(false);

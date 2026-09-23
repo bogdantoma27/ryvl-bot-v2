@@ -1,3 +1,5 @@
+import { isRyvlTeam, isRyvlMatch, isRyvlSide, resolveRyvlIdentity } from './notification-policy';
+import { collectPages, completedResult } from './notification-delivery';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -331,28 +333,29 @@ export class VpgService {
   // Superliga Romania Competitions, Standings, Fixtures, Results, Leaderboards
   // ---------------------------------------------------------------------------
 
-  async fetchSeasons(): Promise<number[]> {
-    try {
-      const res = await fetch(`${this.API_BASE}/leagues/Superliga-Romania/seasons/`, {
-        signal: AbortSignal.timeout(15000),
-        headers: { 'User-Agent': 'RYVLBot/2.0' },
-      });
-      if (!res.ok) return [2];
-      const data = await res.json();
-      const seasons = Array.isArray(data) ? data.map(Number).sort((a, b) => b - a) : [2];
-      return seasons.length > 0 ? seasons : [2];
-    } catch {
-      return [2];
-    }
+  async fetchSeasons(leagueSlug = 'Superliga-Romania'): Promise<number[]> {
+    const response = await fetch(`${this.API_BASE}/leagues/${encodeURIComponent(leagueSlug)}/seasons/`, {
+      signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'RYVLBot/2.0' },
+    });
+    if (!response.ok) throw new Error(`VPG seasons HTTP ${response.status} for ${leagueSlug}`);
+    const raw = await response.json();
+    const values = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+    const seasons = values.map(Number).filter((n: number) => Number.isInteger(n) && n > 0).sort((x: number, y: number) => y - x);
+    if (!seasons.length) throw new Error(`No valid VPG season available for ${leagueSlug}`);
+    return seasons;
   }
 
-  async fetchLatestSeason(): Promise<number> {
-    const seasons = await this.fetchSeasons();
-    return seasons[0] || 2;
+  async fetchLatestSeason(leagueSlug = 'Superliga-Romania'): Promise<number> {
+    return (await this.fetchSeasons(leagueSlug))[0];
+  }
+
+  async fetchAllMatches(status: 'complete' | 'scheduled', season: number, leagueSlug = 'Superliga-Romania'): Promise<VpgMatchItem[]> {
+    // Fetch every page. A late result must not be dropped just because its match date is old.
+    return collectPages((limit, offset) => this.fetchMatches(status, season, limit, offset, leagueSlug));
   }
 
   async fetchStandings(season?: number, leagueSlug = 'Superliga-Romania'): Promise<VpgStandingsRow[]> {
-    const targetSeason = season || (await this.fetchLatestSeason());
+    const targetSeason = season || (await this.fetchLatestSeason(leagueSlug));
     const url = `${this.API_BASE}/leagues/${leagueSlug}/table/?season=${targetSeason}&is_history=false`;
     const res = await fetch(url, {
       signal: AbortSignal.timeout(15000),
@@ -386,7 +389,7 @@ export class VpgService {
     offset = 0,
     leagueSlug = 'Superliga-Romania',
   ): Promise<VpgMatchItem[]> {
-    const targetSeason = season || (await this.fetchLatestSeason());
+    const targetSeason = season || (await this.fetchLatestSeason(leagueSlug));
     const url = `${this.API_BASE}/leagues/${leagueSlug}/matches/?status=${status}&season=${targetSeason}&limit=${limit}&offset=${offset}`;
     const res = await fetch(url, {
       signal: AbortSignal.timeout(15000),
@@ -394,7 +397,8 @@ export class VpgService {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${status} matches`);
     const json = await res.json();
-    const list = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+    if (!Array.isArray(json?.data) && !Array.isArray(json)) throw new Error('VPG returned an invalid match page');
+    const list = Array.isArray(json?.data) ? json.data : json;
 
     return list.map((m: any) => ({
       id: Number(m.id),
@@ -403,6 +407,8 @@ export class VpgService {
       dateFormattedEn: this.formatDateEn(m.datetime),
       status: m.status || status,
       matchDay: Number(m.match_day || 0),
+      homeSlug: m.home_slug || null,
+      awaySlug: m.away_slug || null,
       homeName: m.home_name || 'Home Team',
       awayName: m.away_name || 'Away Team',
       homeScore: m.home_score != null ? Number(m.home_score) : null,
@@ -417,7 +423,7 @@ export class VpgService {
     season?: number,
     leagueSlug = 'Superliga-Romania',
   ): Promise<VpgLeaderboardEntry[]> {
-    const targetSeason = season || (await this.fetchLatestSeason());
+    const targetSeason = season || (await this.fetchLatestSeason(leagueSlug));
     const lbNameMap: Record<string, string> = {
       strikers: 'top_strikers',
       cam: 'top_cam',
@@ -504,6 +510,10 @@ export class VpgService {
   }
 
   async getCompetitions(guildId?: string): Promise<RyvlCompetitionDto[]> {
+    if (!guildId) {
+      const publicGuild = await this.prisma.guild.findFirst({ orderBy: { joinedAt: 'asc' } });
+      guildId = publicGuild?.id;
+    }
     if (guildId) {
       const comps = await this.prisma.ryvlCompetition.findMany({
         where: { guildId },
@@ -597,11 +607,14 @@ export class VpgService {
 
     const activeSlug = targetComp.slug;
     const activeName = targetComp.name;
+    if (!targetComp.active) throw new Error('This competition is not active yet');
+    const targetSeason = targetComp.season || (await this.fetchLatestSeason(activeSlug));
+    const warnings: string[] = [];
 
     let teamName = 'RYVL Esports';
     if (guildId) {
       const g = await this.prisma.guild.findUnique({ where: { id: guildId } });
-      if (g?.ryvlTeamName) teamName = g.ryvlTeamName;
+      if (g?.ryvlTeamName && isRyvlTeam(g.ryvlTeamName)) teamName = g.ryvlTeamName;
     }
 
     let allMatches: VpgMatchItem[] = [];
@@ -609,27 +622,34 @@ export class VpgService {
     let standings: VpgStandingsRow[] = [];
 
     try {
-      allMatches = await this.fetchMatches('complete', undefined, 100, 0, activeSlug);
+      allMatches = await this.fetchAllMatches('complete', targetSeason, activeSlug);
     } catch {
+      warnings.push('Completed matches are temporarily unavailable.');
       allMatches = [];
     }
 
     try {
-      scheduledMatches = await this.fetchMatches('scheduled', undefined, 30, 0, activeSlug);
+      scheduledMatches = await this.fetchAllMatches('scheduled', targetSeason, activeSlug);
     } catch {
+      warnings.push('Fixtures are temporarily unavailable.');
       scheduledMatches = [];
     }
 
     try {
-      standings = await this.fetchStandings(undefined, activeSlug);
+      standings = await this.fetchStandings(targetSeason, activeSlug);
     } catch {
+      warnings.push('League standings are temporarily unavailable.');
       standings = [];
     }
 
-    const teamMatcher = /ryvl|rival/i;
+    if (warnings.length === 3) throw new Error('VPG is temporarily unavailable. Please try again.');
+    const identity = resolveRyvlIdentity(standings);
+    const teamMatcher = { test: (name: string) => isRyvlTeam(name) };
+    allMatches.sort((a, b) => Date.parse(b.datetime) - Date.parse(a.datetime) || b.id - a.id);
+    scheduledMatches.sort((a, b) => Date.parse(a.datetime) - Date.parse(b.datetime) || a.id - b.id);
 
     const ryvlMatches = allMatches.filter(
-      (m) => teamMatcher.test(m.homeName) || teamMatcher.test(m.awayName),
+      (m) => isRyvlMatch(m, identity) && completedResult(m),
     );
 
     let wins = 0;
@@ -645,7 +665,7 @@ export class VpgService {
     const streak: ('W' | 'D' | 'L')[] = [];
 
     for (const m of ryvlMatches) {
-      const isHome = teamMatcher.test(m.homeName);
+      const isHome = isRyvlSide(m.homeName, m.homeSlug, identity);
       const ryvlScore = isHome ? (m.homeScore ?? 0) : (m.awayScore ?? 0);
       const oppScore = isHome ? (m.awayScore ?? 0) : (m.homeScore ?? 0);
 
@@ -689,12 +709,12 @@ export class VpgService {
     const goalsPerMatch = played > 0 ? Number((goalsFor / played).toFixed(2)) : 0;
     const concededPerMatch = played > 0 ? Number((goalsAgainst / played).toFixed(2)) : 0;
 
-    const standingsRow = standings.find((r) => teamMatcher.test(r.teamName));
+    const standingsRow = standings.find((r) => isRyvlSide(r.teamName, r.teamSlug, identity));
     const standingsPosition = standingsRow ? standingsRow.position : null;
 
     const ryvlUpcoming = scheduledMatches
-      .filter((m) => teamMatcher.test(m.homeName) || teamMatcher.test(m.awayName))
-      .slice(0, 10);
+      .filter((m) => isRyvlMatch(m, identity))
+      ;
 
     const stats: RyvlPerformanceStats = {
       competitionName: activeName,
@@ -723,7 +743,10 @@ export class VpgService {
       activeCompetition: activeSlug,
       competitions,
       stats,
-      recentResults: ryvlMatches.slice(0, 10),
+      recentResults: ryvlMatches,
+      standings,
+      season: targetSeason,
+      warnings,
       upcomingFixtures: ryvlUpcoming,
     };
   }

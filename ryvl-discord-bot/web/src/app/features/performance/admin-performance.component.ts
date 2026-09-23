@@ -1,3 +1,4 @@
+import { VpgNotificationsComponent } from './vpg-notifications.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -22,7 +23,7 @@ import {
   selector: 'app-admin-performance',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, VpgNotificationsComponent],
   template: `
     <div class="max-w-7xl w-full mx-auto space-y-8 animate-fadeIn">
       <!-- Header -->
@@ -60,7 +61,7 @@ import {
       </div>
 
       <!-- Feedback Alerts -->
-      @if (successMessage()) {
+      @if(successMessage()) {
         <div class="p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs flex items-center justify-between shadow-lg">
           <div class="flex items-center gap-2.5">
             <span class="text-base">✅</span>
@@ -70,7 +71,7 @@ import {
         </div>
       }
 
-      @if (errorMessage()) {
+      @if(errorMessage()) {
         <div class="p-4 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center justify-between shadow-lg">
           <div class="flex items-center gap-2.5">
             <span class="text-base">⚠️</span>
@@ -79,6 +80,8 @@ import {
           <button type="button" (click)="errorMessage.set(null)" class="text-slate-300 hover:text-white font-bold p-1 cursor-pointer">✕</button>
         </div>
       }
+
+      <app-vpg-notifications />
 
       <!-- Section 1: Multi-Competition Tracking Slots -->
       <div class="p-6 rounded-2xl bg-[#16213e] border border-slate-700/60 shadow-xl space-y-6">
@@ -108,7 +111,7 @@ import {
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
                     <span class="text-xs font-mono font-black text-[#EAE905]">SLOT {{ comp.displayOrder || ($index + 1) }}</span>
-                    @if (selectedCompSlug() === comp.slug) {
+                    @if(selectedCompSlug() === comp.slug) {
                       <span class="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-[#EAE905]/20 text-[#EAE905] border border-[#EAE905]/30">VIEWING</span>
                     }
                   </div>
@@ -182,14 +185,14 @@ import {
                   [disabled]="isSavingSlot() === comp.id"
                   class="btn-yellow flex-1 py-2 rounded-lg font-extrabold text-xs shadow transition cursor-pointer text-center disabled:opacity-50"
                 >
-                  @if (isSavingSlot() === comp.id) {
+                  @if(isSavingSlot() === comp.id) {
                     <span>Saving...</span>
                   } @else {
                     <span>Save Slot</span>
                   }
                 </button>
 
-                @if (comp.active) {
+                @if(comp.active) {
                   <button
                     type="button"
                     (click)="selectCompetition(comp.slug)"
@@ -258,7 +261,7 @@ import {
               [disabled]="isPostingResults()"
               class="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs uppercase tracking-wider shadow transition cursor-pointer flex items-center justify-center gap-2"
             >
-              @if (isPostingResults()) {
+              @if(isPostingResults()) {
                 <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
                 <span>Dispatching...</span>
               } @else {
@@ -298,7 +301,7 @@ import {
               [disabled]="isPostingFixtures()"
               class="btn-yellow w-full py-2.5 px-4 rounded-xl disabled:opacity-50 font-extrabold text-xs uppercase tracking-wider shadow transition cursor-pointer flex items-center justify-center gap-2"
             >
-              @if (isPostingFixtures()) {
+              @if(isPostingFixtures()) {
                 <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
                 <span>Dispatching...</span>
               } @else {
@@ -338,7 +341,7 @@ import {
               [disabled]="isPostingLeaderboard()"
               class="w-full py-2.5 px-4 rounded-xl bg-blue-500 hover:bg-blue-400 disabled:opacity-50 text-black font-extrabold text-xs uppercase tracking-wider shadow transition cursor-pointer flex items-center justify-center gap-2"
             >
-              @if (isPostingLeaderboard()) {
+              @if(isPostingLeaderboard()) {
                 <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
                 <span>Dispatching...</span>
               } @else {
@@ -350,7 +353,7 @@ import {
       </div>
 
       <!-- Section 3: Live Campaign Telemetry Overview -->
-      @if (performance(); as perf) {
+      @if(performance(); as perf) {
         <div class="space-y-6">
           <div class="flex items-center justify-between border-b border-slate-700/60 pb-3">
             <div>
@@ -360,7 +363,7 @@ import {
               </h2>
               <p class="text-xs text-slate-400">Live competitive metrics aggregated for {{ perf.teamName }}.</p>
             </div>
-            @if (perf.stats.standingsPosition) {
+            @if(perf.stats.standingsPosition) {
               <div class="px-3 py-1 rounded-xl bg-[#EAE905]/10 border border-[#EAE905]/30 text-xs font-mono font-bold text-[#EAE905]">
                 League Rank: #{{ perf.stats.standingsPosition }} / {{ perf.stats.totalTeams || 16 }}
               </div>

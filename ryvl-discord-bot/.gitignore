@@ -9,3 +9,7 @@ dist/
 *.log
 coverage/
 .turbo/
+
+# Project-local Python runtime is host-specific, never source code.
+.venv/
+__pycache__/

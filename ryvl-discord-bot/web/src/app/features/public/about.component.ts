@@ -41,22 +41,7 @@ import { RouterLink } from '@angular/router';
             Competing in the highest tier of European EA FC 11v11 Pro Clubs and VPG competitions, our squad represents modern digital athletics. Every formation, pressing trigger, and set piece is rehearsed to automatic perfection.
           </p>
 
-          <div class="flex items-center gap-6 pt-2">
-            <div>
-              <div class="text-2xl font-black text-white">100%</div>
-              <div class="text-[10px] text-slate-400 uppercase font-mono">Manual 11v11</div>
-            </div>
-            <div class="h-8 w-px bg-white/10"></div>
-            <div>
-              <div class="text-2xl font-black text-[#EAE905]">VPG</div>
-              <div class="text-[10px] text-slate-400 uppercase font-mono">Tier 1 Circuit</div>
-            </div>
-            <div class="h-8 w-px bg-white/10"></div>
-            <div>
-              <div class="text-2xl font-black text-white">#WERYVL</div>
-              <div class="text-[10px] text-slate-400 uppercase font-mono">Organization Creed</div>
-            </div>
-          </div>
+
         </div>
 
         <!-- Brand Visual Artwork Card -->

@@ -78,7 +78,7 @@ import { VpgMatchItem } from '../../core/models';
       </div>
 
       <!-- Fixtures Feed -->
-      @if (isLoading()) {
+      @if(isLoading()) {
         <div class="space-y-4">
           @for (i of [1, 2, 3, 4, 5]; track i) {
             <div class="h-28 rounded-2xl bg-white/5 border border-white/10 animate-pulse"></div>
@@ -91,7 +91,7 @@ import { VpgMatchItem } from '../../core/models';
           <p class="text-xs text-slate-400 max-w-sm mx-auto">
             {{ onlyRyvl() ? 'No upcoming matches scheduled for RYVL in this season.' : 'All scheduled matches for this season have concluded or are awaiting announcement.' }}
           </p>
-          @if (onlyRyvl()) {
+          @if(onlyRyvl()) {
             <button
               (click)="onlyRyvl.set(false)"
               class="btn-yellow px-4 py-2 rounded-xl text-xs font-black uppercase mt-2 cursor-pointer"
@@ -114,7 +114,7 @@ import { VpgMatchItem } from '../../core/models';
                     <span class="px-2.5 py-0.5 rounded bg-[#EAE905]/10 border border-[#EAE905]/30 text-[#EAE905] font-mono text-[11px] font-bold">
                       MATCHDAY {{ m.matchDay || '?' }}
                     </span>
-                    @if (isRyvlMatch(m)) {
+                    @if(isRyvlMatch(m)) {
                       <span class="text-[10px] font-bold text-[#EAE905] uppercase tracking-wider">RYVL MATCH</span>
                     }
                   </div>
@@ -125,10 +125,10 @@ import { VpgMatchItem } from '../../core/models';
                 <div class="flex-1 w-full flex items-center justify-center gap-4 sm:gap-8">
                   <!-- Home Team -->
                   <div class="flex items-center justify-end gap-3 flex-1 min-w-0 text-right">
-                    <span class="text-sm sm:text-base font-bold text-white truncate" [class.text-[#EAE905]]="/ryvl|rival/i.test(m.homeName)">
+                    <span class="text-sm sm:text-base font-bold text-white truncate" [class.text-[#EAE905]]="/^\s*ryvl(?:\s+esports)?\s*$/i.test(m.homeName)">
                       {{ m.homeName }}
                     </span>
-                    @if (m.homeLogoUrl) {
+                    @if(m.homeLogoUrl) {
                       <img [src]="m.homeLogoUrl" alt="" class="w-9 h-9 sm:w-11 sm:h-11 object-contain shrink-0" />
                     } @else {
                       <div class="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-xs font-black text-slate-400 shrink-0">FC</div>
@@ -142,12 +142,12 @@ import { VpgMatchItem } from '../../core/models';
 
                   <!-- Away Team -->
                   <div class="flex items-center justify-start gap-3 flex-1 min-w-0 text-left">
-                    @if (m.awayLogoUrl) {
+                    @if(m.awayLogoUrl) {
                       <img [src]="m.awayLogoUrl" alt="" class="w-9 h-9 sm:w-11 sm:h-11 object-contain shrink-0" />
                     } @else {
                       <div class="w-9 h-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-xs font-black text-slate-400 shrink-0">FC</div>
                     }
-                    <span class="text-sm sm:text-base font-bold text-white truncate" [class.text-[#EAE905]]="/ryvl|rival/i.test(m.awayName)">
+                    <span class="text-sm sm:text-base font-bold text-white truncate" [class.text-[#EAE905]]="/^\s*ryvl(?:\s+esports)?\s*$/i.test(m.awayName)">
                       {{ m.awayName }}
                     </span>
                   </div>
@@ -218,6 +218,6 @@ export class FixturesComponent implements OnInit {
   }
 
   isRyvlMatch(m: VpgMatchItem): boolean {
-    return /ryvl|rival/i.test(m.homeName) || /ryvl|rival/i.test(m.awayName);
+    return /^\s*ryvl(?:\s+esports)?\s*$/i.test(m.homeName) || /^\s*ryvl(?:\s+esports)?\s*$/i.test(m.awayName);
   }
 }

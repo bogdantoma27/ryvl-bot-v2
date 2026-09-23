@@ -269,6 +269,9 @@ export interface RyvlCompetition {
 }
 
 export interface RyvlPerformanceResponse {
+  standings?: VpgStandingsRow[];
+  season?: number;
+  warnings?: string[];
   teamName: string;
   activeCompetition: string;
   competitions: RyvlCompetition[];
@@ -355,3 +358,20 @@ export interface RosterPlayer {
 }
 
 
+
+
+export interface VpgNotificationSettings {
+  pollIntervalSec: number;
+  fixturesTime: string;
+  resultsEnabled: boolean;
+  ryvlResultsEnabled: boolean;
+  fixturesEnabled: boolean;
+  ryvlFixturesEnabled: boolean;
+  standingsEnabled: boolean;
+  ryvlStandingsEnabled: boolean;
+}
+export interface VpgNotificationResponse {
+  config: VpgNotificationSettings & { lastPolledAt?: string | null; lastSuccessAt?: string | null; lastError?: string | null; retryAfter?: string | null };
+  timezone: string;
+  channels: Record<string, string | null | undefined>;
+}

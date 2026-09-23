@@ -52,7 +52,7 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
           <span class="text-xs text-slate-400">Season {{ selectedSeason() }}</span>
         </div>
 
-        @if (isLoadingStandings()) {
+        @if(isLoadingStandings()) {
           <div class="h-96 rounded-2xl bg-white/5 border border-white/10 animate-pulse"></div>
         } @else if (standings().length === 0) {
           <div class="p-12 rounded-2xl bg-[#0c0c0e] border border-white/10 text-center text-slate-400 text-sm">
@@ -98,7 +98,7 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
 
                       <td class="py-3 px-4">
                         <div class="flex items-center gap-3">
-                          @if (r.teamLogoUrl) {
+                          @if(r.teamLogoUrl) {
                             <img [src]="r.teamLogoUrl" alt="" class="w-6 h-6 object-contain shrink-0" />
                           } @else {
                             <div class="w-6 h-6 rounded bg-white/5 flex items-center justify-center text-[10px] text-slate-400 shrink-0">FC</div>
@@ -106,7 +106,7 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
                           <span class="text-white truncate" [class.text-[#EAE905]]="isRyvl">
                             {{ r.teamName }}
                           </span>
-                          @if (isRyvl) {
+                          @if(isRyvl) {
                             <span class="px-1.5 py-0.5 rounded bg-[#EAE905] text-black text-[9px] font-black uppercase tracking-wider">
                               RYVL
                             </span>
@@ -161,7 +161,7 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
           </div>
         </div>
 
-        @if (isLoadingLeaderboard()) {
+        @if(isLoadingLeaderboard()) {
           <div class="h-64 rounded-2xl bg-white/5 border border-white/10 animate-pulse"></div>
         } @else if (leaderboard().length === 0) {
           <div class="p-12 rounded-2xl bg-[#0c0c0e] border border-white/10 text-center text-slate-400 text-sm">
@@ -175,7 +175,7 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
                   <span class="text-lg font-black font-mono" [class.text-[#EAE905]]="e.rank <= 3" [class.text-slate-500]="e.rank > 3">
                     #{{ e.rank }}
                   </span>
-                  @if (e.userAvatarUrl) {
+                  @if(e.userAvatarUrl) {
                     <img [src]="e.userAvatarUrl" alt="" class="w-9 h-9 rounded-full object-cover shrink-0" />
                   } @else {
                     <div class="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-xs font-bold text-slate-300 shrink-0">
@@ -191,7 +191,7 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
                 </div>
 
                 <div class="text-right shrink-0">
-                  @if (selectedCategory() === 'strikers') {
+                  @if(selectedCategory() === 'strikers') {
                     <div class="text-base font-black font-mono text-[#EAE905]">{{ e.goals }} <span class="text-[10px] text-slate-400 font-normal">G</span></div>
                     <div class="text-[10px] text-slate-500 font-mono">{{ e.matchesPlayed }} Matches</div>
                   } @else if (selectedCategory() === 'cam' || selectedCategory() === 'wingers') {
@@ -287,6 +287,6 @@ export class StandingsComponent implements OnInit {
   }
 
   isRyvlTeam(name: string): boolean {
-    return /ryvl|rival/i.test(name);
+    return /^\s*ryvl(?:\s+esports)?\s*$/i.test(name);
   }
 }

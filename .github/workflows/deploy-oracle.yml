@@ -13,13 +13,13 @@ on:
 
 concurrency:
   group: oracle-production
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
     name: Deploy backend and frontend
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Deploy over SSH
@@ -29,9 +29,13 @@ jobs:
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script_stop: true
-          command_timeout: 17m
+          command_timeout: 22m
           script: |
             set -euo pipefail
+
+            # Serialize manual and automated deployments on this VM as well as in Actions.
+            exec 9>/home/ubuntu/.ryvl-deploy.lock
+            flock -w 1200 9
 
             echo "Updating repository..."
             cd /home/ubuntu/ryvl-bot-v2
@@ -42,6 +46,7 @@ jobs:
             # This discards tracked build/install drift (for example a locally
             # modified package-lock.json) while preserving ignored .env files.
             git reset --hard origin/main
+            RELEASE_SHA="$(git rev-parse HEAD)"
 
             echo "Ensuring Node.js 22 is installed..."
             NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo 0)"
@@ -87,13 +92,10 @@ jobs:
             npm ci
             npx prisma generate
             npm run build
+            node --test test/*.test.cjs
 
-            # Database schema changes are intentionally NOT applied automatically.
+            # General database schema changes are not automatically applied.
             # Run prisma db push/migrations manually after reviewing schema changes.
-
-            echo "Restarting backend..."
-            pm2 restart ryvl-backend --update-env
-            pm2 save
 
             echo "Building frontend..."
             cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/web
@@ -111,11 +113,35 @@ jobs:
               exit 1
             fi
 
-            echo "Publishing frontend..."
-            sudo mkdir -p /var/www/ryvl
-            sudo rm -rf /var/www/ryvl/*
-            sudo cp -a "$WEB_DIST"/. /var/www/ryvl/
-            sudo chown -R caddy:caddy /var/www/ryvl
+            # Do not restart the application or change the published frontend until both builds pass.
+            echo "Applying reviewed additive notification tables..."
+            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
+            npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
+
+            echo "Restarting backend..."
+            pm2 restart ryvl-backend --update-env
+            pm2 save
+            BACKEND_READY=0
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent --max-time 5 http://127.0.0.1:3000/api/health >/dev/null; then
+                BACKEND_READY=1
+                break
+              fi
+              sleep 2
+            done
+            test "$BACKEND_READY" -eq 1
+
+            echo "Publishing validated frontend release..."
+            RELEASE_DIR="/var/www/ryvl-releases/$RELEASE_SHA"
+            sudo mkdir -p "$RELEASE_DIR"
+            sudo cp -a "$WEB_DIST"/. "$RELEASE_DIR"/
+            sudo chown -R caddy:caddy "$RELEASE_DIR"
+            sudo test -s "$RELEASE_DIR/index.html"
+            if [ -d /var/www/ryvl ] && [ ! -L /var/www/ryvl ]; then
+              sudo mv /var/www/ryvl "/var/www/ryvl-legacy-$(date +%s)"
+            fi
+            sudo ln -s "$RELEASE_DIR" "/var/www/ryvl-next-$RELEASE_SHA"
+            sudo mv -Tf "/var/www/ryvl-next-$RELEASE_SHA" /var/www/ryvl
 
             echo "Updating Caddy..."
             sudo cp /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/Caddyfile /etc/caddy/Caddyfile
@@ -123,6 +149,8 @@ jobs:
             sudo systemctl enable caddy
             sudo systemctl reload caddy
 
-            echo "Deployment complete."
+            curl --fail --silent --max-time 10 http://127.0.0.1/ >/dev/null
+            curl --fail --silent --max-time 10 http://127.0.0.1/api/health >/dev/null
+            echo "Deployment complete: $RELEASE_SHA"
             pm2 status ryvl-backend
-            systemctl --no-pager --full status caddy | head -20
+            systemctl --no-pager --full status caddy

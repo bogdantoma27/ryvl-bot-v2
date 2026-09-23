@@ -7,6 +7,7 @@ import { VpgService } from './vpg.service';
 import { VpgPollerService } from './vpg-poller.service';
 import { VpgSuperligaPollerService } from './vpg-superliga-poller.service';
 import { VpgController } from './vpg.controller';
+import { VpgNotificationsController } from './vpg-notifications.controller';
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { VpgController } from './vpg.controller';
     forwardRef(() => DiscordModule),
   ],
   providers: [VpgService, VpgPollerService, VpgSuperligaPollerService],
-  controllers: [VpgController],
+  controllers: [VpgController, VpgNotificationsController],
   exports: [VpgService, VpgPollerService, VpgSuperligaPollerService],
 })
 export class VpgModule {}

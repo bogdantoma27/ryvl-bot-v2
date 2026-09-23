@@ -38,6 +38,9 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/public/public-shell.component').then((m) => m.PublicShellComponent),
     children: [
+      { path: 'live', pathMatch: 'full', redirectTo: 'match-center' },
+      { path: 'privacy', title: 'Privacy Policy | RYVL Esports', data: { kind: 'privacy' }, loadComponent: () => import('./features/public/legal.component').then(m => m.LegalComponent) },
+      { path: 'terms', title: 'Terms of Service | RYVL Esports', data: { kind: 'terms' }, loadComponent: () => import('./features/public/legal.component').then(m => m.LegalComponent) },
       {
         path: '',
         pathMatch: 'full',
@@ -54,11 +57,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/public/performance.component').then((m) => m.PerformanceComponent),
       },
-      {
-        path: 'competitions',
-        loadComponent: () =>
-          import('./features/public/competitions.component').then((m) => m.CompetitionsComponent),
-      },
+      { path: 'competitions', pathMatch: 'full', redirectTo: 'performance' },
       {
         path: 'results',
         loadComponent: () =>
@@ -75,7 +74,7 @@ export const routes: Routes = [
           import('./features/public/standings.component').then((m) => m.StandingsComponent),
       },
       {
-        path: 'live',
+        path: 'match-center',
         loadComponent: () =>
           import('./features/public/live.component').then((m) => m.LiveComponent),
       },

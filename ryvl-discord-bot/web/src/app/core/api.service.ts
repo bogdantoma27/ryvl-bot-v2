@@ -1,3 +1,4 @@
+import { VpgNotificationSettings, VpgNotificationResponse } from './models';
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
@@ -657,6 +658,22 @@ export class ApiService {
       this.http.get<RosterPlayer[]>(`${this.baseUrl}/api/public/roster?t=${Date.now()}`),
     );
   }
+  getSuperligaToday(): Promise<{ date: string; season: number; results: VpgMatchItem[]; fixtures: VpgMatchItem[]; updatedAt: string }> {
+    return firstValueFrom(this.http.get<{ date: string; season: number; results: VpgMatchItem[]; fixtures: VpgMatchItem[]; updatedAt: string }>(`${this.baseUrl}/api/vpg/superliga/today`));
+  }
+  getVpgNotifications(guildId: string): Promise<VpgNotificationResponse> {
+    return firstValueFrom(this.http.get<VpgNotificationResponse>(`${this.baseUrl}/api/guilds/${guildId}/vpg/notifications`, { headers: this.headers() }));
+  }
+  updateVpgNotifications(guildId: string, value: VpgNotificationSettings): Promise<VpgNotificationResponse> {
+    return firstValueFrom(this.http.patch<VpgNotificationResponse>(`${this.baseUrl}/api/guilds/${guildId}/vpg/notifications`, value, { headers: this.headers() }));
+  }
+  checkVpgNotifications(guildId: string): Promise<{ postedCount: number; updatedCount?: number; busy?: boolean }> {
+    return firstValueFrom(this.http.post<{ postedCount: number; updatedCount?: number; busy?: boolean }>(`${this.baseUrl}/api/guilds/${guildId}/vpg/notifications/check`, {}, { headers: this.headers() }));
+  }
+  repairClubLinks(guildId: string): Promise<{ updated: number; skipped: number; failed: number; inspected: number; limit: number }> {
+    return firstValueFrom(this.http.post<{ updated: number; skipped: number; failed: number; inspected: number; limit: number }>(`${this.baseUrl}/api/guilds/${guildId}/vpg/notifications/repair-club-links`, {}, { headers: this.headers() }));
+  }
+
 }
 
 

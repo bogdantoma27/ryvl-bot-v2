@@ -1,3 +1,4 @@
+import { fixturesOnDay, romaniaClock } from './notification-policy';
 import {
   Controller,
   Get,
@@ -140,6 +141,17 @@ export class VpgController {
       results,
       total: results.length,
     };
+  }
+
+  @Get('api/vpg/superliga/today')
+  async getTodayMatches() {
+    const season = await this.vpgService.fetchLatestSeason();
+    const [results, fixtures] = await Promise.all([
+      this.vpgService.fetchAllMatches('complete', season),
+      this.vpgService.fetchAllMatches('scheduled', season),
+    ]);
+    const date = romaniaClock(new Date()).date;
+    return { date, season, results: fixturesOnDay(results, date), fixtures: fixturesOnDay(fixtures, date), updatedAt: new Date().toISOString() };
   }
 
   @Get('api/vpg/superliga/leaderboard')

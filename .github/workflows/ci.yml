@@ -1,0 +1,75 @@
+name: Validate backend and public website
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ryvl-discord-bot/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ryvl-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ryvl_ci
+          POSTGRES_PASSWORD: local-test-only
+          POSTGRES_DB: ryvl_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ryvl_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ryvl_ci:local-test-only@localhost:5432/ryvl_ci
+      RUN_DATABASE_TESTS: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          check-latest: true
+      - name: Install backend and validate Prisma
+        working-directory: ryvl-discord-bot/server
+        run: |
+          npm ci
+          npx prisma validate
+          npx prisma generate
+      - name: Test additive upgrade with existing data
+        working-directory: ryvl-discord-bot/server
+        run: |
+          git show e3fcb325b4f37a18676085161ed7611152b36c1a:ryvl-discord-bot/server/prisma/schema.prisma > /tmp/ryvl-before.prisma
+          npx prisma db push --schema /tmp/ryvl-before.prisma --skip-generate
+          node - <<'NODE'
+          const {PrismaClient}=require('@prisma/client');
+          const prisma=new PrismaClient();
+          prisma.guild.create({data:{id:'999999999999900001',name:'Existing CI guild',defaultFixturesChannelId:'keep-this-channel'}})
+            .catch(error=>{console.error(error.message);process.exitCode=1;})
+            .finally(()=>prisma.$disconnect());
+          NODE
+          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
+          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
+      - name: Backend build and regression tests
+        working-directory: ryvl-discord-bot/server
+        run: npm test
+      - name: Angular production build
+        working-directory: ryvl-discord-bot/web
+        run: |
+          npm ci
+          npm run build
+      - name: Desktop and mobile browser checks
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ryvl-browser" --no-save @playwright/test@1.56.1
+          export PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules"
+          node ryvl-discord-bot/web/test/browser-smoke.cjs

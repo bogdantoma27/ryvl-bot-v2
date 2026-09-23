@@ -83,7 +83,7 @@ export class RyvlEmbedBuilder {
     }
 
     const lines = results.slice(0, 10).map((m) => {
-      const isHome = /ryvl|rival/i.test(m.homeName);
+      const isHome = /^\s*ryvl(?:\s+esports)?\s*$/i.test(m.homeName);
       const ryvlScore = isHome ? (m.homeScore ?? 0) : (m.awayScore ?? 0);
       const oppScore = isHome ? (m.awayScore ?? 0) : (m.homeScore ?? 0);
       const oppName = isHome ? m.awayName : m.homeName;
@@ -114,7 +114,7 @@ export class RyvlEmbedBuilder {
     }
 
     const lines = fixtures.slice(0, 8).map((m) => {
-      const isHome = /ryvl|rival/i.test(m.homeName);
+      const isHome = /^\s*ryvl(?:\s+esports)?\s*$/i.test(m.homeName);
       const oppName = isHome ? m.awayName : m.homeName;
       const venue = isHome ? '🏠 Home' : '✈️ Away';
       const dateStr = m.dateFormattedEn || m.dateFormattedRo;

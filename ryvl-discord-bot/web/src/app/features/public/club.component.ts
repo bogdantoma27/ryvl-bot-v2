@@ -62,7 +62,7 @@ import { GuildStore } from '../../core/guild.store';
           <div class="flex items-center gap-6">
             <!-- Club Crest -->
             <div class="w-24 h-24 rounded-2xl bg-black/80 border-2 border-[#EAE905]/40 p-2 flex items-center justify-center shrink-0 shadow-2xl">
-              @if (clubCrestUrl()) {
+              @if(clubCrestUrl()) {
                 <img [src]="clubCrestUrl()" alt="Crest" class="w-full h-full object-contain" />
               } @else {
                 <img src="/assets/branding/ryvl-mark.png" alt="RYVL Crest" class="w-full h-full object-contain" />
@@ -202,8 +202,8 @@ import { GuildStore } from '../../core/guild.store';
       </div>
 
       <!-- Tab 1: Recent Matches Feed -->
-      @if (activeTab() === 'matches') {
-        @if (isLoadingMatches()) {
+      @if(activeTab() === 'matches') {
+        @if(isLoadingMatches()) {
           <div class="py-20 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-4">
             <div class="w-10 h-10 border-2 border-[#EAE905] border-t-transparent rounded-full animate-spin mx-auto"></div>
             <p class="text-sm font-bold text-slate-300">Synchronizing match telemetry from EA Sports servers...</p>
@@ -296,10 +296,10 @@ import { GuildStore } from '../../core/guild.store';
                 </div>
 
                 <!-- Expanded Squad Performance Breakdown -->
-                @if (expandedMatchId() === match.matchId) {
+                @if(expandedMatchId() === match.matchId) {
                   <div class="px-6 pb-6 pt-3 border-t border-white/10 bg-[#121214] space-y-6 animate-fadeIn">
                     <!-- Team Aggregate Statistics -->
-                    @if (match.trackedClub.aggregate || match.opponentClub.aggregate) {
+                    @if(match.trackedClub.aggregate || match.opponentClub.aggregate) {
                       <div>
                         <h4 class="text-xs font-mono font-bold uppercase tracking-wider text-[#EAE905] mb-3">
                           Match Aggregate Comparison
@@ -337,7 +337,7 @@ import { GuildStore } from '../../core/guild.store';
                     }
 
                     <!-- RYVL Squad Performance Table -->
-                    @if (match.trackedPlayers.length > 0) {
+                    @if(match.trackedPlayers.length > 0) {
                       <div>
                         <h4 class="text-xs font-mono font-bold uppercase tracking-wider text-[#EAE905] mb-2 flex items-center justify-between">
                           <span>{{ match.trackedClub.name }} Player Performance</span>
@@ -360,7 +360,7 @@ import { GuildStore } from '../../core/guild.store';
                               @for (p of match.trackedPlayers; track p.gamertag) {
                                 <tr class="hover:bg-white/5 transition">
                                   <td class="py-2 px-3 font-semibold text-white flex items-center gap-1.5">
-                                    @if (p.isMom) {
+                                    @if(p.isMom) {
                                       <span title="Man of the Match" class="text-amber-400">⭐</span>
                                     }
                                     <span>{{ p.gamertag }}</span>
@@ -387,8 +387,8 @@ import { GuildStore } from '../../core/guild.store';
       }
 
       <!-- Tab 2: Squad Leaderboard & Member Statistics -->
-      @if (activeTab() === 'roster') {
-        @if (isLoadingMembers()) {
+      @if(activeTab() === 'roster') {
+        @if(isLoadingMembers()) {
           <div class="py-20 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-4">
             <div class="w-10 h-10 border-2 border-[#EAE905] border-t-transparent rounded-full animate-spin mx-auto"></div>
             <p class="text-sm font-bold text-slate-300">Loading club member leaderboard...</p>
@@ -451,7 +451,7 @@ import { GuildStore } from '../../core/guild.store';
       }
 
       <!-- Tab 3: Campaign Telemetry -->
-      @if (activeTab() === 'summary') {
+      @if(activeTab() === 'summary') {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div class="p-6 rounded-3xl bg-[#0c0c0e] border border-white/10 space-y-4">
             <div class="text-xs font-mono text-[#EAE905] uppercase tracking-wider">Win Efficiency</div>
