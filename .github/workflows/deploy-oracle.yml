@@ -37,7 +37,11 @@ jobs:
             cd /home/ubuntu/ryvl-bot-v2
             git fetch origin main
             git checkout main
-            git pull --ff-only origin main
+
+            # The production VM should mirror the canonical main branch.
+            # This discards tracked build/install drift (for example a locally
+            # modified package-lock.json) while preserving ignored .env files.
+            git reset --hard origin/main
 
             echo "Ensuring Node.js 22 is installed..."
             NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo 0)"
