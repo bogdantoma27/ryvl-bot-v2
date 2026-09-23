@@ -39,6 +39,20 @@ jobs:
             git checkout main
             git pull --ff-only origin main
 
+            echo "Ensuring Node.js 22 is installed..."
+            NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo 0)"
+            NODE_MINOR="$(node -p "process.versions.node.split('.')[1]" 2>/dev/null || echo 0)"
+            NODE_PATCH="$(node -p "process.versions.node.split('.')[2]" 2>/dev/null || echo 0)"
+
+            # Angular 22 requires Node.js >= 22.22.3 in the Node 22 line.
+            if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && { [ "$NODE_MINOR" -lt 22 ] || { [ "$NODE_MINOR" -eq 22 ] && [ "$NODE_PATCH" -lt 3 ]; }; }; }; then
+              curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+
+            node --version
+            npm --version
+
             echo "Building backend..."
             cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
             npm ci
