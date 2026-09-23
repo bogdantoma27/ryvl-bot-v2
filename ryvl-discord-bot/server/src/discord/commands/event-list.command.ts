@@ -1,4 +1,5 @@
-import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import { ChatInputCommandInteraction, EmbedBuilder   MessageFlags,
+} from 'discord.js';
 import { Injectable } from '@nestjs/common';
 import { EventsService } from '../../events/events.service';
 
@@ -11,7 +12,7 @@ export class EventListCommand {
     if (!guildId) {
       await interaction.reply({
         content: 'This command can only be used inside a server.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -24,7 +25,7 @@ export class EventListCommand {
     if (events.length === 0) {
       await interaction.reply({
         content: 'No upcoming events found for this server.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -59,6 +60,6 @@ export class EventListCommand {
       });
     }
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   }
 }
