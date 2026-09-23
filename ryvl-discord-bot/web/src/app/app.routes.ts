@@ -1,31 +1,28 @@
 import { inject } from '@angular/core';
-import { CanMatchFn, Route, Routes, UrlSegment } from '@angular/router';
+import { CanMatchFn, Router, Routes } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ApiService } from './core/api.service';
 
-export const authGuard: CanMatchFn = async (route: Route, segments: UrlSegment[]) => {
+export const authGuard: CanMatchFn = async () => {
   const api = inject(ApiService);
+  const router = inject(Router);
+  const login = (error?: string) => router.createUrlTree(['/admin/login'], {
+    queryParams: error ? { error } : undefined,
+  });
 
-  // On any route, check for ?token= query param to consume the JWT from OAuth callback
-  if (typeof window !== 'undefined') {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    if (token) {
-      api.setSessionToken(token);
-      const cleanUrl = window.location.pathname;
-      window.history.replaceState({}, document.title, cleanUrl);
-    }
-  }
-
+  // ApiService already consumes an OAuth token, when present. A missing session
+  // must redirect to sign-in: returning false from canMatch falls through to home.
   const token = api.getSessionToken();
-  if (!token) {
-    return false;
-  }
-
+  if (!token) return login();
   try {
     const auth = await api.authMe();
-    return Boolean(auth && (auth.authenticated || auth.user));
-  } catch {
-    return false;
+    if (auth && (auth.authenticated || auth.user)) return true;
+    if (api.getSessionToken() === token) api.setSessionToken(null);
+    return login('session_expired');
+  } catch (error: unknown) {
+    const rejected = error instanceof HttpErrorResponse && (error.status === 401 || error.status === 403);
+    if (rejected && api.getSessionToken() === token) api.setSessionToken(null);
+    return login(rejected ? 'session_expired' : 'unavailable');
   }
 };
 
@@ -110,6 +107,12 @@ export const routes: Routes = [
   // ---------------------------------------------------------------------------
   // Admin Management Console (Bot, Events, Lineups, Settings)
   // ---------------------------------------------------------------------------
+  // The sign-in page is public; all workspace routes below keep their guard.
+  {
+    path: 'admin/login',
+    title: 'Staff sign-in | RYVL Esports',
+    loadComponent: () => import('./features/auth/admin-login.component').then(m => m.AdminLoginComponent),
+  },
   {
     path: 'admin',
     pathMatch: 'full',

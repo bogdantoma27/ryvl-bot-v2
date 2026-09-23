@@ -66,6 +66,7 @@ jobs:
           python3 -m unittest discover -s ryvl-discord-bot/deploy/test -v
           bash -n ryvl-discord-bot/deploy/oracle.sh
           node --check ryvl-discord-bot/deploy/verify-public-site.mjs
+          node --check ryvl-discord-bot/web/test/admin-live-smoke.cjs
           # Scan tracked code/docs only. Tests intentionally keep old-IP rejection cases.
           if git grep -n -E 'https?://130[.]61[.]228[.]100' -- ':!**/test/**'; then
             echo 'Unexpected old production IP URL remains outside regression fixtures.' >&2
@@ -97,3 +98,4 @@ jobs:
           export PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules"
           node ryvl-discord-bot/web/test/browser-smoke.cjs
           node ryvl-discord-bot/web/test/ui-review-regressions.cjs
+          node ryvl-discord-bot/web/test/admin-access.cjs

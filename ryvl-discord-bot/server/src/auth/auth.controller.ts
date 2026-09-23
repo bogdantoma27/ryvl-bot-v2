@@ -39,10 +39,14 @@ export class AuthController {
     @Res() res: Response,
   ): Promise<void> {
     const frontendUrl = this.configService.frontendUrl;
+    // OAuth belongs to the staff console, not the public homepage. These are
+    // fixed local paths; no user-supplied return URL can become an open redirect.
+    const loginUrl = new URL('/admin/login', frontendUrl).toString();
+    const dashboardUrl = new URL('/admin/dashboard', frontendUrl).toString();
 
     if (error || !code) {
       this.logger.warn(`Discord OAuth error: ${error || 'missing_code'}`);
-      res.redirect(`${frontendUrl}?error=${encodeURIComponent(error || 'missing_code')}`);
+      res.redirect(`${loginUrl}?error=${encodeURIComponent(error || 'missing_code')}`);
       return;
     }
 
@@ -74,10 +78,10 @@ export class AuthController {
       });
 
       this.logger.log(`Discord user authenticated: ${displayName} (${user.id})`);
-      res.redirect(`${frontendUrl}?token=${encodeURIComponent(token)}`);
+      res.redirect(`${dashboardUrl}?token=${encodeURIComponent(token)}`);
     } catch (err) {
       this.logger.error(`Discord OAuth token exchange failed: ${err}`);
-      res.redirect(`${frontendUrl}?error=auth_failed`);
+      res.redirect(`${loginUrl}?error=auth_failed`);
     }
   }
 
