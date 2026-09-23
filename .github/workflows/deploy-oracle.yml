@@ -53,3 +53,36 @@ jobs:
         env:
           EXPECTED_REVISION: ${{ github.sha }}
         run: node ryvl-discord-bot/deploy/verify-public-site.mjs
+  cleanup:
+    name: Remove this migration's merged validation branch
+    needs: deploy
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Remove only deploy/ryvl-top when fully merged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MAIN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          REF='heads/deploy/ryvl-top'
+          # This branch was created solely for this migration. Preserve all other branches.
+          if ! BRANCH_SHA="$(gh api "repos/$GH_REPO/git/ref/$REF" --jq '.object.sha' 2>/dev/null)"; then
+            echo 'Temporary branch could not be read or is already absent; leaving branches unchanged.'
+            exit 0
+          fi
+          STATUS="$(gh api "repos/$GH_REPO/compare/$BRANCH_SHA...$MAIN_SHA" --jq '.status')"
+          if [ "$STATUS" = ahead ] || [ "$STATUS" = identical ]; then
+            CURRENT_SHA="$(gh api "repos/$GH_REPO/git/ref/$REF" --jq '.object.sha')"
+            if [ "$CURRENT_SHA" != "$BRANCH_SHA" ]; then
+              echo 'Preserving branch because its head changed during cleanup.'
+              exit 0
+            fi
+            gh api --method DELETE "repos/$GH_REPO/git/refs/$REF"
+            echo 'Removed the fully merged temporary migration branch.'
+          else
+            echo 'Preserving branch because it contains changes not included in this deployment.'
+          fi
