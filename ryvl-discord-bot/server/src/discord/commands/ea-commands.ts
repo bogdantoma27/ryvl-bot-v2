@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
   ChannelType,
+  MessageFlags,
 } from 'discord.js';
 import { EaService } from '../../ea/ea.service';
 import { EaPollerService } from '../../ea/ea-poller.service';
@@ -19,7 +20,7 @@ export class EaCommands {
   ) {}
 
   async handleSetup(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const guildId = interaction.guildId;
     if (!guildId) {
