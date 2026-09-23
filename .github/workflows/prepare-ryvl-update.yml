@@ -22,13 +22,15 @@ jobs:
           POSTGRES_DB: ryvl_ci
         ports: ['5432:5432']
         options: >-
-          --health-cmd 'pg_isready -U ryvl_ci'
+          --health-cmd "pg_isready -U ryvl_ci"
           --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgresql://ryvl_ci:local-test-only@localhost:5432/ryvl_ci
       RUN_DATABASE_TESTS: '1'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -71,6 +73,7 @@ jobs:
           export PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules"
           node ryvl-discord-bot/web/test/browser-smoke.cjs
       - name: Inspect public VPG response shape without posting to Discord
+        if: always()
         continue-on-error: true
         run: |
           node - <<'NODE'
@@ -92,7 +95,7 @@ jobs:
           })().catch(error => { console.error(error.message); process.exitCode = 1; });
           NODE
       - name: Save verified source on the isolated branch only
-        if: steps.apply.outputs.applied == 'true'
+        if: success() && steps.apply.outputs.applied == 'true'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
