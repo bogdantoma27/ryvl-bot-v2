@@ -998,3 +998,54 @@ The current frontend implementation does this automatically, so a fresh frontend
 - Prefer dedicated deployment SSH keys
 - Review Prisma schema changes before applying them to production data
 - Keep Ubuntu, Node.js and application dependencies patched
+
+
+---
+
+## 24. Server-side SVG/PNG text rendering on Oracle Ubuntu
+
+The lineup generator uses `sharp` to rasterize SVG into PNG. SVG text rendering on Linux depends on the system font stack (fontconfig/Pango/librsvg).
+
+Minimal Ubuntu cloud images may not have a usable fontconfig configuration or common fonts installed. A typical symptom is:
+
+```text
+Fontconfig error: Cannot load default config file: File not found
+```
+
+and the generated image can contain the pitch/shapes but no text.
+
+Install the required font packages:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y fontconfig fontconfig-config fonts-dejavu-core fonts-liberation2
+sudo fc-cache -f
+```
+
+Verify that a font is resolvable:
+
+```bash
+fc-match "Liberation Sans"
+```
+
+The production lineup SVG explicitly prefers `Liberation Sans` and falls back to `DejaVu Sans`, both of which are available on Ubuntu.
+
+The GitHub Actions deployment performs this font check/install automatically, so future deployments to a fresh Oracle VM should not require manual font setup.
+
+### Discord "Unknown interaction" on a cloud VM
+
+Discord interactions must be acknowledged quickly. A cloud deployment can expose latency that is not noticeable locally, especially when the command performs a remote database lookup before replying.
+
+The lineup command is implemented so that:
+
+- modal commands call `showModal()` before database/network work
+- non-modal commands call `deferReply()` before database/network work
+- long image rendering happens only after an interaction has already been acknowledged
+
+This avoids errors such as:
+
+```text
+DiscordAPIError[10062]: Unknown interaction
+```
+
+The bot also uses `MessageFlags.Ephemeral` instead of the deprecated `ephemeral: true` response option for the lineup flow.
