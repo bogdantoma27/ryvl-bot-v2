@@ -1,156 +1,88 @@
 name: Deploy RYVL to Oracle VM
-
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
-      - "ryvl-discord-bot/server/**"
-      - "ryvl-discord-bot/web/**"
-      - "ryvl-discord-bot/Caddyfile"
-      - ".github/workflows/deploy-oracle.yml"
+      - 'ryvl-discord-bot/**'
+      - '.github/workflows/deploy-oracle.yml'
+      - '.github/workflows/ci.yml'
   workflow_dispatch:
-
+permissions:
+  contents: read
 concurrency:
   group: oracle-production
   cancel-in-progress: false
-
 jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
   deploy:
     name: Deploy backend and frontend
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 25
-
     steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1.2.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Deploy the validated revision over SSH
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
+        env:
+          RELEASE_SHA: ${{ github.sha }}
         with:
           host: ${{ secrets.ORACLE_HOST }}
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
-          script_stop: true
+          envs: RELEASE_SHA
           command_timeout: 22m
           script: |
             set -euo pipefail
-
-            # Serialize manual and automated deployments on this VM as well as in Actions.
+            [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
             exec 9>/home/ubuntu/.ryvl-deploy.lock
             flock -w 1200 9
-
-            echo "Updating repository..."
             cd /home/ubuntu/ryvl-bot-v2
             git fetch origin main
-            git checkout main
-
-            # The production VM should mirror the canonical main branch.
-            # This discards tracked build/install drift (for example a locally
-            # modified package-lock.json) while preserving ignored .env files.
-            git reset --hard origin/main
-            RELEASE_SHA="$(git rev-parse HEAD)"
-
-            echo "Ensuring Node.js 22 is installed..."
-            NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo 0)"
-            NODE_MINOR="$(node -p "process.versions.node.split('.')[1]" 2>/dev/null || echo 0)"
-            NODE_PATCH="$(node -p "process.versions.node.split('.')[2]" 2>/dev/null || echo 0)"
-
-            # Angular 22 requires Node.js >= 22.22.3 in the Node 22 line.
-            if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && { [ "$NODE_MINOR" -lt 22 ] || { [ "$NODE_MINOR" -eq 22 ] && [ "$NODE_PATCH" -lt 3 ]; }; }; }; then
-              curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-              sudo apt-get install -y nodejs
-            fi
-
-            node --version
-            npm --version
-
-            echo "Ensuring server-side font rendering dependencies are installed..."
-            if ! command -v fc-match >/dev/null 2>&1 || [ ! -f /etc/fonts/fonts.conf ]; then
-              sudo apt-get update
-              sudo apt-get install -y fontconfig fontconfig-config fonts-dejavu-core fonts-liberation2
-            fi
-
-            # Sharp renders SVG text through librsvg/Pango/fontconfig. Rebuild the
-            # font cache so lineup PNG text is available on minimal OCI images.
-            sudo fc-cache -f
-            fc-match "Liberation Sans"
-
-            echo "Building backend..."
-            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
-
-            echo "Ensuring EA Python bridge runtime is available..."
-            if ! command -v python3 >/dev/null 2>&1; then
-              sudo apt-get update
-              sudo apt-get install -y python3
-            fi
-            if [ ! -x .venv/bin/python ]; then
-              sudo apt-get update
-              sudo apt-get install -y python3-venv
-              python3 -m venv .venv
-            fi
-            .venv/bin/python -m pip install --upgrade pip
-            .venv/bin/pip install -r requirements-ea.txt
-
-            npm ci
-            npx prisma generate
-            npm run build
-            node --test test/*.test.cjs
-
-            # General database schema changes are not automatically applied.
-            # Run prisma db push/migrations manually after reviewing schema changes.
-
-            echo "Building frontend..."
-            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/web
-            npm ci
-            npm run build
-
-            # Angular's application builder normally emits browser files here.
-            WEB_DIST="/home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/web/dist/web/browser"
-            if [ ! -d "$WEB_DIST" ]; then
-              WEB_DIST="/home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/web/dist/web"
-            fi
-
-            if [ ! -f "$WEB_DIST/index.html" ]; then
-              echo "Angular build output not found at $WEB_DIST"
+            # Never silently deploy a different, unvalidated revision.
+            if [ "$(git rev-parse origin/main)" != "$RELEASE_SHA" ]; then
+              echo 'main has advanced. The newer workflow will deploy its validated revision.' >&2
               exit 1
             fi
-
-            # Do not restart the application or change the published frontend until both builds pass.
-            echo "Applying reviewed additive notification tables..."
-            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
-            npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
-
-            echo "Restarting backend..."
-            pm2 restart ryvl-backend --update-env
-            pm2 save
-            BACKEND_READY=0
-            for attempt in $(seq 1 30); do
-              if curl --fail --silent --max-time 5 http://127.0.0.1:3000/api/health >/dev/null; then
-                BACKEND_READY=1
-                break
-              fi
-              sleep 2
-            done
-            test "$BACKEND_READY" -eq 1
-
-            echo "Publishing validated frontend release..."
-            RELEASE_DIR="/var/www/ryvl-releases/$RELEASE_SHA"
-            sudo mkdir -p "$RELEASE_DIR"
-            sudo cp -a "$WEB_DIST"/. "$RELEASE_DIR"/
-            sudo chown -R caddy:caddy "$RELEASE_DIR"
-            sudo test -s "$RELEASE_DIR/index.html"
-            if [ -d /var/www/ryvl ] && [ ! -L /var/www/ryvl ]; then
-              sudo mv /var/www/ryvl "/var/www/ryvl-legacy-$(date +%s)"
+            git checkout main
+            git reset --hard "$RELEASE_SHA"
+            bash ryvl-discord-bot/deploy/oracle.sh
+      - name: Verify public DNS, TLS, application and OAuth configuration
+        env:
+          EXPECTED_REVISION: ${{ github.sha }}
+        run: node ryvl-discord-bot/deploy/verify-public-site.mjs
+  cleanup:
+    name: Remove this migration's merged validation branch
+    needs: deploy
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Remove only deploy/ryvl-top when fully merged
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          MAIN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          REF='heads/deploy/ryvl-top'
+          # This branch was created solely for this migration. Preserve all other branches.
+          if ! BRANCH_SHA="$(gh api "repos/$GH_REPO/git/ref/$REF" --jq '.object.sha' 2>/dev/null)"; then
+            echo 'Temporary branch could not be read or is already absent; leaving branches unchanged.'
+            exit 0
+          fi
+          STATUS="$(gh api "repos/$GH_REPO/compare/$BRANCH_SHA...$MAIN_SHA" --jq '.status')"
+          if [ "$STATUS" = ahead ] || [ "$STATUS" = identical ]; then
+            CURRENT_SHA="$(gh api "repos/$GH_REPO/git/ref/$REF" --jq '.object.sha')"
+            if [ "$CURRENT_SHA" != "$BRANCH_SHA" ]; then
+              echo 'Preserving branch because its head changed during cleanup.'
+              exit 0
             fi
-            sudo ln -s "$RELEASE_DIR" "/var/www/ryvl-next-$RELEASE_SHA"
-            sudo mv -Tf "/var/www/ryvl-next-$RELEASE_SHA" /var/www/ryvl
-
-            echo "Updating Caddy..."
-            sudo cp /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/Caddyfile /etc/caddy/Caddyfile
-            sudo caddy validate --config /etc/caddy/Caddyfile
-            sudo systemctl enable caddy
-            sudo systemctl reload caddy
-
-            curl --fail --silent --max-time 10 http://127.0.0.1/ >/dev/null
-            curl --fail --silent --max-time 10 http://127.0.0.1/api/health >/dev/null
-            echo "Deployment complete: $RELEASE_SHA"
-            pm2 status ryvl-backend
-            systemctl --no-pager --full status caddy
+            gh api --method DELETE "repos/$GH_REPO/git/refs/$REF"
+            echo 'Removed the fully merged temporary migration branch.'
+          else
+            echo 'Preserving branch because it contains changes not included in this deployment.'
+          fi

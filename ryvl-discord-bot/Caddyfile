@@ -1,13 +1,39 @@
-:80 {
-  # Keep backend traffic private to the VM and expose it through the same origin.
-  handle /api/* {
-    reverse_proxy 127.0.0.1:3000
-  }
+# Caddy obtains and renews public certificates for both DNS names automatically.
+ryvl.top {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		# OAuth currently returns a token in the URL: do not send it in referrers.
+		Referrer-Policy no-referrer
+	}
 
-  # Serve the Angular production build and fall back to index.html for client-side routes.
-  handle {
-    root * /var/www/ryvl
-    try_files {path} /index.html
-    file_server
-  }
+	@api path /api /api/*
+	handle @api {
+		# Keep /api in the URI; NestJS controllers already include that prefix.
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle {
+		root * /var/www/ryvl
+		route {
+			try_files {path} /index.html
+			@entry path /index.html /release.json
+			header @entry Cache-Control "no-cache"
+			file_server
+		}
+	}
+}
+
+# Preserve paths and query strings when canonicalizing www.
+www.ryvl.top {
+	redir https://ryvl.top{uri} 308
+}
+
+# Explicit HTTP routes avoid a two-hop www redirect; the catch-all also moves
+# legacy IP bookmarks to the canonical site. ACME challenges remain automatic.
+http://ryvl.top, http://www.ryvl.top {
+	redir https://ryvl.top{uri} 308
+}
+:80 {
+	redir https://ryvl.top{uri} 308
 }
