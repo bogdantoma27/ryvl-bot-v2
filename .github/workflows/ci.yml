@@ -67,6 +67,7 @@ jobs:
           bash -n ryvl-discord-bot/deploy/oracle.sh
           node --check ryvl-discord-bot/deploy/verify-public-site.mjs
           node --check ryvl-discord-bot/web/test/admin-live-smoke.cjs
+          node --check ryvl-discord-bot/web/test/public-header-live-smoke.cjs
           # Scan tracked code/docs only. Tests intentionally keep old-IP rejection cases.
           if git grep -n -E 'https?://130[.]61[.]228[.]100' -- ':!**/test/**'; then
             echo 'Unexpected old production IP URL remains outside regression fixtures.' >&2
@@ -100,3 +101,4 @@ jobs:
           node ryvl-discord-bot/web/test/ui-review-regressions.cjs
           node ryvl-discord-bot/web/test/admin-access.cjs
           node ryvl-discord-bot/web/test/public-content-regressions.cjs
+          node ryvl-discord-bot/web/test/public-header-regressions.cjs

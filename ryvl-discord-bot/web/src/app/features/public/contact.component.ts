@@ -1,3 +1,4 @@
+import { PublicPageHeaderComponent } from './public-page-header.component';
 import { SOCIAL_LINKS } from './presentation';
 import {
   ChangeDetectionStrategy,
@@ -13,26 +14,19 @@ import { ApiService } from '../../core/api.service';
   selector: 'app-public-contact',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PublicPageHeaderComponent],
   template: `
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
-      <!-- Header -->
-      <div class="border-b border-[#EAE905]/15 pb-6">
-        <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">Direct Lines</div>
-        <h1 class="text-4xl font-black text-white uppercase tracking-tight">Contact RYVL Esports</h1>
-        <p class="text-xs sm:text-sm text-slate-400 mt-2 max-w-2xl">
-          Get in touch with management for scrims, tournament invitations, sponsorships, or general inquiries.
-        </p>
-      </div>
+    <div class="public-page space-y-8">
+      <app-public-page-header heading="Contact RYVL Esports" eyebrow="RYVL Esports" description="Get in touch about friendly matches, tournaments, partnerships or other enquiries." />
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
         <!-- Direct Inquiries Cards -->
         <div class="space-y-6">
           <div class="p-6 rounded-2xl bg-[#0c0c0e] border border-white/10 space-y-2">
             <div class="text-xs font-mono text-[#EAE905] uppercase tracking-wider">Discord Community</div>
-            <h3 class="text-base font-bold text-white">Official Server</h3>
+            <h3 class="text-base font-semibold text-white">Official Server</h3>
             <p class="text-xs text-slate-400 leading-relaxed">
-              Fastest response time for players, scrim inquiries, and community members.
+              For players, friendly matches and community questions.
             </p>
             <a
               [href]="social.discord"
@@ -46,34 +40,34 @@ import { ApiService } from '../../core/api.service';
 
           <div class="p-6 rounded-2xl bg-[#0c0c0e] border border-white/10 space-y-2">
             <div class="text-xs font-mono text-[#EAE905] uppercase tracking-wider">Competitive Scrims</div>
-            <h3 class="text-base font-bold text-white">Friendly Match Inquiries</h3>
+            <h3 class="text-base font-semibold text-white">Friendly Match Inquiries</h3>
             <p class="text-xs text-slate-400 leading-relaxed">
-              We arrange high-level 11v11 test matches on non-game nights (Wednesdays & Weekends).
+              Contact us to arrange a friendly 11v11 match.
             </p>
-            <span class="text-xs font-mono text-slate-300">scrims&#64;ryvl.gg</span>
+            <a [href]="social.discord" target="_blank" rel="noopener noreferrer" class="text-sm text-[#EAE905] hover:underline">Arrange a match on Discord</a>
           </div>
 
           <div class="p-6 rounded-2xl bg-[#0c0c0e] border border-white/10 space-y-2">
             <div class="text-xs font-mono text-[#EAE905] uppercase tracking-wider">Partnerships</div>
-            <h3 class="text-base font-bold text-white">Sponsorships & Brand Deals</h3>
+            <h3 class="text-base font-semibold text-white">Sponsorships & Brand Deals</h3>
             <p class="text-xs text-slate-400 leading-relaxed">
               Opportunities for jersey placement, stream overlays, and community activations.
             </p>
-            <span class="text-xs font-mono text-slate-300">partners&#64;ryvl.gg</span>
+            <a [href]="social.discord" target="_blank" rel="noopener noreferrer" class="text-sm text-[#EAE905] hover:underline">Discuss a partnership on Discord</a>
           </div>
         </div>
 
         <!-- Interactive Contact Form -->
-        <div class="lg:col-span-2 p-8 sm:p-10 rounded-3xl bg-[#0c0c0e] border border-white/10 relative shadow-xl">
-          <h2 class="text-xl font-black text-white uppercase tracking-tight mb-1">Send A Message</h2>
-          <p class="text-xs text-slate-400 mb-6">Leave us your details and we will reply promptly.</p>
+        <div class="lg:col-span-2 min-w-0 p-5 sm:p-8 rounded-3xl bg-[#0c0c0e] border border-white/10 relative shadow-xl">
+          <h2 class="text-xl font-semibold text-white tracking-tight mb-1">Send A Message</h2>
+          <p class="text-xs text-slate-400 mb-6">Include your Discord username or email so we can reply.</p>
 
           @if(sent()) {
             <div class="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3">
               <div class="text-3xl">📨</div>
-              <h3 class="text-base font-bold text-emerald-300">Message Delivered!</h3>
+              <h3 class="text-base font-semibold text-emerald-300">Message Delivered!</h3>
               <p class="text-xs text-slate-300 max-w-md mx-auto">
-                Thank you, <strong>{{ form.name }}</strong>. Your dispatch has been routed to RYVL management.
+                Thank you, <strong>{{ form.name }}</strong>. Your message has been sent to RYVL management.
               </p>
               <button
                 type="button"
@@ -151,9 +145,9 @@ import { ApiService } from '../../core/api.service';
                 >
                   @if(isSubmitting()) {
                     <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
-                    <span>Transmitting...</span>
+                    <span>Sending...</span>
                   } @else {
-                    <span>Send Transmission</span>
+                    <span>Send message</span>
                   }
                 </button>
               </div>

@@ -1,3 +1,4 @@
+import { PublicPageHeaderComponent } from './public-page-header.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -17,44 +18,12 @@ import { ApiService } from '../../core/api.service';
   selector: 'app-public-club',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, PublicPageHeaderComponent],
   template: `
-    <div class="w-full min-w-0 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12 animate-fadeIn">
-      <!-- Section Header -->
-      <div class="border-b border-[#EAE905]/15 pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">
-            EA SPORTS FC 27 Pro Clubs
-          </div>
-          <h1 class="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight flex flex-wrap items-center gap-3">
-            <span>RYVL Club Tracker</span>
-            <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[#EAE905]/15 text-[#EAE905] border border-[#EAE905]/30">
-              11v11
-            </span>
-          </h1>
-          <p class="text-xs sm:text-sm text-slate-400 mt-2 max-w-2xl">
-            Live telemetry, recent match clashes, and competitive campaign performance pulled directly from the EA SPORTS FC 27 Pro Clubs API for RYVL Esports.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          (click)="refreshData()"
-          [disabled]="isLoadingMatches() || isLoadingConfig()"
-          class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer self-start md:self-auto disabled:opacity-50"
-        >
-          <svg
-            class="w-3.5 h-3.5 text-[#EAE905]"
-            [class.animate-spin]="isLoadingMatches() || isLoadingConfig()"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          <span>Refresh Telemetry</span>
-        </button>
-      </div>
+    <div class="public-page space-y-8">
+      <app-public-page-header heading="RYVL Club Tracker" eyebrow="EA SPORTS FC 27 Pro Clubs">
+        <button header-actions type="button" class="public-button" (click)="refreshData()" [disabled]="isLoadingMatches() || isLoadingConfig()">Refresh</button>
+      </app-public-page-header>
 
       <!-- Distinguish outages from a valid empty match/member feed. -->
       @if(errorMessage()) {
@@ -92,14 +61,13 @@ import { ApiService } from '../../core/api.service';
                 </span>
               </div>
 
-              <h2 class="text-3xl sm:text-4xl font-black text-white uppercase tracking-tight break-words">
+              <h2 class="text-3xl sm:text-4xl font-semibold text-white tracking-tight break-words">
                 {{ clubName() }}
               </h2>
 
               <p class="text-xs text-slate-400 flex items-center gap-2">
                 <span>EA Club ID: <code class="text-slate-300 font-mono bg-black/50 px-1.5 py-0.5 rounded border border-white/10">{{ clubId() }}</code></span>
-                <span>•</span>
-                <span>Tier: <span class="text-white font-bold">Elite 11v11</span></span>
+
               </p>
             </div>
           </div>
@@ -125,7 +93,7 @@ import { ApiService } from '../../core/api.service';
         <!-- Metric Badges Row -->
         <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 mt-8 pt-8 border-t border-white/10">
           <div class="bg-black/40 p-4 rounded-2xl border border-white/5">
-            <div class="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">Campaign Record</div>
+            <div class="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">Match record</div>
             <div class="text-lg font-black text-white mt-1">
               {{ wins() }}W - {{ ties() }}D - {{ losses() }}L
             </div>
@@ -164,7 +132,7 @@ import { ApiService } from '../../core/api.service';
             <div class="text-lg font-black text-cyan-400 mt-1">
               {{ cleanSheets() }}
             </div>
-            <div class="text-[11px] text-slate-400 mt-0.5">Match Shutouts</div>
+
           </div>
         </div>
       </div>
@@ -177,7 +145,7 @@ import { ApiService } from '../../core/api.service';
           class="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer flex items-center gap-2"
           [ngClass]="activeTab() === 'matches' ? 'bg-[#EAE905] !text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
         >
-          <span [class.!text-black]="activeTab() === 'matches'">Recent Match Clashes</span>
+          <span [class.!text-black]="activeTab() === 'matches'">Recent matches</span>
           <span
             class="text-[10px] px-2 py-0.5 rounded-full font-mono font-bold"
             [ngClass]="activeTab() === 'matches' ? 'bg-black/20 !text-black' : 'bg-white/10 text-slate-400'"
@@ -207,7 +175,7 @@ import { ApiService } from '../../core/api.service';
           class="px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer"
           [ngClass]="activeTab() === 'summary' ? 'bg-[#EAE905] !text-black font-extrabold shadow-md shadow-[#EAE905]/15' : 'bg-[#121214] text-slate-300 border border-white/10 hover:bg-white/5'"
         >
-          <span [class.!text-black]="activeTab() === 'summary'">Campaign Telemetry</span>
+          <span [class.!text-black]="activeTab() === 'summary'">Club statistics</span>
         </button>
       </div>
 
@@ -223,7 +191,7 @@ import { ApiService } from '../../core/api.service';
         } @else if (matches().length === 0) {
           <div class="p-16 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-3">
             <div class="text-4xl">⚽</div>
-            <h3 class="text-base font-bold text-white uppercase">No Matches Synchronized</h3>
+            <h3 class="text-base font-semibold text-white">No Matches Synchronized</h3>
             <p class="text-xs text-slate-400 max-w-md mx-auto">
               No recent matches recorded on EA servers for this club yet. Completed games will appear here automatically.
             </p>
@@ -314,7 +282,7 @@ import { ApiService } from '../../core/api.service';
                     @if(match.trackedClub.aggregate || match.opponentClub.aggregate) {
                       <div>
                         <h4 class="text-xs font-mono font-bold uppercase tracking-wider text-[#EAE905] mb-3">
-                          Match Aggregate Comparison
+                          Match statistics
                         </h4>
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                           <div class="bg-[#18181c] p-3 rounded-xl border border-white/5">
@@ -353,7 +321,7 @@ import { ApiService } from '../../core/api.service';
                       <div>
                         <h4 class="text-xs font-mono font-bold uppercase tracking-wider text-[#EAE905] mb-2 flex items-center justify-between">
                           <span>{{ match.trackedClub.name }} Player Performance</span>
-                          <span class="text-slate-400 font-normal">Bucharest Telemetry</span>
+
                         </h4>
                         <div class="overflow-x-auto rounded-xl border border-white/10">
                           <table class="w-full text-left text-xs">
@@ -410,15 +378,15 @@ import { ApiService } from '../../core/api.service';
         } @else if (members().length === 0) {
           <div class="p-16 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-3">
             <div class="text-4xl">👥</div>
-            <h3 class="text-base font-bold text-white uppercase">No Member Records</h3>
+            <h3 class="text-base font-semibold text-white">No Member Records</h3>
             <p class="text-xs text-slate-400 max-w-md mx-auto">Could not fetch individual member statistics for {{ clubName() }}.</p>
           </div>
         } @else {
           <div class="rounded-3xl bg-[#0c0c0e] border border-white/10 overflow-hidden shadow-2xl">
             <div class="p-6 bg-[#121214] border-b border-white/10 flex items-center justify-between flex-wrap gap-4">
               <div>
-                <h3 class="text-lg font-bold text-white uppercase tracking-tight">EA Pro Clubs Member Statistics</h3>
-                <p class="text-xs text-slate-400">All-time competitive performance recorded on official EA servers.</p>
+                <h3 class="text-lg font-semibold text-white tracking-tight">Player statistics</h3>
+
               </div>
               <span class="px-3 py-1 rounded-full text-xs font-mono font-bold bg-[#EAE905]/15 text-[#EAE905] border border-[#EAE905]/30">
                 {{ members().length }} Registered Players
@@ -464,14 +432,14 @@ import { ApiService } from '../../core/api.service';
         }
       }
 
-      <!-- Tab 3: Campaign Telemetry -->
+      <!-- Tab 3: Club statistics -->
       @if(activeTab() === 'summary') {
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div class="p-6 rounded-3xl bg-[#0c0c0e] border border-white/10 space-y-4">
-            <div class="text-xs font-mono text-[#EAE905] uppercase tracking-wider">Win Efficiency</div>
+            <div class="text-xs font-mono text-[#EAE905] uppercase tracking-wider">Win rate</div>
             <div class="text-4xl font-black text-white">{{ winRate() }}%</div>
             <p class="text-xs text-slate-400 leading-relaxed">
-              Calculated across {{ totalMatches() }} competitive 11v11 fixtures recorded on EA SPORTS FC 27 Pro Clubs.
+              {{ totalMatches() }} matches played.
             </p>
             <div class="h-2 w-full bg-white/10 rounded-full overflow-hidden">
               <div class="h-full bg-[#EAE905]" [style.width.%]="winRate()"></div>
@@ -479,7 +447,7 @@ import { ApiService } from '../../core/api.service';
           </div>
 
           <div class="p-6 rounded-3xl bg-[#0c0c0e] border border-white/10 space-y-4">
-            <div class="text-xs font-mono text-emerald-400 uppercase tracking-wider">Attack Output</div>
+            <div class="text-xs font-mono text-emerald-400 uppercase tracking-wider">Goals scored</div>
             <div class="text-4xl font-black text-emerald-400">{{ goals() }}</div>
             <p class="text-xs text-slate-400 leading-relaxed">
               Total goals scored with an average of {{ totalMatches() > 0 ? (goals() / totalMatches()).toFixed(2) : 0 }} goals per game.
@@ -487,11 +455,8 @@ import { ApiService } from '../../core/api.service';
           </div>
 
           <div class="p-6 rounded-3xl bg-[#0c0c0e] border border-white/10 space-y-4">
-            <div class="text-xs font-mono text-cyan-400 uppercase tracking-wider">Defensive Rigor</div>
+            <div class="text-xs font-mono text-cyan-400 uppercase tracking-wider">Clean sheets</div>
             <div class="text-4xl font-black text-cyan-400">{{ cleanSheets() }}</div>
-            <p class="text-xs text-slate-400 leading-relaxed">
-              Match clean sheets registered without conceding a single opposition goal.
-            </p>
           </div>
         </div>
       }

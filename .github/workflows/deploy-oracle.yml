@@ -53,12 +53,13 @@ jobs:
         env:
           EXPECTED_REVISION: ${{ github.sha }}
         run: node ryvl-discord-bot/deploy/verify-public-site.mjs
-      - name: Verify live Club Tracker and Admin navigation in a real browser
+      - name: Verify live public headers, Club Tracker and Admin navigation
         run: |
           # Guest-only checks; do not sign into Discord or send test data to production.
           npm install --prefix "$RUNNER_TEMP/ryvl-browser" --no-save @playwright/test@1.56.1
           export PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules"
           node ryvl-discord-bot/web/test/admin-live-smoke.cjs
+          node ryvl-discord-bot/web/test/public-header-live-smoke.cjs
   cleanup:
     name: Remove this fix's merged validation branch
     needs: deploy
@@ -67,15 +68,15 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Remove only fix/fc27-club-navigation when fully merged
+      - name: Remove only fix/public-headers-copy when fully merged
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           MAIN_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          REF='heads/fix/fc27-club-navigation'
-          # This branch was created solely for this fix. Preserve all other branches.
+          REF='heads/fix/public-headers-copy'
+          # Preserve every other branch and this branch if it advances after review.
           if ! BRANCH_SHA="$(gh api "repos/$GH_REPO/git/ref/$REF" --jq '.object.sha' 2>/dev/null)"; then
             echo 'Temporary branch could not be read or is already absent; leaving branches unchanged.'
             exit 0

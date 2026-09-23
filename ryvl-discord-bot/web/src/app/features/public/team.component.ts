@@ -1,3 +1,4 @@
+import { PublicPageHeaderComponent } from './public-page-header.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -15,36 +16,12 @@ import { RosterPlayer } from '../../core/models';
   selector: 'app-public-team',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, PublicPageHeaderComponent],
   template: `
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-12">
-      <!-- Section Header -->
-      <div class="border-b border-[#EAE905]/15 pb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">Official EA FC Pro Clubs</div>
-          <h1 class="text-4xl font-black text-white uppercase tracking-tight flex items-center gap-3">
-            <span>RYVL Active Roster</span>
-            <span class="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold bg-[#EAE905]/15 text-[#EAE905] border border-[#EAE905]/30">
-              11v11
-            </span>
-          </h1>
-          <p class="text-xs sm:text-sm text-slate-400 mt-2 max-w-2xl">
-            Live player roster and competitive statistics pulled directly from the EA SPORTS FC 27 Pro Clubs API for RYVL Esports.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          (click)="loadRoster()"
-          [disabled]="isLoading()"
-          class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-300 hover:text-white transition cursor-pointer self-start md:self-auto disabled:opacity-50"
-        >
-          <svg class="w-3.5 h-3.5 text-[#EAE905]" [class.animate-spin]="isLoading()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          <span>Refresh Roster</span>
-        </button>
-      </div>
+    <div class="public-page space-y-8">
+      <app-public-page-header heading="RYVL Active Roster" eyebrow="RYVL Esports">
+        <button header-actions type="button" class="public-button" (click)="loadRoster()" [disabled]="isLoading()">Refresh</button>
+      </app-public-page-header>
 
       <!-- Filter Tabs -->
       <div class="flex flex-wrap items-center gap-2">
@@ -75,7 +52,7 @@ import { RosterPlayer } from '../../core/models';
       } @else if (error()) {
         <div class="p-12 rounded-3xl bg-rose-950/30 border border-rose-600/40 text-center space-y-3">
           <div class="text-3xl">⚠️</div>
-          <h3 class="text-base font-bold text-rose-300">Unable to load club roster</h3>
+          <h3 class="text-base font-semibold text-rose-300">Unable to load club roster</h3>
           <p class="text-xs text-slate-400">{{ error() }}</p>
           <button
             type="button"
@@ -120,7 +97,7 @@ import { RosterPlayer } from '../../core/models';
                     <span>🇷🇴</span>
                     <span class="truncate">&#64;{{ p.name }}</span>
                   </div>
-                  <h3 class="text-xl font-black text-white tracking-wide group-hover:text-[#EAE905] transition truncate">
+                  <h3 class="text-xl font-semibold text-white tracking-wide group-hover:text-[#EAE905] transition truncate">
                     {{ p.proName }}
                   </h3>
                   <div class="text-[11px] text-slate-400 font-medium capitalize">
@@ -169,7 +146,7 @@ import { RosterPlayer } from '../../core/models';
       <!-- Recruitment Prompt -->
       <div class="p-8 rounded-3xl bg-[#0c0c0e] border border-[#EAE905]/20 flex flex-col md:flex-row items-center justify-between gap-6">
         <div>
-          <h3 class="text-xl font-bold text-white uppercase">Think You Have What It Takes?</h3>
+          <h3 class="text-xl font-semibold text-white">Think You Have What It Takes?</h3>
           <p class="text-xs text-slate-400 mt-1">We run ongoing trials for talented players who want to compete at the highest tier.</p>
         </div>
         <a

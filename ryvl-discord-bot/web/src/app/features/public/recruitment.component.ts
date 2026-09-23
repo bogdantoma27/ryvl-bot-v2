@@ -1,3 +1,4 @@
+import { PublicPageHeaderComponent } from './public-page-header.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -12,17 +13,10 @@ import { ApiService } from '../../core/api.service';
   selector: 'app-public-recruitment',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, PublicPageHeaderComponent],
   template: `
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-16">
-      <!-- Header -->
-      <div class="border-b border-[#EAE905]/15 pb-6">
-        <div class="text-xs font-mono text-[#EAE905] uppercase tracking-widest mb-1">Squad Scouting & Trials</div>
-        <h1 class="text-4xl font-black text-white uppercase tracking-tight">Recruitment & Trials</h1>
-        <p class="text-xs sm:text-sm text-slate-400 mt-2 max-w-2xl">
-          We are seeking dedicated, high-IQ competitors ready to push limits in VPG Superliga România and European tournaments.
-        </p>
-      </div>
+    <div class="public-page space-y-8">
+      <app-public-page-header heading="Recruitment &amp; Trials" eyebrow="RYVL Esports" description="Apply for a place in the RYVL squad." />
 
       <!-- Criteria & Expectations -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -30,7 +24,7 @@ import { ApiService } from '../../core/api.service';
           <div class="w-10 h-10 rounded-xl bg-[#EAE905]/10 border border-[#EAE905]/30 flex items-center justify-center text-lg text-[#EAE905]">
             ⏰
           </div>
-          <h3 class="text-base font-bold text-white uppercase">Match Night Commitment</h3>
+          <h3 class="text-base font-semibold text-white">Match Night Commitment</h3>
           <p class="text-xs text-slate-400 leading-relaxed">
             Attendance is mandatory for official VPG Superliga fixtures on <strong class="text-slate-200">Monday, Tuesday, and Thursday</strong> from 21:45 to 00:00 (Bucharest time).
           </p>
@@ -40,7 +34,7 @@ import { ApiService } from '../../core/api.service';
           <div class="w-10 h-10 rounded-xl bg-[#EAE905]/10 border border-[#EAE905]/30 flex items-center justify-center text-lg text-[#EAE905]">
             🎙️
           </div>
-          <h3 class="text-base font-bold text-white uppercase">Voice Comms & Clarity</h3>
+          <h3 class="text-base font-semibold text-white">Voice Comms & Clarity</h3>
           <p class="text-xs text-slate-400 leading-relaxed">
             A clear microphone and calm communication on Discord voice channels during matches. Constructive tactical callouts only.
           </p>
@@ -50,7 +44,7 @@ import { ApiService } from '../../core/api.service';
           <div class="w-10 h-10 rounded-xl bg-[#EAE905]/10 border border-[#EAE905]/30 flex items-center justify-center text-lg text-[#EAE905]">
             ⚽
           </div>
-          <h3 class="text-base font-bold text-white uppercase">11v11 Experience</h3>
+          <h3 class="text-base font-semibold text-white">11v11 Experience</h3>
           <p class="text-xs text-slate-400 leading-relaxed">
             Demonstrated mastery of positional discipline, spacing, and quick decision-making in competitive manual 11v11 Pro Clubs settings.
           </p>
@@ -58,18 +52,18 @@ import { ApiService } from '../../core/api.service';
       </div>
 
       <!-- Application Form -->
-      <div class="p-8 sm:p-12 rounded-3xl bg-[#0d0d10] border border-[#EAE905]/30 relative overflow-hidden shadow-2xl">
+      <div class="p-5 sm:p-8 rounded-3xl bg-[#0d0d10] border border-[#EAE905]/30 relative overflow-hidden shadow-2xl">
         <div class="max-w-3xl mx-auto space-y-8">
           <div>
-            <span class="text-xs font-mono font-bold text-[#EAE905] uppercase tracking-widest">Trial Application</span>
-            <h2 class="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight mt-1">Submit Your Dossier</h2>
-            <p class="text-xs text-slate-400 mt-1">Our captaincy team reviews submissions within 24–48 hours.</p>
+
+            <h2 class="text-2xl sm:text-3xl font-semibold text-white tracking-tight mt-1">Apply for a trial</h2>
+            <p class="text-xs text-slate-400 mt-1">We will use your Discord username to contact you about your application.</p>
           </div>
 
           @if(submitted()) {
             <div class="p-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3 animate-fadeIn">
               <div class="text-3xl">✅</div>
-              <h3 class="text-lg font-bold text-emerald-300">Application Received!</h3>
+              <h3 class="text-lg font-semibold text-emerald-300">Application Received!</h3>
               <p class="text-xs text-slate-300 max-w-md mx-auto">
                 Thank you for applying to RYVL Esports, <strong>{{ form.gamertag }}</strong>. Our management team will contact you via Discord at <strong>{{ form.discordTag }}</strong> for your trial schedule.
               </p>
@@ -105,7 +99,7 @@ import { ApiService } from '../../core/api.service';
                     required
                     [(ngModel)]="form.discordTag"
                     name="discordTag"
-                    placeholder="e.g. your_discord#0000"
+                    placeholder="e.g. your_discord"
                     class="w-full bg-[#141419] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
                   />
                 </div>
@@ -140,7 +134,7 @@ import { ApiService } from '../../core/api.service';
                     name="secondaryPosition"
                     class="w-full bg-[#141419] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#EAE905] transition cursor-pointer"
                   >
-                    <option value="None">None (Pure Specialist)</option>
+                    <option value="None">None</option>
                     <option value="ST">Striker (ST / CF)</option>
                     <option value="LW">Left Winger (LW / LM)</option>
                     <option value="RW">Right Winger (RW / RM)</option>
@@ -210,9 +204,9 @@ import { ApiService } from '../../core/api.service';
                 >
                   @if(isSubmitting()) {
                     <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
-                    <span>Submitting Application...</span>
+                    <span>Submitting...</span>
                   } @else {
-                    <span>Submit Trial Request</span>
+                    <span>Submit application</span>
                   }
                 </button>
               </div>
