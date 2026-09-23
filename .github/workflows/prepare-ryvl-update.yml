@@ -1,0 +1,102 @@
+name: Validate approved RYVL update
+on:
+  push:
+    branches: [update/vpg-automation-public-ux]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: ryvl-approved-update-validation
+  cancel-in-progress: true
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/update/vpg-automation-public-ux'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ryvl_ci
+          POSTGRES_PASSWORD: local-test-only
+          POSTGRES_DB: ryvl_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd 'pg_isready -U ryvl_ci'
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ryvl_ci:local-test-only@localhost:5432/ryvl_ci
+      RUN_DATABASE_TESTS: '1'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          check-latest: true
+      - name: Apply reviewed source transformations if supplied
+        id: apply
+        run: |
+          if [ -f .maintenance/apply_approved_update.py ]; then
+            python3 .maintenance/apply_approved_update.py
+            echo 'applied=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install backend and generate Prisma client
+        working-directory: ryvl-discord-bot/server
+        run: |
+          npm ci
+          npx prisma validate
+          npx prisma generate
+      - name: Verify additive upgrade from the existing database schema
+        if: steps.apply.outputs.applied == 'true'
+        working-directory: ryvl-discord-bot/server
+        run: |
+          git show e3fcb325b4f37a18676085161ed7611152b36c1a:ryvl-discord-bot/server/prisma/schema.prisma > /tmp/ryvl-before.prisma
+          npx prisma db push --schema /tmp/ryvl-before.prisma --skip-generate
+          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
+          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
+      - name: Build and run backend regression tests
+        working-directory: ryvl-discord-bot/server
+        run: |
+          npm run build
+          node --test test/*.test.cjs
+      - name: Build Angular production frontend
+        working-directory: ryvl-discord-bot/web
+        run: |
+          npm ci
+          npm run build
+      - name: Browser checks
+        if: steps.apply.outputs.applied == 'true'
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ryvl-browser" --no-save @playwright/test@1.56.1
+          export PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules"
+          node ryvl-discord-bot/web/test/browser-smoke.cjs
+      - name: Inspect public VPG response shape without posting to Discord
+        continue-on-error: true
+        run: |
+          node - <<'NODE'
+          (async () => {
+            const base = 'https://api.virtualprogaming.com/public/leagues/Superliga-Romania';
+            const response = await fetch(base + '/seasons/', {signal: AbortSignal.timeout(15000)});
+            if (!response.ok) throw Error('VPG seasons HTTP ' + response.status);
+            const seasons = await response.json();
+            console.log('VPG seasons:', JSON.stringify(seasons));
+            const season = Array.isArray(seasons) ? Math.max(...seasons.map(Number)) : 2;
+            for (const endpoint of ['/table/?season=' + season + '&is_history=false', '/matches/?status=complete&season=' + season + '&limit=2&offset=0']) {
+              const r = await fetch(base + endpoint, {signal: AbortSignal.timeout(15000)});
+              if (!r.ok) throw Error('VPG feed HTTP ' + r.status);
+              const payload = await r.json();
+              const rows = Array.isArray(payload) ? payload : payload.data || [];
+              console.log(endpoint, 'sample keys:', Object.keys(rows[0] || {}));
+              console.log('RYVL rows:', JSON.stringify(rows.filter(x => /ryvl/i.test(x.team_name || x.home_name || '') || /ryvl/i.test(x.away_name || ''))));
+            }
+          })().catch(error => { console.error(error.message); process.exitCode = 1; });
+          NODE
+      - name: Save verified source on the isolated branch only
+        if: steps.apply.outputs.applied == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md ORACLE_VM_DEPLOYMENT.md ryvl-discord-bot .github/workflows
+          git diff --cached --quiet || git commit -m 'feat: implement VPG automation and public website refinements'
+          git push origin HEAD:refs/heads/update/vpg-automation-public-ux
+          echo "Verified source commit: $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
