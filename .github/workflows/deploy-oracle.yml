@@ -53,6 +53,17 @@ jobs:
             node --version
             npm --version
 
+            echo "Ensuring server-side font rendering dependencies are installed..."
+            if ! command -v fc-match >/dev/null 2>&1 || [ ! -f /etc/fonts/fonts.conf ]; then
+              sudo apt-get update
+              sudo apt-get install -y fontconfig fontconfig-config fonts-dejavu-core fonts-liberation2
+            fi
+
+            # Sharp renders SVG text through librsvg/Pango/fontconfig. Rebuild the
+            # font cache so lineup PNG text is available on minimal OCI images.
+            sudo fc-cache -f
+            fc-match "Liberation Sans"
+
             echo "Building backend..."
             cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
             npm ci
