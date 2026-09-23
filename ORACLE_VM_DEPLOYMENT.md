@@ -1,1167 +1,355 @@
-# Oracle Cloud VM Deployment Guide
+# Oracle Cloud VM deployment — RYVL
 
-This document describes the production setup used for the RYVL Discord Bot application on an Oracle Cloud Infrastructure (OCI) Ubuntu VM, including:
+**Canonical website:** https://ryvl.top  
+**Admin:** https://ryvl.top/admin/dashboard  
+**API:** https://ryvl.top/api/health
 
-- OCI compute instance creation
-- public networking
-- Ubuntu firewall configuration
-- Node.js, PM2 and Caddy installation
-- backend and frontend deployment
-- environment variables
-- Discord OAuth configuration
-- GitHub Actions automatic deployment
-- common troubleshooting commands
+This guide covers the initial installation and the current HTTPS deployment. Do not rerun first-install commands over a working environment without reading their warnings.
 
-The current production architecture is:
+## Architecture and authoritative branch
 
 ```text
-Internet
-   |
-   | TCP 80
-   v
-Oracle Cloud public IP
-   |
-   v
-Caddy (:80)
-   |
-   +-- /          -> Angular static files in /var/www/ryvl
-   |
-   +-- /api/*     -> NestJS backend on 127.0.0.1:3000
-                          |
-                          +-- Discord bot
-                          +-- PostgreSQL / Prisma
+Spaceship DNS: ryvl.top / www.ryvl.top
+                  |
+           Oracle Ubuntu VM
+                  |
+       Caddy 80 -> HTTPS redirect
+       Caddy 443 -> ryvl.top (trusted TLS)
+                  |
+                  +-- /api/* -> 127.0.0.1:3000 -> NestJS / Discord / PostgreSQL
+                  +-- other paths -> /var/www/ryvl -> Angular release directory
 ```
 
-The backend port `3000` does not need to be publicly exposed. Caddy is the public entry point.
+`www` and HTTP are redirected to https://ryvl.top with their URI preserved. Caddy manages both certificates and renewal. There is no separate public API subdomain or public port 3000.
 
----
+**Deploy `main`.** The old `update/vpg-automation-public-ux` branch is development history. Its full application directory and README/deployment documentation were incorporated into main release `0fbdb979`. A different branch commit count after that squash-style release does not mean the features are missing. Never deploy the old preparation workflow to production.
 
-## 1. Create the Oracle Cloud VM
+## 1. Initial Oracle instance
 
-The production VM was created with the following general configuration:
+The working installation uses Canonical Ubuntu 24.04, ARM64 Ampere `VM.Standard.A1.Flex`, 2 OCPUs and 12 GB RAM, on-demand capacity. AD-3 had available capacity after AD-2 returned an out-of-capacity error. Try another availability domain and avoid a pinned fault domain when capacity is unavailable; a dedicated host is not needed for this application.
 
-- Operating system: Canonical Ubuntu 24.04
-- Shape: `VM.Standard.A1.Flex`
-- Architecture: ARM64 / Ampere
-- OCPUs: 2
-- Memory: 12 GB
-- Capacity type: On-demand
-- Availability domain: any AD with available A1 capacity
-- Fault domain: preferably let OCI choose unless there is a specific placement requirement
-- Authorization header / IMDSv2 requirement: enabled
-- Confidential computing: disabled
-- Shielded instance options: disabled for this setup
-- Restart after infrastructure maintenance: enabled
-- Boot volume: default size/performance
-- In-transit volume encryption: enabled
-- Customer-managed encryption key: not required
+The initial configuration enabled the instance-metadata authorization header and restoration after infrastructure maintenance, left migration choice to Oracle, used default boot-volume size/performance and in-transit encryption, and did not enable confidential computing or a customer-managed encryption key. Recheck OCI pricing/limits before changing instance resources.
 
-### A1 capacity errors
+## 2. VCN, subnet, public address and route
 
-OCI Always Free A1 capacity is sometimes unavailable in a specific availability domain.
+The working network is `vcn-main` with `subnet-public`, subnet CIDR `10.0.0.0/24`, and an automatically assigned private address. IPv6 is not required.
 
-If OCI returns:
+A public subnet must permit public IPv4 assignment. After creation, the instance Networking page exposes its VNIC/private IP and public-IP assignment controls. Assign a public IPv4 if none exists; the current address is `130.61.228.100`. An existing ephemeral address should not be unassigned casually. If the address changes later, update DNS and the deployment SSH secret together.
+
+The subnet needs an available Internet Gateway and a route:
 
 ```text
-Out of capacity for shape VM.Standard.A1.Flex
+Destination 0.0.0.0/0 -> Internet Gateway
 ```
 
-try another availability domain and avoid pinning a fault domain.
+The instance's **Connect public subnet to internet** quick action can create the necessary network resources. Verify the actual subnet's assigned route table/security lists, not just resources with similar names.
 
-The current VM was ultimately created in AD-3 after AD-2 had no capacity.
+## 3. OCI security rules and Ubuntu firewall
 
----
+Both layers must allow traffic. The OCI subnet security list or VNIC network security group needs stateful TCP ingress on **22, 80 and 443**. Source port range is All. HTTP/HTTPS source is `0.0.0.0/0`; SSH should be restricted where feasible, while accounting for changing GitHub-hosted runner addresses. Keep key-based SSH authentication. Outbound access must allow DNS, HTTPS and the configured database/Discord services.
 
-## 2. Create the VCN and public subnet
+Do not add public port-3000 or database rules merely to make the website work.
 
-During instance creation:
-
-- Create a new VCN
-- Example VCN name: `vcn-main`
-- Create a new public subnet
-- Example subnet name: `subnet-public`
-- Example subnet CIDR: `10.0.0.0/24`
-- Private IPv4: automatically assigned
-- IPv6: not required
-
-OCI may not allow the public IPv4 toggle to be selected while the subnet is still being created in the same wizard. That is expected.
-
-After the instance has been created, assign an ephemeral public IPv4 address to the primary private IP if OCI did not assign one automatically.
-
-A typical path is:
-
-```text
-Compute
--> Instances
--> <instance>
--> Networking
--> Primary VNIC
--> IP administration
--> primary private IP
--> Edit
--> Ephemeral public IP
-```
-
----
-
-## 3. Connect the public subnet to the Internet
-
-On the instance Networking page, OCI can show a quick action:
-
-```text
-Connect public subnet to internet
-```
-
-Use it if available.
-
-The public subnet needs:
-
-- an Internet Gateway
-- a route table entry:
-  - destination: `0.0.0.0/0`
-  - target: Internet Gateway
-- ingress security rules
-
-The route should effectively be:
-
-```text
-0.0.0.0/0 -> Internet Gateway
-```
-
----
-
-## 4. OCI security-list ingress rules
-
-The subnet security list must allow the public services required by the VM.
-
-Recommended rules for this setup:
-
-| Port | Protocol | Purpose |
-|---|---|---|
-| 22 | TCP | SSH and GitHub Actions deployment |
-| 80 | TCP | HTTP / Caddy |
-| 443 | TCP | HTTPS when a domain/TLS is configured |
-
-For example:
-
-```text
-Source: 0.0.0.0/0
-Protocol: TCP
-Destination port: 80
-```
-
-and similarly for `443`.
-
-### Do not expose port 3000 publicly
-
-NestJS listens on port `3000`, but Caddy proxies `/api/*` to `127.0.0.1:3000`.
-
-Therefore OCI does not need a public port-3000 rule.
-
-For SSH, `0.0.0.0/0` is currently convenient because GitHub-hosted Actions runners use changing public IP addresses. Authentication must remain SSH-key-only. A more locked-down future setup can use a self-hosted runner, VPN or another fixed network path.
-
----
-
-## 5. SSH into the VM
-
-Connect using the private key downloaded/generated during OCI instance creation:
-
-```powershell
-ssh -i "C:\path\to\oracle-private-key.key" ubuntu@<ORACLE_PUBLIC_IP>
-```
-
-### Windows private-key permission error
-
-If Windows OpenSSH reports:
-
-```text
-WARNING: UNPROTECTED PRIVATE KEY FILE!
-Permissions ... are too open.
-```
-
-run:
-
-```powershell
-icacls "C:\path\to\oracle-private-key.key" /inheritance:r
-icacls "C:\path\to\oracle-private-key.key" /grant:r "$($env:USERNAME):(R)"
-```
-
-If SSH names another Windows user/group that still has access, remove that entry with `icacls /remove`.
-
----
-
-## 6. Configure the Ubuntu host firewall
-
-OCI networking and the Ubuntu host firewall are separate layers. Both must allow the traffic.
-
-First inspect the current rule order:
+On Ubuntu, inspect order and interfaces:
 
 ```bash
-sudo iptables -L INPUT -n --line-numbers
+sudo iptables -L INPUT -n -v --line-numbers
 ```
 
-On the current OCI Ubuntu image, a `REJECT` rule appeared before the originally-added HTTP/HTTPS rules.
-
-For example:
-
-```text
-4  ACCEPT ... tcp dpt:22
-5  REJECT ...
-6  ACCEPT ... tcp dpt:443
-7  ACCEPT ... tcp dpt:80
-```
-
-Anything after the `REJECT` rule is never reached.
-
-Insert HTTP and HTTPS before the reject rule:
+During the original setup, REJECT was line 5. Rules inserted at line 6 were unreachable. The working fix inserted HTTP/HTTPS **before that REJECT**:
 
 ```bash
+# Use these positions only when inspection still shows REJECT at line 5.
 sudo iptables -I INPUT 5 -p tcp --dport 80 -m conntrack --ctstate NEW -j ACCEPT
 sudo iptables -I INPUT 5 -p tcp --dport 443 -m conntrack --ctstate NEW -j ACCEPT
 sudo netfilter-persistent save
 ```
 
-Then verify again:
+Do not repeatedly insert duplicate rules or flush the firewall. Reinspect the current position rather than assuming line 5 forever. Keep existing Oracle-specific rules. HTTPS needs an actual TLS listener in addition to open port 443.
 
-```bash
-sudo iptables -L INPUT -n --line-numbers
+## 4. SSH and Windows key permissions
+
+From Windows PowerShell:
+
+```powershell
+ssh -i "C:\path\to\oracle-private-key.key" ubuntu@130.61.228.100
 ```
 
-The allow rules for `80` and `443` must appear before the catch-all `REJECT`.
+When Windows OpenSSH rejects an overly accessible private key:
 
-### Important correction to the original setup commands
-
-The first setup attempt used:
-
-```bash
-sudo iptables -I INPUT 6 ... --dport 80 ...
-sudo iptables -I INPUT 6 ... --dport 443 ...
-sudo iptables -I INPUT 6 ... --dport 3000 ...
+```powershell
+icacls "C:\path\to\oracle-private-key.key" /inheritance:r
+icacls "C:\path\to\oracle-private-key.key" /grant:r "$($env:USERNAME):(R)"
+icacls "C:\path\to\oracle-private-key.key"
 ```
 
-On this image, line 6 was after the reject rule, so those rules did not make the application reachable.
+Remove any specifically reported unintended user/group ACE with `icacls /remove`. Never post the private key in chat, logs or Git. Removing inherited permissions alone may leave explicit unwanted entries.
 
-Also, port `3000` is not needed publicly when Caddy is used.
-
----
-
-## 7. Install Node.js 22, Git and PM2
-
-Angular 22 requires a recent Node.js 22 release. Node.js 20 is not sufficient for the current frontend toolchain.
-
-Install Node.js 22:
+## 5. Install Node.js, Git and PM2
 
 ```bash
+sudo apt-get update
+sudo apt-get install -y curl ca-certificates git gnupg
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt-get install -y nodejs git
-```
-
-Verify:
-
-```bash
+sudo apt-get install -y nodejs
 node --version
 npm --version
-```
-
-Install PM2 globally:
-
-```bash
 sudo npm install -g pm2
 ```
 
----
+Use a current Node 22 release, at least 22.22.3 for this Angular toolchain. Node 20 caused the initial frontend build failure. PM2 must run as `ubuntu`, not as a second root-owned daemon.
 
-## 8. Clone the repository
-
-From the Ubuntu user's home directory:
+## 6. Clone the correct directory
 
 ```bash
 cd ~
 git clone https://github.com/bogdantoma27/ryvl-bot-v2.git
+cd ~/ryvl-bot-v2/ryvl-discord-bot/server
+npm ci
 ```
 
-The backend path is:
+The frontend is `~/ryvl-bot-v2/ryvl-discord-bot/web`. Running npm from `/home/ubuntu` or omitting the outer `ryvl-bot-v2` directory causes missing-package/path errors.
 
-```text
-~/ryvl-bot-v2/ryvl-discord-bot/server
-```
+## 7. Environment and Discord application
 
-The frontend path is:
-
-```text
-~/ryvl-bot-v2/ryvl-discord-bot/web
-```
-
-This is important: running `npm install` from `/home/ubuntu` will fail because there is no `package.json` there.
-
----
-
-## 9. Configure the backend environment
-
-The tracked template is:
-
-```text
-ryvl-discord-bot/server/.env.example
-```
-
-Do not put real secrets into `.env.example` and do not commit a real `.env` file.
-
-Create the production file on the VM:
+For a NEW installation only:
 
 ```bash
 cd ~/ryvl-bot-v2/ryvl-discord-bot/server
-cp .env.example .env
+cp -n .env.example .env
+chmod 600 .env
 nano .env
 ```
 
-The production file must contain:
+Fill real values in **server/.env**, never in the tracked template:
 
-```env
-DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DATABASE
-DISCORD_TOKEN=<DISCORD_BOT_TOKEN>
-DISCORD_CLIENT_ID=<DISCORD_APPLICATION_CLIENT_ID>
-DISCORD_CLIENT_SECRET=<DISCORD_APPLICATION_CLIENT_SECRET>
-DISCORD_OAUTH_REDIRECT_URI=http://<ORACLE_PUBLIC_IP>/api/auth/discord/callback
-JWT_SECRET=<RANDOM_SECRET_AT_LEAST_32_CHARACTERS>
-FRONTEND_URL=http://<ORACLE_PUBLIC_IP>
-PORT=3000
-```
+| Variable | Source/value |
+|---|---|
+| DATABASE_URL | Actual production PostgreSQL connection string, including provider-required TLS settings |
+| DISCORD_TOKEN | Discord Developer Portal → application → Bot |
+| DISCORD_CLIENT_ID | Discord application/OAuth2 Client ID |
+| DISCORD_CLIENT_SECRET | Discord OAuth2 Client Secret |
+| JWT_SECRET | Unique random secret, generated with `openssl rand -hex 32`; at least 32 characters |
+| FRONTEND_URL | `https://ryvl.top` |
+| DISCORD_OAUTH_REDIRECT_URI | `https://ryvl.top/api/auth/discord/callback` |
+| PORT | `3000` |
 
-### DATABASE_URL
+The exact HTTPS callback must also be saved in Discord Developer Portal → OAuth2 → Redirects. Once domain login is verified, remove the old production IP callback; retain localhost only for intentional development.
 
-Use the PostgreSQL connection string for the production database.
+Do not change working database/Discord credentials or rotate JWT_SECRET during the domain migration. Local development can use an actual localhost frontend origin and registered localhost callback. The outer `ryvl-discord-bot/.env.example` is for local Compose, not native PM2 production.
 
-Do not use the example localhost database URL unless PostgreSQL is actually installed and running on the same VM.
+## 8. PostgreSQL and Prisma
 
-### DISCORD_TOKEN
-
-Discord Developer Portal:
-
-```text
-Applications
--> RYVL application
--> Bot
--> Token
-```
-
-Never commit this value.
-
-### DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET
-
-Discord Developer Portal:
-
-```text
-Applications
--> RYVL application
--> OAuth2
-```
-
-Never commit the client secret.
-
-### DISCORD_OAUTH_REDIRECT_URI
-
-For the current HTTP/IP deployment:
-
-```env
-DISCORD_OAUTH_REDIRECT_URI=http://<ORACLE_PUBLIC_IP>/api/auth/discord/callback
-```
-
-The exact same URI must be registered in the Discord Developer Portal OAuth2 redirect list.
-
-### JWT_SECRET
-
-The application requires at least 32 characters.
-
-Generate a secure value with:
-
-```bash
-openssl rand -hex 32
-```
-
-Paste the generated value into:
-
-```env
-JWT_SECRET=<generated-value>
-```
-
-### FRONTEND_URL
-
-For the current VM/IP deployment:
-
-```env
-FRONTEND_URL=http://<ORACLE_PUBLIC_IP>
-```
-
-This is used by the backend after Discord OAuth completes.
-
-### PORT
-
-Keep:
-
-```env
-PORT=3000
-```
-
-Caddy proxies API requests to this local backend port.
-
----
-
-## 10. Configure Discord OAuth
-
-In the Discord Developer Portal, add the production redirect URI:
-
-```text
-http://<ORACLE_PUBLIC_IP>/api/auth/discord/callback
-```
-
-It must match `DISCORD_OAUTH_REDIRECT_URI` exactly.
-
-When a proper domain with HTTPS is added later, change both the backend environment and Discord Developer Portal to something like:
-
-```text
-https://app.example.com/api/auth/discord/callback
-```
-
-and:
-
-```env
-FRONTEND_URL=https://app.example.com
-DISCORD_OAUTH_REDIRECT_URI=https://app.example.com/api/auth/discord/callback
-```
-
----
-
-## 11. Install backend dependencies and prepare Prisma
-
-Run:
+Use the configured production database. A localhost sample works only if PostgreSQL really runs locally. This guide does not silently install or replace a production database.
 
 ```bash
 cd ~/ryvl-bot-v2/ryvl-discord-bot/server
-npm ci
 npx prisma generate
-```
-
-For an initial database setup or a reviewed schema update:
-
-```bash
+# Only for a NEW/disposable database, after checking DATABASE_URL:
 npx prisma db push
-```
-
-### Production database warning
-
-Do not automatically use:
-
-```bash
-npx prisma db push --force-reset
-```
-
-against a database that contains data. It drops/recreates data.
-
-The GitHub Actions workflow deliberately does not run `prisma db push` automatically. Database schema changes must be reviewed and applied manually.
-
----
-
-## 12. Build and start the backend with PM2
-
-Build:
-
-```bash
 npm run build
 ```
 
-Start the NestJS backend:
+If required columns cannot be added to existing rows, review and backfill a migration. **Do not use --force-reset on valuable data.** The current notification feature has the reviewed additive script:
 
 ```bash
-pm2 start dist/main.js --name ryvl-backend
-pm2 save
+npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
 ```
 
-Verify:
+It creates new tables/indexes transactionally and can be repeated. Other schema changes still require review. Schedule backups for the actual PostgreSQL service independently of application deployment.
+
+## 9. Font rendering and EA Python bridge
 
 ```bash
-pm2 status
+sudo apt-get install -y fontconfig fontconfig-config fonts-dejavu-core fonts-liberation2 python3 python3-venv
+sudo fc-cache -f
+fc-match 'Liberation Sans'
+cd ~/ryvl-bot-v2/ryvl-discord-bot/server
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-ea.txt
+```
+
+Sharp's SVG text rendering requires fonts/fontconfig on the minimal Linux image. The lineup renderer prefers Liberation Sans/DejaVu. Missing configuration previously caused pitch graphics without text.
+
+The EA service uses `.venv/bin/python`, falling back to `python3`; `curl_cffi` is declared in `requirements-ea.txt`. This avoids `spawn python ENOENT` and missing-Python-package failures. An optional live integration check is:
+
+```bash
+.venv/bin/python src/ea/scripts/ea_bridge.py search common-gen5 'RYVL Esports'
+```
+
+External EA/VPG API availability is independent of whether the local runtime is installed.
+
+## 10. PM2 first start and reboot persistence
+
+```bash
+cd ~/ryvl-bot-v2/ryvl-discord-bot/server
+npm run build
+pm2 start dist/main.js --name ryvl-backend
 pm2 logs ryvl-backend --lines 100
 ```
 
-The process should show:
-
-```text
-ryvl-backend  online
-```
-
-### Start PM2 automatically after VM reboot
-
-Run:
+Press Ctrl+C to leave streaming logs without stopping the app. Then:
 
 ```bash
 pm2 startup
-```
-
-PM2 prints a `sudo ...` command. Run the exact command it prints.
-
-Then:
-
-```bash
+# Run the EXACT sudo command printed above; this installs the ubuntu startup unit.
 pm2 save
 ```
 
----
+`pm2 startup && pm2 save` alone is insufficient when the generated sudo command has not been executed. The backend should be online and respond locally:
 
-## 13. Install Caddy
+```bash
+curl --fail http://127.0.0.1:3000/api/health
+```
 
-Install the official Caddy package:
+Environment validation errors, such as a short JWT_SECRET, must be resolved before deployment. Old PM2 log entries remain after a fix; inspect timestamps/new output rather than assuming every historical error is current.
+
+## 11. Spaceship DNS for ryvl.top
+
+Keep these nameservers:
+
+```text
+launch1.spaceship.net
+launch2.spaceship.net
+```
+
+In Spaceship Advanced DNS for `ryvl.top`, save:
+
+| Type | Host | Value | TTL |
+|---|---|---|---|
+| A | `@` | `130.61.228.100` | 30 minutes or chosen TTL |
+| CNAME | `www` | `ryvl.top` | 30 minutes or chosen TTL |
+
+Enter only `www` in the Host field because the UI appends the domain. Do not enter a scheme or port in DNS values. Replace conflicting parking/web records only; keep email/verification records. Do not add IPv6 AAAA records without working IPv6.
+
+From Windows:
+
+```powershell
+nslookup -type=A ryvl.top. 8.8.8.8
+nslookup -type=A www.ryvl.top. 8.8.8.8
+nslookup -type=A ryvl.top. launch1.spaceship.net
+```
+
+Both names must ultimately resolve to the VM. If Google and Spaceship resolve correctly but the ISP does not, investigate resolver caching. `ipconfig /flushdns` clears Windows' cache, not the ISP's cache. Chrome Secure DNS can use Google during troubleshooting. NXDOMAIN occurs before a browser reaches the VM; it is not a port-443 diagnosis.
+
+## 12. Install Caddy and enable the domain
 
 ```bash
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
-
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key \
   | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt \
   | sudo tee /etc/apt/sources.list.d/caddy-stable.list
-
 sudo apt update
 sudo apt install -y caddy
 ```
 
-The repository contains the production configuration at:
+`ryvl-discord-bot/Caddyfile` is authoritative. It serves `ryvl.top` over HTTPS, redirects `www` and HTTP, proxies `/api` and `/api/*` without stripping the prefix, and serves the Angular SPA from `/var/www/ryvl`. The index and release metadata are revalidated rather than pinned in cache. Referrer-Policy is set to no-referrer because the current OAuth flow returns a token in the URL.
 
-```text
-ryvl-discord-bot/Caddyfile
-```
+Do not replace the loopback upstream with ryvl.top. Do not install Certbot alongside this configuration. Caddy needs a persistent writable data directory, publicly reachable 80/443 and correct DNS. If a CAA record is configured, it must permit the certificate authority in use. Keep Caddy's certificate storage private.
 
-Current configuration:
+The deployment validates configuration before reload and waits for trusted certificates for BOTH domains before changing public environment URLs. On TLS preflight failure, it restores the previous Caddyfile and leaves those environment URLs unchanged. Do not use curl -k or disable certificate validation to hide failures.
 
-```caddyfile
-:80 {
-  handle /api/* {
-    reverse_proxy 127.0.0.1:3000
-  }
+## 13. GitHub Actions SSH credentials
 
-  handle {
-    root * /var/www/ryvl
-    try_files {path} /index.html
-    file_server
-  }
-}
-```
-
-This means:
-
-- Angular is served from `/var/www/ryvl`
-- API traffic is reverse-proxied to NestJS
-- Angular client-side routes fall back to `index.html`
-
----
-
-## 14. Frontend production API URL
-
-The Angular frontend uses:
-
-- `http://localhost:3000` only when the browser itself is on localhost
-- `window.location.origin` in production
-
-Therefore, when the application is opened as:
-
-```text
-http://<ORACLE_PUBLIC_IP>
-```
-
-the frontend calls:
-
-```text
-http://<ORACLE_PUBLIC_IP>/api/...
-```
-
-Caddy then forwards those requests internally to:
-
-```text
-127.0.0.1:3000
-```
-
-There is no need to hard-code the Oracle IP into the Angular build.
-
----
-
-## 15. Manual frontend build and publish
-
-GitHub Actions now performs this automatically, but the equivalent manual procedure is:
-
-```bash
-cd ~/ryvl-bot-v2/ryvl-discord-bot/web
-npm ci
-npm run build
-```
-
-Angular normally produces:
-
-```text
-dist/web/browser
-```
-
-or, depending on the builder version:
-
-```text
-dist/web
-```
-
-Copy the built files to Caddy's web root:
-
-```bash
-sudo mkdir -p /var/www/ryvl
-sudo rm -rf /var/www/ryvl/*
-sudo cp -a dist/web/browser/. /var/www/ryvl/
-sudo chown -R caddy:caddy /var/www/ryvl
-```
-
-If `dist/web/browser` does not exist but `dist/web/index.html` does, copy from `dist/web` instead.
-
-Install the repo Caddy configuration:
-
-```bash
-sudo cp ~/ryvl-bot-v2/ryvl-discord-bot/Caddyfile /etc/caddy/Caddyfile
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl enable caddy
-sudo systemctl reload caddy
-```
-
----
-
-## 16. GitHub Actions automatic deployment
-
-The workflow is:
-
-```text
-.github/workflows/deploy-oracle.yml
-```
-
-It runs automatically when `main` receives changes under:
-
-- `ryvl-discord-bot/server/**`
-- `ryvl-discord-bot/web/**`
-- `ryvl-discord-bot/Caddyfile`
-- the deployment workflow itself
-
-It can also be started manually from the GitHub Actions UI.
-
-The deployment performs:
-
-```text
-GitHub push to main
-        |
-        v
-GitHub Actions runner
-        |
-        | SSH
-        v
-Oracle VM
-        |
-        +-- git pull --ff-only
-        +-- ensure Node.js 22
-        +-- npm ci (backend)
-        +-- prisma generate
-        +-- npm run build (backend)
-        +-- pm2 restart ryvl-backend
-        +-- npm ci (frontend)
-        +-- npm run build (frontend)
-        +-- copy Angular build to /var/www/ryvl
-        +-- validate/reload Caddy
-```
-
-The workflow intentionally does not modify the VM's `.env` file.
-
-Because `.env` is ignored by Git, it survives normal `git pull` deployments.
-
----
-
-## 17. Create a dedicated GitHub Actions SSH key
-
-A dedicated key is recommended instead of reusing the personal OCI SSH key.
-
-One setup method is to generate it on the VM:
+Use a dedicated deployment key rather than your personal OCI key. One setup method on the VM:
 
 ```bash
 mkdir -p ~/.ssh
 chmod 700 ~/.ssh
-
-ssh-keygen -t ed25519 \
-  -C "github-actions-ryvl" \
-  -f ~/.ssh/github-actions-ryvl \
-  -N ""
-```
-
-Authorize the public key:
-
-```bash
+ssh-keygen -t ed25519 -C github-actions-ryvl -f ~/.ssh/github-actions-ryvl -N ''
 cat ~/.ssh/github-actions-ryvl.pub >> ~/.ssh/authorized_keys
 chmod 600 ~/.ssh/authorized_keys
 ```
 
-Display the private key once:
+Copy the complete private key, including BEGIN/END lines, directly into the GitHub repository secret—not into chat or source. After verifying Actions can connect, remove the private-key copy from the VM; the authorized public key must remain.
 
-```bash
-cat ~/.ssh/github-actions-ryvl
-```
+Repository → Settings → Secrets and variables → Actions:
 
-Copy the entire value, including:
+| Secret | Value |
+|---|---|
+| ORACLE_HOST | VM IP `130.61.228.100`, not an HTTPS URL |
+| ORACLE_USER | `ubuntu` |
+| ORACLE_SSH_KEY | Complete dedicated private deployment key |
 
-```text
------BEGIN OPENSSH PRIVATE KEY-----
-...
------END OPENSSH PRIVATE KEY-----
-```
+The SSH host remains an IP so website DNS/proxy changes cannot break deployments. This does not expose an IP-based website to visitors.
 
-into the GitHub Actions secret described below.
+## 14. Automatic deployment and domain cutover
 
-After confirming GitHub Actions can connect successfully, the copy of the private deployment key on the VM can be removed:
+`.github/workflows/deploy-oracle.yml` deploys main and supports Run workflow. It first runs the reusable CI suite, then uses the exact validated SHA. A newer main revision causes an older run to stop rather than deploy untested code. Runs are serialized and a VM-side lock prevents overlapping checkouts.
 
-```bash
-rm ~/.ssh/github-actions-ryvl
-```
+The remote workflow calls `ryvl-discord-bot/deploy/oracle.sh`. It:
 
-Keep the `.pub` file if desired; the authorized copy already exists in `authorized_keys`.
+1. Ensures Node 22, required fonts and the EA virtual environment.
+2. Builds/tests the backend and builds Angular before restarting production.
+3. Validates the Caddyfile and applies only the existing additive notification SQL.
+4. Stages a frontend release, writes release.json and switches /var/www/ryvl to that release. The initial physical directory is retained as a legacy backup.
+5. Loads the domain Caddyfile and waits for both trusted TLS certificates.
+6. Updates only FRONTEND_URL and DISCORD_OAUTH_REDIRECT_URI in server/.env; an already-present obsolete WEB_BASE_URL is aligned as well. Other settings are preserved.
+7. Explicitly refreshes the same public values in PM2, restarts and saves the process after the health check.
+8. Verifies local HTTPS/API and then, from the GitHub runner, public DNS/TLS, redirects, pages, OAuth, CORS and the exact release revision.
 
----
+Environment backups are private files under `~/.local/state/ryvl-deploy/env-backups`. They contain secrets: do not upload or print them. Caddy backups are in `~/.local/state/ryvl-deploy`. The URL updater is idempotent and creates no extra backup when no values change.
 
-## 18. GitHub Actions repository secrets
+The current ConfigModule keeps process environment values ahead of .env; therefore PM2 must have the public values explicitly refreshed, not merely have its .env edited. Application secrets are never copied into workflow logs.
 
-In GitHub:
+No domain migration resets the database or changes the Discord/JWT credentials. Update the Discord Portal callback before the cutover. Once HTTPS works, sign in again on the domain, because browser token storage is origin-specific.
 
-```text
-Repository
--> Settings
--> Secrets and variables
--> Actions
--> Repository secrets
-```
+## 15. Manual deployment fallback
 
-Create:
-
-### ORACLE_HOST
-
-```text
-<ORACLE_PUBLIC_IP>
-```
-
-### ORACLE_USER
-
-```text
-ubuntu
-```
-
-### ORACLE_SSH_KEY
-
-The complete dedicated private key:
-
-```text
------BEGIN OPENSSH PRIVATE KEY-----
-...
------END OPENSSH PRIVATE KEY-----
-```
-
-Never commit the private key into the repository.
-
----
-
-## 19. Deploying future changes
-
-After the initial setup, normal deployment is simply:
-
-```text
-edit code
--> commit
--> push to main
--> GitHub Actions deploys automatically
-```
-
-There is normally no need to SSH into the VM for ordinary frontend/backend code changes.
-
-### Manual fallback
-
-If GitHub Actions is unavailable:
+Use the same reviewed script instead of a different copy/paste process:
 
 ```bash
 cd ~/ryvl-bot-v2
+exec 9>~/.ryvl-deploy.lock
+flock -w 1200 9
 git fetch origin main
 git checkout main
-git pull --ff-only origin main
-
-cd ryvl-discord-bot/server
-npm ci
-npx prisma generate
-npm run build
-pm2 restart ryvl-backend --update-env
-pm2 save
-
-cd ../web
-npm ci
-npm run build
-
-sudo mkdir -p /var/www/ryvl
-sudo rm -rf /var/www/ryvl/*
-
-if [ -f dist/web/browser/index.html ]; then
-  sudo cp -a dist/web/browser/. /var/www/ryvl/
-else
-  sudo cp -a dist/web/. /var/www/ryvl/
-fi
-
-sudo chown -R caddy:caddy /var/www/ryvl
-sudo cp ../Caddyfile /etc/caddy/Caddyfile
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl reload caddy
+# This discards tracked local edits. Commit work on your development PC, not the VM.
+git reset --hard origin/main
+bash ryvl-discord-bot/deploy/oracle.sh
 ```
 
----
+The initial PM2 process and Caddy package must already exist. The .env must contain real credentials and be owned by ubuntu. Never use git clean -x on the production checkout. Release directories are intentionally retained for rollback; monitor disk usage and prune only obsolete releases after identifying the active target.
 
-## 20. Verifying the deployment
+## 16. Verification and troubleshooting
 
-### Backend
+From Windows after deployment:
+
+```powershell
+curl.exe -I https://ryvl.top
+curl.exe -I https://www.ryvl.top
+curl.exe -I http://ryvl.top
+curl.exe https://ryvl.top/api/health
+curl.exe https://ryvl.top/release.json
+```
+
+Expected: apex HTTPS 200; www/HTTP 308 to the apex; health JSON status ok; revision equal to deployed main. HTTPS to a bare IP is not the canonical site and is not promised to have a matching certificate. HTTP IP bookmarks redirect to the domain.
+
+On the VM:
 
 ```bash
-pm2 status
-pm2 logs ryvl-backend --lines 100
-```
-
-### Caddy
-
-```bash
-sudo systemctl status caddy --no-pager
-```
-
-### Listening ports
-
-```bash
-sudo ss -lntp | grep -E ':80|:3000'
-```
-
-Expected:
-
-- Caddy on `:80`
-- Node/NestJS on `:3000`
-
-### Test Caddy locally
-
-```bash
-curl -I http://127.0.0.1
-```
-
-Expected response includes:
-
-```text
-HTTP/1.1 200 OK
-Server: Caddy
-```
-
-### Test from another machine
-
-```bash
-curl -I http://<ORACLE_PUBLIC_IP>
-```
-
-Then open:
-
-```text
-http://<ORACLE_PUBLIC_IP>
-```
-
----
-
-## 21. HTTP versus HTTPS
-
-With the current raw-IP Caddy configuration:
-
-```caddyfile
-:80
-```
-
-the application is HTTP-only.
-
-A browser will therefore display a "Not secure" warning. That is expected.
-
-Opening:
-
-```text
-https://<ORACLE_PUBLIC_IP>
-```
-
-will not work just because port `443` is open. A TLS listener/certificate must also be configured.
-
-### Recommended production HTTPS setup
-
-Use a domain such as:
-
-```text
-ryvl.example.com
-```
-
-Create a DNS A record pointing to the Oracle public IP.
-
-Then change the Caddyfile site address from:
-
-```text
-:80
-```
-
-to:
-
-```text
-ryvl.example.com
-```
-
-Caddy can then obtain and renew the public TLS certificate automatically.
-
-Also update:
-
-```env
-FRONTEND_URL=https://ryvl.example.com
-DISCORD_OAUTH_REDIRECT_URI=https://ryvl.example.com/api/auth/discord/callback
-```
-
-and update the Discord Developer Portal redirect URI to the same HTTPS callback.
-
----
-
-## 22. Common troubleshooting
-
-### Browser times out even though OCI port 80 is open
-
-Check Ubuntu iptables:
-
-```bash
-sudo iptables -L INPUT -n --line-numbers
-```
-
-If `REJECT` appears above the port-80 allow rule, move/add the allow rule above it.
-
-This was the cause of the initial timeout on this VM.
-
-### GitHub Actions reports "missing server host"
-
-The GitHub repository secrets are missing or empty.
-
-Verify:
-
-- `ORACLE_HOST`
-- `ORACLE_USER`
-- `ORACLE_SSH_KEY`
-
-### Frontend build fails with Node.js 20
-
-Angular 22 requires a newer Node.js version.
-
-Install Node 22:
-
-```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt-get install -y nodejs
-```
-
-The current GitHub Actions workflow performs this check automatically.
-
-### PM2 says the backend is errored
-
-Inspect:
-
-```bash
-pm2 logs ryvl-backend --lines 100
-```
-
-A common first-start issue is a missing/invalid environment value.
-
-For example, `JWT_SECRET` must be at least 32 characters.
-
-### Prisma refuses to add required columns
-
-If existing rows are present, Prisma cannot add a required column without values for those rows.
-
-Do not use `--force-reset` on production data.
-
-Use a proper migration/backfill strategy or intentionally reset only a disposable database.
-
-### Frontend still calls an old Render URL
-
-Production frontend API requests should use the browser's current origin.
-
-The current frontend implementation does this automatically, so a fresh frontend build/deployment is required after changing that code.
-
----
-
-## 23. Security notes
-
-- Never commit `.env`
-- Never commit Discord tokens or client secrets
-- Never commit SSH private keys
-- Keep the database port private unless external access is explicitly required
-- Keep backend port `3000` private
-- Use HTTPS with a domain for the final production setup
-- Prefer dedicated deployment SSH keys
-- Review Prisma schema changes before applying them to production data
-- Keep Ubuntu, Node.js and application dependencies patched
-
-
----
-
-## 24. Server-side SVG/PNG text rendering on Oracle Ubuntu
-
-The lineup generator uses `sharp` to rasterize SVG into PNG. SVG text rendering on Linux depends on the system font stack (fontconfig/Pango/librsvg).
-
-Minimal Ubuntu cloud images may not have a usable fontconfig configuration or common fonts installed. A typical symptom is:
-
-```text
-Fontconfig error: Cannot load default config file: File not found
-```
-
-and the generated image can contain the pitch/shapes but no text.
-
-Install the required font packages:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y fontconfig fontconfig-config fonts-dejavu-core fonts-liberation2
-sudo fc-cache -f
-```
-
-Verify that a font is resolvable:
-
-```bash
-fc-match "Liberation Sans"
-```
-
-The production lineup SVG explicitly prefers `Liberation Sans` and falls back to `DejaVu Sans`, both of which are available on Ubuntu.
-
-The GitHub Actions deployment performs this font check/install automatically, so future deployments to a fresh Oracle VM should not require manual font setup.
-
-### Discord "Unknown interaction" on a cloud VM
-
-Discord interactions must be acknowledged quickly. A cloud deployment can expose latency that is not noticeable locally, especially when the command performs a remote database lookup before replying.
-
-The lineup command is implemented so that:
-
-- modal commands call `showModal()` before database/network work
-- non-modal commands call `deferReply()` before database/network work
-- long image rendering happens only after an interaction has already been acknowledged
-
-This avoids errors such as:
-
-```text
-DiscordAPIError[10062]: Unknown interaction
-```
-
-The bot also uses `MessageFlags.Ephemeral` instead of the deprecated `ephemeral: true` response option for the lineup flow.
-
-
----
-
-## 25. EA Python bridge runtime on Ubuntu
-
-The EA Pro Clubs integration executes:
-
-```text
-server/src/ea/scripts/ea_bridge.py
-```
-
-from the NestJS backend.
-
-Ubuntu 24.04 may not provide a `python` executable, only `python3`. The bridge also requires the third-party Python package `curl_cffi`.
-
-The production application therefore uses:
-
-```text
-server/.venv/bin/python
-```
-
-with dependencies defined in:
-
-```text
-server/requirements-ea.txt
-```
-
-The GitHub Actions deployment automatically:
-
-```bash
-sudo apt-get install -y python3 python3-venv
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-ea.txt
-```
-
-The NestJS EA service prefers `.venv/bin/python` and falls back to `python3`.
-
-This avoids a common Oracle/Ubuntu production-only failure where EA commands work locally on Windows but fail on the VM with:
-
-```text
-spawn python ENOENT
-```
-
-or:
-
-```text
-ModuleNotFoundError: No module named 'curl_cffi'
-```
-
-To test the bridge manually:
-
-```bash
-cd ~/ryvl-bot-v2/ryvl-discord-bot/server
-.venv/bin/python src/ea/scripts/ea_bridge.py search common-gen5 "RYVL Esports"
-```
-
-
----
-
-## 26. VPG notifications, public website and current deployment safeguards
-
-The current feature overview and feed/channel mapping are maintained in [README.md](README.md). The public site now includes VPG Romania transfers, Match Center, in-page RYVL Performance tabs and working `/privacy` and `/terms` routes. The public Competitions page is removed; its URL redirects to Performance. The admin competition slots are not removed.
-
-### Administration
-
-1. Keep your existing channel selections in **Admin → Settings**.
-2. Open **Admin → RYVL Performance → VPG automatic posting**.
-3. Enable the desired general and/or RYVL-only feeds. A missing channel means that feed will not post.
-4. Set the results polling interval (default 2 minutes) and daily fixture time (default 10:00).
-5. Weekly standings use Sunday 10:00 **Europe/Bucharest**. This does not depend on the VM's UTC timezone.
-
-A newly configured result destination saves a baseline without replaying old results. It will announce future newly confirmed entries. Failed sends remain retryable, and separate destinations have independent receipts. Fixture updates edit the day's tracked messages; no scheduled matches means no empty-day post. The background process records errors and applies retry backoff. API pagination is checked before any baseline advances.
-
-### Updating existing databases
-
-The notification upgrade is in `server/prisma/deploy/vpg-notifications.sql`. It only creates two new tables and indexes. Existing data and channel settings are not reset. The deploy workflow executes this reviewed, transactional SQL after successful backend/frontend builds and before restarting PM2. It can be run again safely.
-
-For a manual upgrade, from the backend folder with the correct `.env`:
-
-```bash
-npx prisma generate
-npm run build
-npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
-pm2 restart ryvl-backend --update-env
-```
-
-Do not substitute `--force-reset`. This is a narrowly scoped upgrade, not permission to automatically apply arbitrary future destructive schema changes.
-
-### Website buttons and custom domain later
-
-Use `FRONTEND_URL` as the public website base for Discord club buttons. The old `WEB_BASE_URL` localhost fallback has been removed. Example for the existing HTTP deployment:
-
-```env
-FRONTEND_URL=http://130.61.228.100
-DISCORD_OAUTH_REDIRECT_URI=http://130.61.228.100/api/auth/discord/callback
-```
-
-After adding DNS and HTTPS in Caddy, change both URLs to your domain and update the Discord Developer Portal callback. Restart the backend. To repair already-posted buttons, use **Repair old club links** in the notification panel. This explicit action edits known bot-owned messages only, with a 200-message limit; it does not remove or replay match posts.
-
-### Deployment verification
-
-The workflow now serializes deployments, takes a VM-side lock, builds both projects and runs non-network regression tests before restarting PM2. The reviewed additive notification SQL is applied before the new code starts. Frontend files are staged in a release directory and switched into place after validation. The old physical `/var/www/ryvl` directory is retained as a legacy backup on its first conversion to a release symlink. The workflow does not modify the live `.env`.
-
-Verify locally after deployment:
-
-```bash
-curl --fail http://127.0.0.1:3000/api/health
-curl --fail http://127.0.0.1/api/health
 pm2 status ryvl-backend
-sudo systemctl is-active caddy
+pm2 logs ryvl-backend --lines 100 --nostream
+sudo systemctl status caddy --no-pager
+sudo ss -lntp | grep -E ':(80|443|3000)\b'
+sudo iptables -L INPUT -n -v --line-numbers
+curl --fail http://127.0.0.1:3000/api/health
+curl --fail --resolve ryvl.top:443:127.0.0.1 https://ryvl.top/api/health
 ```
 
-### Privacy and transport
+Local loopback HTTP bypasses Caddy and is intentionally retained. A 301/308 alone is not proof the application is healthy. Inspect Caddy's service logs for ACME errors if certificates do not become ready; verify DNS including AAAA/CAA and both firewall layers before changing configuration again.
 
-The legal pages document current app behavior, including Discord authentication, browser token storage, form forwarding and externally requested fonts/images. They are not a substitute for the operator reviewing legal identity/contact details and retention obligations. Public typography loads Inter from the publisher CDN. HTTP is still only the initial IP-based deployment; configure HTTPS before considering the administration environment production-hardened.
+Missing server host in Actions means the repository secrets are missing/empty. A failed health check after npm build is not solved by blindly resetting Prisma. CORS is a browser policy, not authorization: the application still requires authenticated/authorized endpoints.
+
+## 17. VPG notifications and existing Discord links
+
+Channels remain in Admin → Settings; schedules, intervals and repair controls are in Admin → RYVL Performance → VPG automatic posting. Sunday standings are 10:00 Europe/Bucharest; daily fixtures default to 10:00; results default to two minutes. General and RYVL destinations are independent. The historical baseline prevents old-result floods, failures remain retryable and empty fixture days remain silent. See README for full feed behaviour.
+
+New club buttons use FRONTEND_URL. Existing Discord messages keep their old stored URLs: use **Repair old club links** after migration. This asks for confirmation, edits at most 200 recent recorded bot-owned messages, and does not delete or replay history.
+
+## 18. Ongoing security and maintenance
+
+Keep Ubuntu, Node, Caddy and dependencies patched; inspect dependency audits rather than assuming a green build is a security audit. Keep SSH private keys, real .env files, database dumps and certificate storage out of Git. Maintain database backups and monitor release-directory disk use. Restrict public backend/database ports. The legal pages need operator review of identity/contact details and retention practices. HTTPS protects transport; it does not by itself remedy all application-authentication risks.
+
+References: [Caddy automatic HTTPS](https://caddyserver.com/docs/automatic-https), [Caddy redirects](https://caddyserver.com/docs/caddyfile/directives/redir), [Discord OAuth2](https://docs.discord.com/developers/topics/oauth2), [GitHub Actions](https://docs.github.com/en/actions).

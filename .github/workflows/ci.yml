@@ -8,11 +8,9 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
-concurrency:
-  group: ryvl-ci-${{ github.ref }}
-  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-24.04
@@ -63,6 +61,31 @@ jobs:
       - name: Backend build and regression tests
         working-directory: ryvl-discord-bot/server
         run: npm test
+      - name: Environment updater and deployment script checks
+        run: |
+          python3 -m unittest discover -s ryvl-discord-bot/deploy/test -v
+          bash -n ryvl-discord-bot/deploy/oracle.sh
+          node --check ryvl-discord-bot/deploy/verify-public-site.mjs
+          # Scan tracked code/docs only. Tests intentionally keep old-IP rejection cases.
+          if git grep -n -E 'https?://130[.]61[.]228[.]100' -- ':!**/test/**'; then
+            echo 'Unexpected old production IP URL remains outside regression fixtures.' >&2
+            exit 1
+          fi
+      - name: Validate Caddy domain configuration
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y caddy
+          caddy adapt --config ryvl-discord-bot/Caddyfile --adapter caddyfile --pretty > /tmp/ryvl-caddy.json
+          python3 - <<'PY'
+          import json
+          config=json.load(open('/tmp/ryvl-caddy.json'))
+          text=json.dumps(config)
+          assert 'ryvl.top' in text and 'www.ryvl.top' in text
+          assert '127.0.0.1:3000' in text
+          assert 'https://ryvl.top{http.request.uri}' in text
+          assert ':443' in text and ':80' in text
+          print('Caddy domain, redirect, TLS-listener and internal upstream configuration valid.')
+          PY
       - name: Angular production build
         working-directory: ryvl-discord-bot/web
         run: |
