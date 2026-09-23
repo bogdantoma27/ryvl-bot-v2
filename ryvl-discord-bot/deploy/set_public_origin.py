@@ -60,7 +60,7 @@ def update_file(path: Path, origin: str, backup_dir: Path) -> bool:
         backup.write(original)
         backup.flush()
         os.fsync(backup.fileno())
-    fd, temporary = tempfile.mkstemp(prefix='.env-public-origin-', dir=path.parent)
+    fd, temporary = tempfile.mkstemp(prefix='.env.public-origin-', dir=path.parent)
     try:
         with os.fdopen(fd, 'wb') as stream:
             stream.write(updated)

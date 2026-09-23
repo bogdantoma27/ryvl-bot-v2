@@ -57,5 +57,14 @@ class PublicOriginTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.module.update_file(self.env, 'https://ryvl.top', self.backups)
         self.assertEqual(real.read_text(), 'PORT=3000\n')
+    def test_atomic_secret_temporary_file_matches_gitignore_pattern(self):
+        from unittest.mock import patch
+        self.env.write_text('PORT=3000\n')
+        real_mkstemp = self.module.tempfile.mkstemp
+        with patch.object(self.module.tempfile, 'mkstemp', wraps=real_mkstemp) as create:
+            self.module.update_file(self.env, 'https://ryvl.top', self.backups)
+        prefixes = [call.kwargs['prefix'] for call in create.call_args_list if call.kwargs.get('dir') == self.env.parent]
+        self.assertEqual(len(prefixes), 1)
+        self.assertTrue(prefixes[0].startswith('.env.'), 'A crash-left temporary secret must match the existing .env.* ignore rule')
 if __name__ == '__main__':
     unittest.main()
