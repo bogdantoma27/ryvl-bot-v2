@@ -54,11 +54,21 @@ export class EaService {
     return identifier ? EA_CREST_TEMPLATE.replace('{identifier}', String(identifier)) : EA_DEFAULT_CREST;
   }
 
+  private getPythonExecutable(): string {
+    // Production uses a project-local virtual environment so Python dependencies
+    // are isolated from Ubuntu's system Python (PEP 668).
+    const venvPython = join(process.cwd(), '.venv', 'bin', 'python');
+    if (existsSync(venvPython)) return venvPython;
+
+    // Ubuntu 24.04 provides "python3" by default; "python" may not exist.
+    return 'python3';
+  }
+
   private async runBridge(command: string, args: string[]): Promise<any> {
     try {
       const scriptPath = this.getScriptPath();
       const { stdout } = await execFileAsync(
-        'python',
+        this.getPythonExecutable(),
         [scriptPath, command, ...args],
         { maxBuffer: 15 * 1024 * 1024, timeout: 20000 },
       );

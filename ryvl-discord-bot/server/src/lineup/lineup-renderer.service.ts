@@ -129,12 +129,12 @@ export class LineupRendererService {
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="width: 100%; max-width: 100%; height: auto; display: block;">
   <defs>
     <style>
-      .txt-title { font-family: 'Segoe UI', Arial, sans-serif; font-weight: 700; fill: #ffffff; }
-      .txt-pill { font-family: 'Segoe UI', Arial, sans-serif; font-weight: 700; fill: ${primary}; font-size: 24px; dominant-baseline: middle; }
-      .txt-kickoff { font-family: 'Segoe UI', Arial, sans-serif; font-weight: 700; fill: #d9d9d9; font-size: 16px; }
-      .txt-num { font-family: 'Segoe UI', Arial, sans-serif; font-weight: 800; font-size: 20px; text-anchor: middle; dominant-baseline: central; }
-      .txt-name { font-family: 'Segoe UI', Arial, sans-serif; font-weight: 700; font-size: 13.5px; fill: #ffffff; text-anchor: middle; dominant-baseline: central; }
-      .txt-pos { font-family: 'Segoe UI', Arial, sans-serif; font-weight: 700; font-size: 11.5px; fill: #111111; text-anchor: middle; dominant-baseline: central; }
+      .txt-title { font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif; font-weight: 700; fill: #ffffff; }
+      .txt-pill { font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif; font-weight: 700; fill: ${primary}; font-size: 24px; dominant-baseline: middle; }
+      .txt-kickoff { font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif; font-weight: 700; fill: #d9d9d9; font-size: 16px; }
+      .txt-num { font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif; font-weight: 800; font-size: 20px; text-anchor: middle; dominant-baseline: central; }
+      .txt-name { font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif; font-weight: 700; font-size: 13.5px; fill: #ffffff; text-anchor: middle; dominant-baseline: central; }
+      .txt-pos { font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif; font-weight: 700; font-size: 11.5px; fill: #111111; text-anchor: middle; dominant-baseline: central; }
     </style>
   </defs>
 

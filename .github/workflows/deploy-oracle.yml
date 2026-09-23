@@ -1,0 +1,128 @@
+name: Deploy RYVL to Oracle VM
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "ryvl-discord-bot/server/**"
+      - "ryvl-discord-bot/web/**"
+      - "ryvl-discord-bot/Caddyfile"
+      - ".github/workflows/deploy-oracle.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: oracle-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy backend and frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script_stop: true
+          command_timeout: 17m
+          script: |
+            set -euo pipefail
+
+            echo "Updating repository..."
+            cd /home/ubuntu/ryvl-bot-v2
+            git fetch origin main
+            git checkout main
+
+            # The production VM should mirror the canonical main branch.
+            # This discards tracked build/install drift (for example a locally
+            # modified package-lock.json) while preserving ignored .env files.
+            git reset --hard origin/main
+
+            echo "Ensuring Node.js 22 is installed..."
+            NODE_MAJOR="$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || echo 0)"
+            NODE_MINOR="$(node -p "process.versions.node.split('.')[1]" 2>/dev/null || echo 0)"
+            NODE_PATCH="$(node -p "process.versions.node.split('.')[2]" 2>/dev/null || echo 0)"
+
+            # Angular 22 requires Node.js >= 22.22.3 in the Node 22 line.
+            if [ "$NODE_MAJOR" -lt 22 ] || { [ "$NODE_MAJOR" -eq 22 ] && { [ "$NODE_MINOR" -lt 22 ] || { [ "$NODE_MINOR" -eq 22 ] && [ "$NODE_PATCH" -lt 3 ]; }; }; }; then
+              curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+              sudo apt-get install -y nodejs
+            fi
+
+            node --version
+            npm --version
+
+            echo "Ensuring server-side font rendering dependencies are installed..."
+            if ! command -v fc-match >/dev/null 2>&1 || [ ! -f /etc/fonts/fonts.conf ]; then
+              sudo apt-get update
+              sudo apt-get install -y fontconfig fontconfig-config fonts-dejavu-core fonts-liberation2
+            fi
+
+            # Sharp renders SVG text through librsvg/Pango/fontconfig. Rebuild the
+            # font cache so lineup PNG text is available on minimal OCI images.
+            sudo fc-cache -f
+            fc-match "Liberation Sans"
+
+            echo "Building backend..."
+            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
+
+            echo "Ensuring EA Python bridge runtime is available..."
+            if ! command -v python3 >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y python3
+            fi
+            if [ ! -x .venv/bin/python ]; then
+              sudo apt-get update
+              sudo apt-get install -y python3-venv
+              python3 -m venv .venv
+            fi
+            .venv/bin/python -m pip install --upgrade pip
+            .venv/bin/pip install -r requirements-ea.txt
+
+            npm ci
+            npx prisma generate
+            npm run build
+
+            # Database schema changes are intentionally NOT applied automatically.
+            # Run prisma db push/migrations manually after reviewing schema changes.
+
+            echo "Restarting backend..."
+            pm2 restart ryvl-backend --update-env
+            pm2 save
+
+            echo "Building frontend..."
+            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/web
+            npm ci
+            npm run build
+
+            # Angular's application builder normally emits browser files here.
+            WEB_DIST="/home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/web/dist/web/browser"
+            if [ ! -d "$WEB_DIST" ]; then
+              WEB_DIST="/home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/web/dist/web"
+            fi
+
+            if [ ! -f "$WEB_DIST/index.html" ]; then
+              echo "Angular build output not found at $WEB_DIST"
+              exit 1
+            fi
+
+            echo "Publishing frontend..."
+            sudo mkdir -p /var/www/ryvl
+            sudo rm -rf /var/www/ryvl/*
+            sudo cp -a "$WEB_DIST"/. /var/www/ryvl/
+            sudo chown -R caddy:caddy /var/www/ryvl
+
+            echo "Updating Caddy..."
+            sudo cp /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/Caddyfile /etc/caddy/Caddyfile
+            sudo caddy validate --config /etc/caddy/Caddyfile
+            sudo systemctl enable caddy
+            sudo systemctl reload caddy
+
+            echo "Deployment complete."
+            pm2 status ryvl-backend
+            systemctl --no-pager --full status caddy | head -20

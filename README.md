@@ -1,143 +1,147 @@
-# RYVL DS Bot
+# RYVL Discord Bot
 
-Stack-ul curent:
+A Discord event/attendance bot with web dashboard. Users can RSVP to events with Yes/Tentative/No buttons.
 
-- backend: FastAPI + Discord bot + scheduler in [ryvl-bot/service](ryvl-bot/service)
-- frontend: Angular admin panel in [ryvl-bot/webapp](ryvl-bot/webapp)
-- deploy: Render Blueprint in [ryvl-bot/render.yaml](ryvl-bot/render.yaml)
+## Features
+- Event creation via Discord slash commands and web dashboard
+- RSVP with Yes/Tentative/No buttons
+- Recurring events (daily, weekly, biweekly, monthly, custom)
+- Multi-server support
+- Real-time dashboard with SSE updates
+- Role-based event notifications
 
-## Ce face aplicatia
+## Tech Stack
+- **Backend**: NestJS (TypeScript) + discord.js
+- **Frontend**: Angular 22 (standalone components, signals, Tailwind v4)
+- **Database**: PostgreSQL + Prisma ORM
+- **Hosting**: Oracle Cloud VM
+- **Process manager**: PM2
+- **Reverse proxy / static hosting**: Caddy
+- **CI/CD**: GitHub Actions
 
-- login admin prin Discord OAuth (doar membri cu permisiunea Discord "Administrator")
-- Events: create, vote, edit, reschedule, close, cancel, delete, drafturi, recurenta saptamanala
-- Lineup: wizard cu editor de teren pe `<canvas>` (pozitionare pixel-perfect identica cu randarea server-side), drag-and-drop, drafturi, postare imagine in Discord (fara text duplicat pentru titlu/formatie/kickoff, acestea fiind deja in imagine)
-- Account: profil, tema (light/dark/system); sign-out disponibil din meniul de profil al sidebar-ului
+## Production Deployment
 
-## Setup local
+The complete Oracle Cloud deployment and automatic GitHub Actions setup is documented in:
 
-### 4.1 Backend
+**[Oracle Cloud VM Deployment Guide](ORACLE_VM_DEPLOYMENT.md)**
 
-```powershell
-cd ryvl-bot/service
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
-python start.py
-```
+It includes OCI networking, host firewall rules, Node.js 22, PM2, Caddy, backend/frontend deployment, environment variables, Discord OAuth, GitHub Actions secrets, automatic deployment and troubleshooting.
 
-Alternativ explicit (daca vrei sa fortezi alt host/port):
+## Prerequisites
+- Node.js 22+
+- PostgreSQL 17+ or a compatible hosted PostgreSQL service
+- A Discord Application with Bot Token
 
-```powershell
-set HOST=127.0.0.1
-set PORT=8000
-set RELOAD=true
-python start.py
-```
+## Quick Start
 
-Health endpoint:
+### 1. Clone and install
 
-```text
-http://127.0.0.1:8000/healthz
-```
+```bash
+git clone https://github.com/bogdantoma27/ryvl-bot-v2.git
+cd ryvl-bot-v2/ryvl-discord-bot
 
-### 4.2 Frontend
-
-```powershell
-cd ryvl-bot/webapp
+# Install server dependencies
+cd server
 npm ci
+
+# Install web dependencies
+cd ../web
+npm ci
+```
+
+### 2. Configure backend environment
+
+```bash
+cd ../server
+cp .env.example .env
+nano .env
+```
+
+Do not put real secrets into `.env.example`. The real `.env` file is ignored by Git.
+
+See [Oracle Cloud VM Deployment Guide](ORACLE_VM_DEPLOYMENT.md#9-configure-the-backend-environment) for every production variable.
+
+### 3. Set up Prisma
+
+```bash
+npx prisma generate
+npx prisma db push
+```
+
+Do not use `--force-reset` against a production database unless data loss is explicitly intended.
+
+### 4. Start development
+
+Backend:
+
+```bash
+cd ryvl-discord-bot/server
+npm run start:dev
+```
+
+Frontend:
+
+```bash
+cd ryvl-discord-bot/web
 npm start
 ```
 
-Frontend local:
+### 5. Discord Bot Setup
+
+1. Open the Discord Developer Portal.
+2. Create/select the application.
+3. In **Bot**, copy the token into `DISCORD_TOKEN`.
+4. In **OAuth2**, copy the Client ID and Client Secret.
+5. Add the exact callback URI configured as `DISCORD_OAUTH_REDIRECT_URI`.
+6. Invite the bot with the required bot/application-command scopes.
+
+## Production architecture
 
 ```text
-http://localhost:4200
+Internet
+   |
+   v
+Caddy :80 / :443
+   |
+   +-- Angular frontend
+   |
+   +-- /api/* -> NestJS :3000
+                     |
+                     +-- Discord bot
+                     +-- PostgreSQL / Prisma
 ```
 
-## Config backend
+The NestJS port is not intended to be publicly exposed.
 
-Sursa campurilor: [ryvl-bot/service/app/config.py](ryvl-bot/service/app/config.py)
-
-Variabilele de productie (required + optional) sunt documentate canonical in sectiunea Deploy Render de mai jos.
-
-`DEFAULT_TIMEZONE` este doar valoarea implicita folosita la randare/afisare; nu exista o pagina de Settings separata — tema se configureaza din pagina Account.
-
-Intervalul scheduler-ului este hardcodat in backend si este ales conservator pentru a evita presiunea inutila pe baza de date din tier-ul free Render.
-
-Nu mai exista in backend: `APP_ENV`, `APP_NAME`, `ADMIN_ROLE_IDS`, `DEFAULT_ATTENDANCE_CHANNEL_ID`, `DEFAULT_LINEUP_CHANNEL_ID`, `SCHEDULER_INTERVAL_SECONDS` — toate au fost eliminate.
-
-## Baza de date
-
-Local:
-
-1. SQLite (implicit) este ok.
-
-Productie:
-
-1. Foloseste un Postgres extern (ex. Supabase) si seteaza `DATABASE_URL` pe backend.
-2. Nu folosi SQLite pentru persistenta in Render (containerul poate pierde datele la redeploy/restart).
-
-## Deploy Render
-
-Blueprint deja pregatit: [ryvl-bot/render.yaml](ryvl-bot/render.yaml)
-
-### Ce creeaza blueprint-ul
-
-1. Web Service backend: `ryvl-bot-api`.
-2. Static Site frontend: `ryvl-bot-web`.
-
-Blueprint-ul nu mai provizioneaza Render Postgres; `DATABASE_URL` trebuie setat manual catre un Postgres extern (ex. Supabase).
-
-### Cum il folosesti
-
-1. Push codul in GitHub.
-2. Render Dashboard -> New -> Blueprint.
-3. Selectezi repository-ul.
-4. Blueprint path:
+## Project Structure
 
 ```text
-ryvl-bot/render.yaml
+.
+├── .github/
+│   └── workflows/
+│       └── deploy-oracle.yml     # Automatic Oracle VM deployment
+├── ORACLE_VM_DEPLOYMENT.md       # Full production deployment guide
+├── README.md
+└── ryvl-discord-bot/
+    ├── Caddyfile                 # Frontend + API reverse proxy
+    ├── Dockerfile
+    ├── docker-compose.yml
+    ├── nginx/
+    ├── server/                   # NestJS backend + Discord bot
+    │   ├── prisma/
+    │   └── src/
+    └── web/                      # Angular 22 frontend
+        └── src/app/
 ```
 
-5. Confirmi crearea serviciilor.
+## Automatic deployment
 
-### Checklist rapid (recomandat)
+Pushes to `main` that modify the backend, frontend, Caddyfile or deployment workflow automatically trigger the Oracle VM deployment.
 
-1. Push pe branch-ul dorit in GitHub.
-2. Render -> New -> Blueprint -> selectezi repository-ul.
-3. Blueprint path: `ryvl-bot/render.yaml`.
-4. Dupa provisioning, setezi env vars obligatorii pe backend (inclusiv `DATABASE_URL` catre Postgres-ul extern).
-5. Adaugi redirect-ul OAuth in Discord Developer Portal.
-6. Dai deploy/redeploy si verifici:
-
-	- health backend: `/healthz`
-	- login OAuth din frontend
-	- pagina Events + Lineup + Account
-
-### Ce trebuie completat manual dupa creare
-
-Copy-paste rapid (key = example value):
-
-Backend (`ryvl-bot-api`) env vars:
-
-```env
-DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME
-
-ADMIN_APP_URL=https://YOUR_FRONTEND.onrender.com
-PUBLIC_API_BASE_URL=https://YOUR_BACKEND.onrender.com
-
-DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
-DISCORD_CLIENT_ID=YOUR_DISCORD_APP_CLIENT_ID
-DISCORD_CLIENT_SECRET=YOUR_DISCORD_APP_CLIENT_SECRET
-DISCORD_OAUTH_REDIRECT_URI=https://YOUR_BACKEND.onrender.com/api/auth/discord/callback
-DISCORD_GUILD_ID=123456789012345678
-
-SESSION_SECRET=GENERATED_BY_RENDER_OR_SET_MANUALLY
-```
-
-Frontend (`ryvl-bot-web`): nu necesita env vars — URL-ul backend-ului este o constanta stabilita la build (`PRODUCTION_API_BASE_URL` in [ryvl-bot/webapp/src/app/core/api.service.ts](ryvl-bot/webapp/src/app/core/api.service.ts)). Daca schimbi URL-ul backend-ului de productie, actualizezi constanta si redeploy frontend.
-
-Discord OAuth Redirect (in Discord Developer Portal) trebuie sa fie exact:
+The GitHub Actions workflow:
 
 ```text
-https://YOUR_BACKEND.onrender.com/api/auth/discord/callback
+.github/workflows/deploy-oracle.yml
 ```
+
+For setup details and required repository secrets, see the [deployment guide](ORACLE_VM_DEPLOYMENT.md#16-github-actions-automatic-deployment).

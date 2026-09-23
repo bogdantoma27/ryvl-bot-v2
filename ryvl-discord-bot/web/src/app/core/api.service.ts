@@ -56,10 +56,11 @@ export class ApiService {
         return DEFAULT_PRODUCTION_API_BASE_URL;
       }
 
-      // Deployed via Oracle Cloud / VPS / Custom domain with reverse proxy
-      return '';
+      // In production on Oracle VM (served via Caddy/Nginx reverse proxy),
+      // keeping requests same-origin avoids hard-coded hostnames and CORS issues.
+      return window.location.origin;
     }
-    return DEFAULT_PRODUCTION_API_BASE_URL;
+    return '';
   })();
 
   getSessionToken(): string | null {

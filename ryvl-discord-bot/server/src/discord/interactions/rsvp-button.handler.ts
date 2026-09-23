@@ -1,4 +1,8 @@
-import { ButtonInteraction, GuildMember } from 'discord.js';
+import {
+  ButtonInteraction,
+  GuildMember,
+  MessageFlags,
+} from 'discord.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { RsvpStatus } from '@prisma/client';
 import { RsvpService } from '../../events/rsvp.service';
@@ -26,10 +30,15 @@ export class RsvpButtonHandler {
     if (!(statusString in RsvpStatus)) {
       await interaction.reply({
         content: 'Invalid RSVP status option.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
+
+    // Acknowledge the button before database work/message edits. This prevents
+    // Discord "Unknown interaction" errors when cloud/database latency exceeds
+    // the initial interaction response window.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const status = RsvpStatus[statusString];
     const userId = interaction.user.id;
@@ -82,16 +91,14 @@ export class RsvpButtonHandler {
         [RsvpStatus.DECLINED]: 'Declined ❌',
       };
 
-      await interaction.reply({
+      await interaction.editReply({
         content: `Your RSVP has been recorded as **${statusLabels[status]}**!`,
-        ephemeral: true,
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Error processing RSVP button: ${msg}`);
-      await interaction.reply({
+      await interaction.editReply({
         content: `Could not process your RSVP: ${msg}`,
-        ephemeral: true,
       });
     }
   }

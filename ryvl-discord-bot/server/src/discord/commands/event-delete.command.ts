@@ -6,6 +6,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  MessageFlags,
 } from 'discord.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { EventsService } from '../../events/events.service';
@@ -58,21 +59,22 @@ export class EventDeleteCommand {
     if (!guildId) {
       await interaction.reply({
         content: 'This command can only be used inside a server.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
     const eventId = interaction.options.getString('title', true);
 
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
     });
 
     if (!event || event.guildId !== guildId) {
-      await interaction.reply({
+      await interaction.editReply({
         content: `Event not found or belongs to a different server.`,
-        ephemeral: true,
       });
       return;
     }
@@ -96,10 +98,9 @@ export class EventDeleteCommand {
         .setStyle(ButtonStyle.Secondary),
     );
 
-    await interaction.reply({
+    await interaction.editReply({
       embeds: [confirmEmbed],
       components: [row],
-      ephemeral: true,
     });
   }
 
@@ -108,16 +109,21 @@ export class EventDeleteCommand {
 
     if (customId.startsWith('confirm:delete:')) {
       const eventId = customId.replace('confirm:delete:', '');
+
+      // Deleting can involve several database operations, so acknowledge the
+      // button immediately before doing the work.
+      await interaction.deferUpdate();
+
       try {
         await this.eventsService.deleteEvent(eventId);
-        await interaction.update({
+        await interaction.editReply({
           content: '✅ Event deleted successfully.',
           embeds: [],
           components: [],
         });
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
-        await interaction.update({
+        await interaction.editReply({
           content: `❌ Failed to delete event: ${msg}`,
           embeds: [],
           components: [],
@@ -133,14 +139,15 @@ export class EventDeleteCommand {
   }
 
   async promptDelete(interaction: ButtonInteraction, eventId: string): Promise<void> {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     const event = await this.prisma.event.findUnique({
       where: { id: eventId },
     });
 
     if (!event) {
-      await interaction.reply({
+      await interaction.editReply({
         content: 'Event not found or already deleted.',
-        ephemeral: true,
       });
       return;
     }
@@ -164,10 +171,9 @@ export class EventDeleteCommand {
         .setStyle(ButtonStyle.Secondary),
     );
 
-    await interaction.reply({
+    await interaction.editReply({
       embeds: [confirmEmbed],
       components: [row],
-      ephemeral: true,
     });
   }
 }

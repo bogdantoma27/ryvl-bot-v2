@@ -6,6 +6,7 @@ import {
   ActionRowBuilder,
   ModalSubmitInteraction,
   TextBasedChannel,
+  MessageFlags,
 } from 'discord.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { OccurrenceStatus } from '@prisma/client';
@@ -74,7 +75,7 @@ export class EventCreateCommand {
     if (!guildId) {
       await interaction.reply({
         content: 'This command can only be used inside a server.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -88,12 +89,12 @@ export class EventCreateCommand {
     if (!parsedDate) {
       await interaction.reply({
         content: `Could not parse date "${dateStr}" and time "${timeStr}". Please use format YYYY-MM-DD and HH:mm (e.g., 2026-10-15 at 19:00).`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
       const channelId = interaction.channelId;
