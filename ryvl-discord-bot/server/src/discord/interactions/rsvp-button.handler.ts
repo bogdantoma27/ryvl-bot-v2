@@ -1,4 +1,5 @@
-import { ButtonInteraction, GuildMember } from 'discord.js';
+import { ButtonInteraction, GuildMember   MessageFlags,
+} from 'discord.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { RsvpStatus } from '@prisma/client';
 import { RsvpService } from '../../events/rsvp.service';
@@ -26,7 +27,7 @@ export class RsvpButtonHandler {
     if (!(statusString in RsvpStatus)) {
       await interaction.reply({
         content: 'Invalid RSVP status option.',
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
       return;
     }
@@ -84,14 +85,14 @@ export class RsvpButtonHandler {
 
       await interaction.reply({
         content: `Your RSVP has been recorded as **${statusLabels[status]}**!`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Error processing RSVP button: ${msg}`);
       await interaction.reply({
         content: `Could not process your RSVP: ${msg}`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   }
