@@ -98,10 +98,10 @@ import { GuildStore } from '../../core/guild.store';
           <div class="flex items-center gap-3 flex-wrap">
             <a
               routerLink="/team"
-              class="px-5 py-2.5 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] !text-black text-xs font-extrabold uppercase tracking-wider transition shadow-lg shadow-[#EAE905]/15 flex items-center gap-2 cursor-pointer"
+              class="btn-yellow px-5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition shadow-lg shadow-[#EAE905]/15 flex items-center gap-2 cursor-pointer"
             >
-              <span class="!text-black">View Squad Roster</span>
-              <span class="!text-black">&rarr;</span>
+              <span>View Squad Roster</span>
+              <span>&rarr;</span>
             </a>
             <a
               routerLink="/performance"

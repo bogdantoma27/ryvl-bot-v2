@@ -180,12 +180,12 @@ import {
                   type="button"
                   (click)="saveSlot(comp)"
                   [disabled]="isSavingSlot() === comp.id"
-                  class="flex-1 py-2 rounded-lg bg-[#EAE905] hover:bg-[#d8d704] !text-black font-extrabold text-xs shadow transition cursor-pointer text-center disabled:opacity-50"
+                  class="btn-yellow flex-1 py-2 rounded-lg font-extrabold text-xs shadow transition cursor-pointer text-center disabled:opacity-50"
                 >
                   @if (isSavingSlot() === comp.id) {
-                    <span class="!text-black">Saving...</span>
+                    <span>Saving...</span>
                   } @else {
-                    <span class="!text-black">Save Slot</span>
+                    <span>Save Slot</span>
                   }
                 </button>
 
@@ -296,13 +296,13 @@ import {
               type="button"
               (click)="postFixtures()"
               [disabled]="isPostingFixtures()"
-              class="w-full py-2.5 px-4 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] disabled:opacity-50 !text-black font-extrabold text-xs uppercase tracking-wider shadow transition cursor-pointer flex items-center justify-center gap-2"
+              class="btn-yellow w-full py-2.5 px-4 rounded-xl disabled:opacity-50 font-extrabold text-xs uppercase tracking-wider shadow transition cursor-pointer flex items-center justify-center gap-2"
             >
               @if (isPostingFixtures()) {
                 <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
-                <span class="!text-black">Dispatching...</span>
+                <span>Dispatching...</span>
               } @else {
-                <span class="!text-black">Post to Discord</span>
+                <span>Post to Discord</span>
               }
             </button>
           </div>

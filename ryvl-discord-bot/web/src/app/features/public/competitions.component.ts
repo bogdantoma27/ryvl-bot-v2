@@ -62,7 +62,7 @@ import { RouterLink } from '@angular/router';
             <div class="flex flex-wrap items-center gap-3 pt-3">
               <a
                 routerLink="/standings"
-                class="px-5 py-2.5 rounded-xl bg-[#EAE905] !text-black text-xs font-bold uppercase tracking-wider hover:bg-[#d8d704] transition"
+                class="btn-yellow px-5 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition"
               >
                 View League Table
               </a>

@@ -508,9 +508,9 @@ const TIMEZONES = [
                     <button
                       type="button"
                       (click)="saveCompetition(comp)"
-                      class="px-3.5 py-1.5 rounded-lg bg-[#EAE905] !text-black font-extrabold text-xs hover:bg-[#d8d704] transition cursor-pointer"
+                      class="btn-yellow px-3.5 py-1.5 rounded-lg font-extrabold text-xs transition cursor-pointer"
                     >
-                      <span class="!text-black">Save Slot</span>
+                      Save Slot
                     </button>
                   </div>
                 </div>

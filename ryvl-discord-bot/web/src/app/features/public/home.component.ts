@@ -64,10 +64,10 @@ import { VpgMatchItem } from '../../core/models';
           <div class="flex flex-wrap items-center justify-center gap-4 pt-4">
             <a
               routerLink="/performance"
-              class="px-8 py-4 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] !text-black font-black text-sm uppercase tracking-wider transition duration-200 transform hover:-translate-y-0.5 shadow-xl shadow-[#EAE905]/20 flex items-center gap-2.5 cursor-pointer"
+              class="btn-yellow px-8 py-4 rounded-xl font-black text-sm uppercase tracking-wider transition duration-200 transform hover:-translate-y-0.5 shadow-xl shadow-[#EAE905]/20 flex items-center gap-2.5 cursor-pointer"
             >
-              <span class="!text-black">RYVL Performance</span>
-              <svg class="w-4 h-4 !text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
+              <span>RYVL Performance</span>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" /></svg>
             </a>
 
             <a
@@ -253,10 +253,10 @@ import { VpgMatchItem } from '../../core/models';
           <div class="relative z-10 shrink-0">
             <a
               routerLink="/recruitment"
-              class="px-8 py-4 rounded-xl bg-[#EAE905] hover:bg-[#d8d704] !text-black font-black text-xs uppercase tracking-wider shadow-xl shadow-[#EAE905]/20 transition transform hover:scale-105 inline-flex items-center gap-2 cursor-pointer"
+              class="btn-yellow px-8 py-4 rounded-xl font-black text-xs uppercase tracking-wider shadow-xl shadow-[#EAE905]/20 transition transform hover:scale-105 inline-flex items-center gap-2 cursor-pointer"
             >
-              <span class="!text-black">Submit Trial Application</span>
-              <svg class="w-4 h-4 !text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span>Submit Trial Application</span>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
               </svg>
             </a>

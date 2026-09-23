@@ -94,7 +94,7 @@ import { VpgMatchItem } from '../../core/models';
           @if (onlyRyvl()) {
             <button
               (click)="onlyRyvl.set(false)"
-              class="px-4 py-2 rounded-xl bg-[#EAE905] !text-black text-xs font-black uppercase mt-2 cursor-pointer"
+              class="btn-yellow px-4 py-2 rounded-xl text-xs font-black uppercase mt-2 cursor-pointer"
             >
               Show All League Results
             </button>

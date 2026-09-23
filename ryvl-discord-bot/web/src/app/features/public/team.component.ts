@@ -80,7 +80,7 @@ import { RosterPlayer } from '../../core/models';
           <button
             type="button"
             (click)="loadRoster()"
-            class="px-5 py-2.5 rounded-xl bg-[#EAE905] !text-black text-xs font-extrabold uppercase tracking-wider hover:bg-[#d8d704] transition cursor-pointer"
+            class="btn-yellow px-5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition cursor-pointer"
           >
             Retry Connection
           </button>
@@ -174,7 +174,7 @@ import { RosterPlayer } from '../../core/models';
         </div>
         <a
           routerLink="/recruitment"
-          class="px-6 py-3 rounded-xl bg-[#EAE905] !text-black text-xs font-extrabold uppercase tracking-wider hover:bg-[#d8d704] transition shrink-0 cursor-pointer"
+          class="btn-yellow px-6 py-3 rounded-xl text-xs font-extrabold uppercase tracking-wider transition shrink-0 cursor-pointer"
         >
           Apply For Trials
         </a>

@@ -103,7 +103,7 @@ import {
           <button
             type="button"
             (click)="loadPerformance()"
-            class="px-5 py-2.5 rounded-xl bg-[#EAE905] text-black text-xs font-black uppercase tracking-wider hover:bg-[#d8d704] transition cursor-pointer"
+            class="btn-yellow px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition cursor-pointer"
           >
             Retry Telemetry
           </button>

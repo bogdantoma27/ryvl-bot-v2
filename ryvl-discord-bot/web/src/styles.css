@@ -36,118 +36,45 @@ input, select, textarea {
 }
 
 /* ============================================================
-   YELLOW BUTTONS & CONTROLS: GUARANTEE PURE BLACK TEXT
+   YELLOW BUTTONS & BADGES (Explicit Class-Only)
    ============================================================ */
-
-/* Any element with solid yellow bg, .btn-yellow, or .badge-yellow MUST have pitch black text */
 .btn-yellow,
 a.btn-yellow,
 button.btn-yellow,
-.badge-yellow,
-[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]),
-[class*="bg-[#eae905]"]:not([class*="bg-[#eae905]/"]),
-button[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]),
-a[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]),
-button[class*="bg-[#eae905]"]:not([class*="bg-[#eae905]/"]),
-a[class*="bg-[#eae905]"]:not([class*="bg-[#eae905]/"]),
-[class*="bg-yellow-400"],
-[class*="bg-yellow-500"],
-button[class*="bg-yellow-"],
-a[class*="bg-yellow-"] {
+.badge-yellow {
   background-color: #EAE905 !important;
   color: #000000 !important;
-  font-weight: 800 !important;
+  font-weight: 700 !important;
 }
 
-/* Force every child inside solid yellow buttons (spans, svgs, text nodes) to be pitch black */
 .btn-yellow *,
 a.btn-yellow *,
 button.btn-yellow *,
-.badge-yellow *,
-[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]) *,
-[class*="bg-[#eae905]"]:not([class*="bg-[#eae905]/"]) *,
-button[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]) *,
-a[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]) *,
-button[class*="bg-[#eae905]"]:not([class*="bg-[#eae905]/"]) *,
-a[class*="bg-[#eae905]"]:not([class*="bg-[#eae905]/"]) *,
-[class*="bg-yellow-400"] *,
-[class*="bg-yellow-500"] *,
-button[class*="bg-yellow-"] *,
-a[class*="bg-yellow-"] * {
+.badge-yellow * {
   color: #000000 !important;
   fill: currentColor;
 }
 
-/* SVG icons & shapes specifically inside solid yellow buttons */
 .btn-yellow svg,
-button[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]) svg,
-a[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]) svg,
-[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]) svg,
-[class*="bg-[#eae905]"]:not([class*="bg-[#eae905]/"]) svg {
+a.btn-yellow svg,
+button.btn-yellow svg {
   color: #000000 !important;
   stroke: #000000 !important;
 }
 
-.btn-yellow svg path,
-.btn-yellow svg circle,
-.btn-yellow svg line,
-.btn-yellow svg polyline,
-.btn-yellow svg rect,
-[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]) svg path,
-[class*="bg-[#eae905]"]:not([class*="bg-[#eae905]/"]) svg path {
-  stroke: #000000 !important;
-}
-
-/* Hover, active, focus states: guarantee pure black text */
 .btn-yellow:hover,
 a.btn-yellow:hover,
-button.btn-yellow:hover,
-[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]):hover,
-[class*="bg-[#eae905]"]:not([class*="bg-[#eae905]/"]):hover,
-button[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]):hover,
-a[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]):hover,
-[class*="hover:bg-[#EAE905]"]:hover,
-[class*="hover:bg-[#d8d704]"]:hover,
-.btn-yellow:active,
-.btn-yellow:focus,
-[class*="bg-[#EAE905]"]:focus,
-[class*="bg-[#EAE905]"]:active {
+button.btn-yellow:hover {
   background-color: #d8d704 !important;
   color: #000000 !important;
 }
 
 .btn-yellow:hover *,
 a.btn-yellow:hover *,
-button.btn-yellow:hover *,
-[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]):hover *,
-[class*="bg-[#eae905]"]:not([class*="bg-[#eae905]/"]):hover *,
-button[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]):hover *,
-a[class*="bg-[#EAE905]"]:not([class*="bg-[#EAE905]/"]):hover *,
-[class*="hover:bg-[#EAE905]"]:hover *,
-[class*="hover:bg-[#d8d704]"]:hover *,
-.btn-yellow:focus *,
-.btn-yellow:active *,
-[class*="bg-[#EAE905]"]:focus *,
-[class*="bg-[#EAE905]"]:active * {
-  color: #000000 !important;
-}
-
-/* Disabled states on yellow buttons */
-.btn-yellow:disabled,
-button[class*="bg-[#EAE905]"]:disabled,
-button[class*="bg-[#eae905]"]:disabled {
-  color: #000000 !important;
-  opacity: 0.6 !important;
-}
-
-.btn-yellow:disabled *,
-button[class*="bg-[#EAE905]"]:disabled *,
-button[class*="bg-[#eae905]"]:disabled * {
+button.btn-yellow:hover * {
   color: #000000 !important;
 }
 
 .text-pitch-dark {
   color: #000000 !important;
 }
-
-
