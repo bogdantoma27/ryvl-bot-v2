@@ -1,5 +1,5 @@
 'use strict';
-// Read-only post-deploy browser check against the real HTTPS website.
+// Read-only post-deploy browser checks against the real HTTPS website.
 // No test identities, session tokens, Discord authorization or form submissions.
 const fs = require('node:fs');
 const path = require('node:path');
@@ -16,6 +16,17 @@ const { chromium, expect } = require(path.join(process.env.PLAYWRIGHT_NODE_PATH,
         const page = await context.newPage();
         await page.goto(origin + '/privacy', { waitUntil: 'domcontentloaded' });
         await expect(page.getByRole('heading', { name: 'Privacy Policy', exact: true })).toBeVisible({ timeout: 15000 });
+        // The public Club Tracker must be reachable from the actual toolbar,
+        // independently of whether EA's upstream happens to be available today.
+        if (mobile) await page.getByRole('button', { name: 'Toggle navigation', exact: true }).click();
+        const nav = page.getByRole('navigation', { name: mobile ? 'Mobile navigation' : 'Main navigation', exact: true });
+        await nav.getByRole('link', { name: 'Club Tracker', exact: true }).click();
+        await expect(page).toHaveURL(origin + '/club');
+        await expect(page.getByRole('heading', { name: /RYVL Club Tracker/ })).toBeVisible();
+        await expect(page.getByText('EA SPORTS FC 27 Pro Clubs', { exact: true })).toBeVisible();
+        await expect(page.getByText(/EA SPORTS FC 2[56]/i)).toHaveCount(0);
+        console.log('Verified live ' + (mobile ? 'mobile' : 'desktop') + ' Club Tracker navigation and FC 27 branding.');
+        // Preserve the admin regression check after using the new public link.
         if (mobile) {
           await page.getByRole('button', { name: 'Toggle navigation', exact: true }).click();
           await page.locator('#public-mobile-navigation').getByRole('link', { name: 'Admin', exact: true }).click();
