@@ -1,0 +1,3 @@
+# Python dependency used by src/ea/scripts/ea_bridge.py.
+# Installed into server/.venv by the Oracle deployment workflow.
+curl_cffi
