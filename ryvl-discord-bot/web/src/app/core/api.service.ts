@@ -16,7 +16,6 @@ import {
   LineupPostPayload,
 } from './models';
 
-const PRODUCTION_API_BASE_URL = 'https://ryvl-bot-api.onrender.com';
 const DEVELOPMENT_API_BASE_URL = 'http://localhost:3000';
 
 @Injectable({ providedIn: 'root' })
@@ -31,7 +30,9 @@ export class ApiService {
         return DEVELOPMENT_API_BASE_URL;
       }
     }
-    return PRODUCTION_API_BASE_URL;
+    // In production the Angular app and API are served from the same Oracle VM.
+    // Keeping requests same-origin avoids hard-coded hostnames and CORS issues.
+    return typeof window !== 'undefined' ? window.location.origin : '';
   })();
 
   getSessionToken(): string | null {
