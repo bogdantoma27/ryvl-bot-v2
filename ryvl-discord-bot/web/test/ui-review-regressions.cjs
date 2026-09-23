@@ -10,7 +10,7 @@ const root = fs.existsSync(path.join(browserDir, 'index.html')) ? browserDir : p
 const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.png': 'image/png', '.ico': 'image/x-icon', '.svg': 'image/svg+xml' };
 const server = http.createServer((req, res) => {
   const file = path.resolve(root, '.' + decodeURIComponent(new URL(req.url, 'http://localhost').pathname));
-  if (!file.startsWith(root + path.sep)) { res.writeHead(403); return res.end(); }
+  if (!file.startsWith(root + path.sep) && file !== root) { res.writeHead(403); return res.end(); }
   const target = fs.existsSync(file) && fs.statSync(file).isFile() ? file : path.join(root, 'index.html');
   res.setHeader('Content-Type', mime[path.extname(target)] || 'application/octet-stream');
   res.end(fs.readFileSync(target));
@@ -30,8 +30,13 @@ const server = http.createServer((req, res) => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
     const page = await context.newPage();
     await page.route('**/api/**', route => route.fulfill({ json: {} }));
-    await page.goto(origin + '/privacy');
-    await expect(page.getByRole('heading', { name: 'Privacy Policy', exact: true })).toBeVisible();
+    // A document load does not mean Angular's lazy route is rendered yet.
+    async function openPrivacy() {
+      await page.goto(origin + '/privacy');
+      await expect(page.getByRole('heading', { name: 'Privacy Policy', exact: true })).toBeVisible();
+      await expect(page.locator('footer')).toBeAttached();
+    }
+    await openPrivacy();
     for (const width of [1024, 1200, 1280, 1440, 1920]) {
       await check('desktop navigation without menu at ' + width, async () => {
         await page.setViewportSize({ width, height: 900 });
@@ -54,10 +59,15 @@ const server = http.createServer((req, res) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(toggle).toHaveAttribute('aria-expanded', 'false');
       await expect(page.locator('#public-mobile-navigation')).toHaveCount(0);
+      await toggle.click();
+      await page.locator('#public-mobile-navigation a').first().focus();
+      await page.keyboard.press('Escape');
+      await expect(toggle).toBeFocused();
+      await expect(page.locator('#public-mobile-navigation')).toHaveCount(0);
     });
     await check('global scrollbar gutter prevents width and centering shifts', async () => {
       await page.setViewportSize({ width: 1280, height: 900 });
-      await page.goto(origin + '/privacy');
+      await openPrivacy();
       const gutter = await page.evaluate(() => getComputedStyle(document.documentElement).scrollbarGutter);
       assert.match(gutter, /stable/, 'The root scroll container must reserve its gutter');
       const positions = await page.evaluate(async () => {
@@ -75,10 +85,10 @@ const server = http.createServer((req, res) => {
         return { short, long: snapshot() };
       });
       for (const key of ['x', 'width', 'headerX']) assert.ok(Math.abs(positions.short[key] - positions.long[key]) < 1, key + ' shifted');
-      await page.goto(origin + '/privacy');
+      await openPrivacy();
     });
     await check('RYVL favicon and legacy ICO are real image assets', async () => {
-      await page.goto(origin + '/privacy');
+      await openPrivacy();
       const icon = page.locator('link[rel="icon"][type="image/png"]').first();
       await expect(icon).toHaveAttribute('href', /ryvl-favicon-32\.png/);
       const dimensions = await page.evaluate(async () => {
@@ -97,12 +107,12 @@ const server = http.createServer((req, res) => {
         const link = page.locator('footer a').filter({ has: page.locator('img[src="/assets/brands/' + brand + '.svg"]') });
         await expect(link).toHaveCount(1);
         await expect(link.locator('img')).toHaveAttribute('alt', '');
-        assert.ok(await link.locator('img').evaluate(img => img.complete && img.naturalWidth > 0));
+        await expect.poll(() => link.locator('img').evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
         assert.match(await link.innerText(), new RegExp(brand, 'i'));
       }
     });
     await check('visitor privacy is plain language with truthful staff-only details', async () => {
-      await page.goto(origin + '/privacy');
+      await openPrivacy();
       const text = await page.locator('main').innerText();
       assert.doesNotMatch(text, /Oracle Cloud|PostgreSQL|ryvl_token/);
       await expect(page.getByText('Public browsing does not require an account.', { exact: true })).toBeVisible();
