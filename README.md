@@ -1,143 +1,89 @@
-# RYVL DS Bot
+# RYVL Discord Bot
 
-Stack-ul curent:
+A Discord event/attendance bot with web dashboard. Users can RSVP to events with Yes/Tentative/No buttons.
 
-- backend: FastAPI + Discord bot + scheduler in [ryvl-bot/service](ryvl-bot/service)
-- frontend: Angular admin panel in [ryvl-bot/webapp](ryvl-bot/webapp)
-- deploy: Render Blueprint in [ryvl-bot/render.yaml](ryvl-bot/render.yaml)
+## Features
+- Event creation via Discord slash commands and web dashboard
+- RSVP with Yes/Tentative/No buttons
+- Recurring events (daily, weekly, biweekly, monthly, custom)
+- Multi-server support
+- Real-time dashboard with SSE updates
+- Role-based event notifications
 
-## Ce face aplicatia
+## Tech Stack
+- **Backend**: NestJS (TypeScript) + discord.js
+- **Frontend**: Angular 22 (standalone components, signals, Tailwind v4)
+- **Database**: PostgreSQL + Prisma ORM
+- **Hosting**: Oracle Cloud Free Tier (recommended)
 
-- login admin prin Discord OAuth (doar membri cu permisiunea Discord "Administrator")
-- Events: create, vote, edit, reschedule, close, cancel, delete, drafturi, recurenta saptamanala
-- Lineup: wizard cu editor de teren pe `<canvas>` (pozitionare pixel-perfect identica cu randarea server-side), drag-and-drop, drafturi, postare imagine in Discord (fara text duplicat pentru titlu/formatie/kickoff, acestea fiind deja in imagine)
-- Account: profil, tema (light/dark/system); sign-out disponibil din meniul de profil al sidebar-ului
+## Prerequisites
+- Node.js 22+
+- PostgreSQL 17+
+- A Discord Application with Bot Token
 
-## Setup local
+## Quick Start
 
-### 4.1 Backend
+### 1. Clone and install
+```bash
+# Install server dependencies
+cd server && npm install
 
-```powershell
-cd ryvl-bot/service
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
-python start.py
+# Install web dependencies
+cd ../web && npm install
 ```
 
-Alternativ explicit (daca vrei sa fortezi alt host/port):
-
-```powershell
-set HOST=127.0.0.1
-set PORT=8000
-set RELOAD=true
-python start.py
+### 2. Configure environment
+```bash
+cp .env.example .env
+# Edit .env with your Discord bot token and database credentials
 ```
 
-Health endpoint:
+### 3. Set up database
+```bash
+# Start PostgreSQL (via Docker)
+docker compose up db -d
 
-```text
-http://127.0.0.1:8000/healthz
+# Run migrations
+cd server && npx prisma db push
 ```
 
-### 4.2 Frontend
+### 4. Start development
+```bash
+# Terminal 1: Start backend
+cd server && npm run start:dev
 
-```powershell
-cd ryvl-bot/webapp
-npm ci
-npm start
+# Terminal 2: Start frontend
+cd web && npm start
 ```
 
-Frontend local:
+### 5. Discord Bot Setup
+1. Go to https://discord.com/developers/applications
+2. Create a New Application
+3. Go to Bot tab, copy the Token → paste in .env as DISCORD_TOKEN
+4. Go to OAuth2 tab, copy Client ID and Client Secret → paste in .env
+5. Set redirect URI to your callback URL
+6. Invite the bot: `https://discord.com/api/oauth2/authorize?client_id=YOUR_CLIENT_ID&permissions=2147485696&scope=bot%20applications.commands`
 
-```text
-http://localhost:4200
+## Docker Deployment
+```bash
+docker compose up -d
 ```
 
-## Config backend
-
-Sursa campurilor: [ryvl-bot/service/app/config.py](ryvl-bot/service/app/config.py)
-
-Variabilele de productie (required + optional) sunt documentate canonical in sectiunea Deploy Render de mai jos.
-
-`DEFAULT_TIMEZONE` este doar valoarea implicita folosita la randare/afisare; nu exista o pagina de Settings separata — tema se configureaza din pagina Account.
-
-Intervalul scheduler-ului este hardcodat in backend si este ales conservator pentru a evita presiunea inutila pe baza de date din tier-ul free Render.
-
-Nu mai exista in backend: `APP_ENV`, `APP_NAME`, `ADMIN_ROLE_IDS`, `DEFAULT_ATTENDANCE_CHANNEL_ID`, `DEFAULT_LINEUP_CHANNEL_ID`, `SCHEDULER_INTERVAL_SECONDS` — toate au fost eliminate.
-
-## Baza de date
-
-Local:
-
-1. SQLite (implicit) este ok.
-
-Productie:
-
-1. Foloseste un Postgres extern (ex. Supabase) si seteaza `DATABASE_URL` pe backend.
-2. Nu folosi SQLite pentru persistenta in Render (containerul poate pierde datele la redeploy/restart).
-
-## Deploy Render
-
-Blueprint deja pregatit: [ryvl-bot/render.yaml](ryvl-bot/render.yaml)
-
-### Ce creeaza blueprint-ul
-
-1. Web Service backend: `ryvl-bot-api`.
-2. Static Site frontend: `ryvl-bot-web`.
-
-Blueprint-ul nu mai provizioneaza Render Postgres; `DATABASE_URL` trebuie setat manual catre un Postgres extern (ex. Supabase).
-
-### Cum il folosesti
-
-1. Push codul in GitHub.
-2. Render Dashboard -> New -> Blueprint.
-3. Selectezi repository-ul.
-4. Blueprint path:
-
-```text
-ryvl-bot/render.yaml
+## Project Structure
 ```
-
-5. Confirmi crearea serviciilor.
-
-### Checklist rapid (recomandat)
-
-1. Push pe branch-ul dorit in GitHub.
-2. Render -> New -> Blueprint -> selectezi repository-ul.
-3. Blueprint path: `ryvl-bot/render.yaml`.
-4. Dupa provisioning, setezi env vars obligatorii pe backend (inclusiv `DATABASE_URL` catre Postgres-ul extern).
-5. Adaugi redirect-ul OAuth in Discord Developer Portal.
-6. Dai deploy/redeploy si verifici:
-
-	- health backend: `/healthz`
-	- login OAuth din frontend
-	- pagina Events + Lineup + Account
-
-### Ce trebuie completat manual dupa creare
-
-Copy-paste rapid (key = example value):
-
-Backend (`ryvl-bot-api`) env vars:
-
-```env
-DATABASE_URL=postgresql+psycopg://USER:PASSWORD@HOST:5432/DBNAME
-
-ADMIN_APP_URL=https://YOUR_FRONTEND.onrender.com
-PUBLIC_API_BASE_URL=https://YOUR_BACKEND.onrender.com
-
-DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
-DISCORD_CLIENT_ID=YOUR_DISCORD_APP_CLIENT_ID
-DISCORD_CLIENT_SECRET=YOUR_DISCORD_APP_CLIENT_SECRET
-DISCORD_OAUTH_REDIRECT_URI=https://YOUR_BACKEND.onrender.com/api/auth/discord/callback
-DISCORD_GUILD_ID=123456789012345678
-
-SESSION_SECRET=GENERATED_BY_RENDER_OR_SET_MANUALLY
-```
-
-Frontend (`ryvl-bot-web`): nu necesita env vars — URL-ul backend-ului este o constanta stabilita la build (`PRODUCTION_API_BASE_URL` in [ryvl-bot/webapp/src/app/core/api.service.ts](ryvl-bot/webapp/src/app/core/api.service.ts)). Daca schimbi URL-ul backend-ului de productie, actualizezi constanta si redeploy frontend.
-
-Discord OAuth Redirect (in Discord Developer Portal) trebuie sa fie exact:
-
-```text
-https://YOUR_BACKEND.onrender.com/api/auth/discord/callback
+├── server/          # NestJS backend + Discord bot
+│   ├── src/
+│   │   ├── auth/    # Discord OAuth2 + JWT
+│   │   ├── discord/ # Bot commands & interactions
+│   │   ├── events/  # Event CRUD + recurrence
+│   │   ├── guilds/  # Multi-server management
+│   │   └── scheduler/ # Auto-publish & close
+│   └── prisma/      # Database schema
+├── web/             # Angular 22 frontend
+│   └── src/app/
+│       ├── core/    # Services & guards
+│       └── features/ # Page components
+├── nginx/           # Reverse proxy config
+├── docker-compose.yml
+└── Dockerfile
 ```
