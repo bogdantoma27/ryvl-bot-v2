@@ -24,7 +24,6 @@ import {
   RosterPlayer,
 } from './models';
 
-const DEFAULT_PRODUCTION_API_BASE_URL = 'https://ryvl-bot-api.onrender.com';
 const DEVELOPMENT_API_BASE_URL = 'http://localhost:3000';
 
 @Injectable({ providedIn: 'root' })
@@ -45,15 +44,6 @@ export class ApiService {
 
       if (hostname === 'localhost' || hostname === '127.0.0.1') {
         return port === '4200' ? DEVELOPMENT_API_BASE_URL : '';
-      }
-
-      // If hosted on separate static hosting like Render static site, Vercel, Netlify
-      if (
-        hostname.endsWith('.onrender.com') ||
-        hostname.endsWith('.vercel.app') ||
-        hostname.endsWith('.netlify.app')
-      ) {
-        return DEFAULT_PRODUCTION_API_BASE_URL;
       }
 
       // In production on Oracle VM (served via Caddy/Nginx reverse proxy),
