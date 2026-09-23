@@ -53,7 +53,7 @@ import { VpgMatchItem } from '../../core/models';
           <!-- Subtitle / Motto -->
           <p class="text-base sm:text-lg text-slate-400 font-medium max-w-2xl mx-auto leading-relaxed">
             <span class="text-white font-bold tracking-wide">DRIVEN. RELENTLESS. UNCOMPROMISING.</span><br />
-            EA SPORTS FC 11v11 Pro Clubs, competitive teamwork and a community that keeps improving.
+            EA SPORTS FC 27 11v11 Pro Clubs, competitive teamwork and a community that keeps improving.
           </p>
 
           <!-- Action Buttons -->

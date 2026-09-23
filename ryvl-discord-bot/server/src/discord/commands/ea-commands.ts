@@ -71,7 +71,7 @@ export class EaCommands {
     });
 
     const embed = new EmbedBuilder()
-      .setTitle('⚙️ EA Sports Pro Clubs Tracker Configured')
+      .setTitle('⚙️ EA SPORTS FC 27 Pro Clubs Tracker Configured')
       .setColor(0x57f287)
       .setDescription(
         `Automated match stats notifications have been enabled for **<#${channel.id}>**!`,
@@ -174,7 +174,7 @@ export class EaCommands {
             inline: true,
           },
         )
-        .setFooter({ text: 'Data provided by EA Sports Pro Clubs API' });
+        .setFooter({ text: 'Data provided by EA SPORTS FC 27 Pro Clubs API' });
 
       if (crestUrl) {
         embed.setThumbnail(crestUrl);

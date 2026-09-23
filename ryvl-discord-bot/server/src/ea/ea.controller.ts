@@ -8,6 +8,7 @@ import {
   Query,
   UseGuards,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { EaService } from './ea.service';
@@ -105,6 +106,7 @@ export class EaController {
         : ['leagueMatch', 'friendlyMatch', 'playoffMatch'];
 
     const rawMatchesMap = new Map<string, any>();
+    let successfulRequests = 0;
     for (const mType of matchTypes) {
       try {
         const matches = await this.eaService.fetchMatchesRaw(
@@ -113,6 +115,8 @@ export class EaController {
           limit,
           config.platform || 'common-gen5',
         );
+        if (!Array.isArray(matches)) throw new Error('Invalid upstream match response');
+        successfulRequests++;
         if (Array.isArray(matches)) {
           for (const m of matches) {
             if (m && m.matchId) {
@@ -123,6 +127,10 @@ export class EaController {
       } catch (err: any) {
         this.logger.warn(`Failed to fetch ${mType}: ${err.message}`);
       }
+    }
+
+    if (successfulRequests === 0) {
+      throw new ServiceUnavailableException('Match data is temporarily unavailable. Please try again.');
     }
 
     const allMatches = Array.from(rawMatchesMap.values())

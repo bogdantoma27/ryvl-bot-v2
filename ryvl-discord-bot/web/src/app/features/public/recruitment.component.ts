@@ -86,7 +86,7 @@ import { ApiService } from '../../core/api.service';
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <!-- Gamertag / EA ID -->
                 <div>
-                  <label class="block text-xs font-semibold text-slate-300 mb-1.5">EA Sports FC ID / PSN *</label>
+                  <label class="block text-xs font-semibold text-slate-300 mb-1.5">EA SPORTS FC 27 ID / PSN *</label>
                   <input
                     type="text"
                     required
