@@ -1,3 +1,4 @@
+import { PublicPageHeaderComponent } from './public-page-header.component';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { ApiService } from '../../core/api.service';
 import { RyvlPerformanceResponse } from '../../core/models';
@@ -6,17 +7,12 @@ import { StandingsPanelComponent } from './standings-panel.component';
 type PerformanceTab = 'overview' | 'results' | 'fixtures' | 'standings';
 @Component({
   selector: 'app-public-performance', standalone: true, changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MatchesPanelComponent, StandingsPanelComponent],
+  imports: [MatchesPanelComponent, StandingsPanelComponent, PublicPageHeaderComponent],
   template: `
     <div class="public-page space-y-8">
-      <header class="flex flex-col lg:flex-row lg:items-end justify-between gap-5 border-b border-white/10 pb-6">
-        <div>
-          <p class="public-eyebrow">RYVL Esports</p>
-          <h1 class="public-title">Team performance</h1>
-          <p class="public-intro">Results, fixtures and league progress from our VPG competitions.</p>
-        </div>
-        <button type="button" class="public-button" (click)="loadPerformance()" [disabled]="isLoading()">{{ isLoading() ? 'Refreshing…' : 'Refresh' }}</button>
-      </header>
+      <app-public-page-header heading="Team performance" eyebrow="RYVL Esports" description="Results, fixtures and league progress from our VPG competitions.">
+        <button header-actions type="button" class="public-button" (click)="loadPerformance()" [disabled]="isLoading()">{{ isLoading() ? 'Refreshing…' : 'Refresh' }}</button>
+      </app-public-page-header>
       <div class="flex flex-wrap gap-2" aria-label="Select a competition">
         @for (comp of competitions(); track comp.slug) {
           <button type="button" class="public-button" [class.public-button-active]="selectedCompSlug() === comp.slug" [attr.aria-pressed]="selectedCompSlug() === comp.slug" [disabled]="!comp.active" (click)="selectCompetition(comp.slug)">

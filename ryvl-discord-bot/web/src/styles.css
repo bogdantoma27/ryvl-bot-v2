@@ -91,7 +91,7 @@ button.btn-yellow:hover * {
 .public-site .text-xs { font-size: .8125rem; }
 .public-site :is(a, button, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid #EAE905; outline-offset: 4px; }
 .public-site button:disabled { cursor: not-allowed; opacity: .55; }
-.public-page { width: 100%; max-width: 80rem; margin: 0 auto; padding: 2.5rem 1rem; }
+.public-page { width: 100%; min-width: 0; max-width: 80rem; margin: 0 auto; padding: 2.5rem 1rem; }
 .public-title { font-size: clamp(1.85rem, 4vw, 2.75rem); color: #fff; font-weight: 700; letter-spacing: -.035em; line-height: 1.2; }
 .public-eyebrow { color: #EAE905; font-size: .75rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; margin-bottom: .65rem; }
 .public-intro { color: #94a3b8; margin-top: .8rem; font-size: .9375rem; max-width: 42rem; }
