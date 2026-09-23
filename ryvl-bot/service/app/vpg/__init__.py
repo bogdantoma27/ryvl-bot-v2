@@ -1,1 +1,0 @@
-"""VPG API integration and rendering helpers."""
