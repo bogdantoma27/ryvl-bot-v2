@@ -89,7 +89,12 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
 
   async onModuleInit(): Promise<void> {
     this.setupEventHandlers();
-    await this.registerSlashCommands();
+
+    // Keep slash commands guild-scoped so Discord does not display duplicate
+    // global + guild commands. Clearing global commands is idempotent and also
+    // removes any stale global registrations left by older deployments.
+    await this.clearGlobalSlashCommands();
+
     await this.connectClient();
   }
 
@@ -230,18 +235,22 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async registerSlashCommands(): Promise<void> {
+  private async clearGlobalSlashCommands(): Promise<void> {
     try {
-      this.logger.log('Registering global slash commands with Discord REST API...');
-      const rest = new REST({ version: '10' }).setToken(this.configService.discordToken);
-      const commands = getSlashCommands();
+      this.logger.log('Clearing global slash commands to avoid duplicate guild commands...');
+
+      const rest = new REST({ version: '10' }).setToken(
+        this.configService.discordToken,
+      );
+
       await rest.put(
         Routes.applicationCommands(this.configService.discordClientId),
-        { body: commands },
+        { body: [] },
       );
-      this.logger.log('Successfully registered global slash commands.');
+
+      this.logger.log('Global slash commands cleared successfully.');
     } catch (error) {
-      this.logger.warn(`Failed to register global slash commands: ${error}`);
+      this.logger.warn(`Failed to clear global slash commands: ${error}`);
     }
   }
 
