@@ -1,0 +1,26 @@
+name: Check public headers and concise copy
+on:
+  push:
+    branches: [fix/public-headers-copy]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+          check-latest: true
+      - name: Build unchanged production frontend
+        working-directory: ryvl-discord-bot/web
+        run: npm ci && npm run build
+      - name: Reproduce header and copy inconsistencies
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ryvl-browser" --no-save @playwright/test@1.56.1
+          export PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules"
+          node ryvl-discord-bot/web/test/public-header-regressions.cjs
