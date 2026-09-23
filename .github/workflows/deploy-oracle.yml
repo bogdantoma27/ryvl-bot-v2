@@ -66,6 +66,20 @@ jobs:
 
             echo "Building backend..."
             cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
+
+            echo "Ensuring EA Python bridge runtime is available..."
+            if ! command -v python3 >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y python3
+            fi
+            if [ ! -x .venv/bin/python ]; then
+              sudo apt-get update
+              sudo apt-get install -y python3-venv
+              python3 -m venv .venv
+            fi
+            .venv/bin/python -m pip install --upgrade pip
+            .venv/bin/pip install -r requirements-ea.txt
+
             npm ci
             npx prisma generate
             npm run build
