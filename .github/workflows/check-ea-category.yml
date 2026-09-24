@@ -1,0 +1,58 @@
+name: Check EA match category labels
+on:
+  push:
+    branches: [fix/ea-match-categories]
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Build unchanged backend and reproduce incorrect labels
+        working-directory: ryvl-discord-bot/server
+        run: |
+          npm ci
+          npx prisma generate
+          npm run build
+          node --test test/ea-match-category.test.cjs
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Read only EA category fields; do not post messages or alter records
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            set -e
+            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
+            node - <<'NODE'
+            require('reflect-metadata');
+            require('./dist/config/config.module').ConfigModule.forRoot();
+            const { PrismaClient } = require('@prisma/client');
+            const { EaService } = require('./dist/ea/ea.service');
+            const db = new PrismaClient();
+            (async () => {
+              const config = await db.clubTrackerConfig.findFirst({ where: { enabled: true }, select: { clubId: true, platform: true, matchTypes: true } });
+              if (!config) { console.log('No active tracker configuration.'); return; }
+              const ea = new EaService(db);
+              const seen = new Map();
+              for (const category of ['leagueMatch', 'friendlyMatch', 'playoffMatch'].filter(type => config.matchTypes.includes(type))) {
+                try {
+                  const matches = await ea.fetchMatchesRaw(config.clubId, category, 3, config.platform);
+                  console.log(JSON.stringify({ requestedCategory: category, count: matches.length, topLevelTypes: [...new Set(matches.map(m => m.matchType ?? null))], clubTypes: [...new Set(matches.map(m => m.clubs?.[config.clubId]?.matchType ?? null))] }));
+                  for (const match of matches) { const types = seen.get(match.matchId) || []; types.push(category); seen.set(match.matchId, types); }
+                } catch { console.log('Category request unavailable: ' + category); }
+              }
+              console.log('Match IDs seen in multiple categories:', [...seen.values()].filter(v => v.length > 1).length);
+            })().catch(() => { console.error('Read-only EA diagnostic unavailable.'); process.exitCode = 1; }).finally(() => db.$disconnect());
+            NODE
