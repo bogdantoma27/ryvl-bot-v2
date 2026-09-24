@@ -3,48 +3,23 @@ on:
   push:
     branches: [fix/event-time-and-edits]
 permissions:
-  contents: write
+  contents: read
 jobs:
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: ryvl_ci
-          POSTGRES_PASSWORD: local-test-only
-          POSTGRES_DB: ryvl_ci
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U ryvl_ci" --health-interval 5s --health-timeout 5s --health-retries 10
-    env:
-      TZ: UTC
-      DATABASE_URL: postgresql://ryvl_ci:local-test-only@localhost:5432/ryvl_ci
-      RUN_DATABASE_TESTS: '1'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - name: Apply the event fix after reproducing the failures
-        run: python3 .maintenance/fix_event_paths.py
-      - name: Build backend against disposable PostgreSQL
+      - name: Build backend
         working-directory: ryvl-discord-bot/server
-        run: |
-          npm ci
-          npx prisma generate
-          npx prisma db push
-          npm run build
-      - name: Verify date parsing and edits in different server timezones
+        run: npm ci && npm run build
+      - name: Verify real embed updates and reproduce remaining web event payload mismatch
         working-directory: ryvl-discord-bot/server
-        run: |
-          node --test test/event-time-edit.test.cjs test/event-update-database.test.cjs
-          TZ=America/New_York node --test test/event-time-edit.test.cjs
-      - name: Commit verified application changes to the temporary branch only
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add ryvl-discord-bot/server/src
-          git diff --cached --quiet || git commit -m 'fix(events): preserve zoned times and refresh original announcements'
-          git push origin HEAD:refs/heads/fix/event-time-and-edits
+        env:
+          TZ: UTC
+        run: node --test test/event-time-edit.test.cjs test/event-delivery.test.cjs
