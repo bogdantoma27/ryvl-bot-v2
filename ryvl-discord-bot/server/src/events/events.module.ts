@@ -1,3 +1,4 @@
+import { EventMessageService } from './event-message.service';
 import { Module } from '@nestjs/common';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
@@ -10,7 +11,7 @@ import { AuthModule } from '../auth/auth.module';
 @Module({
   imports: [PrismaModule, AuthModule],
   controllers: [EventsController, EventsGateway],
-  providers: [EventsService, RecurrenceService, RsvpService, EventsGateway],
+  providers: [EventMessageService, EventsService, RecurrenceService, RsvpService, EventsGateway],
   exports: [EventsService, RecurrenceService, RsvpService, EventsGateway],
 })
 export class EventsModule {}

@@ -49,6 +49,15 @@ jobs:
             git checkout main
             git reset --hard "$RELEASE_SHA"
             bash ryvl-discord-bot/deploy/oracle.sh
+            # Test only pure date conversion in the actual VM runtime: no DB or Discord writes.
+            node - <<'NODE'
+            const assert = require('node:assert/strict');
+            const { parseEventDateTime, formatEventDateTime } = require('./ryvl-discord-bot/server/dist/events/event-time');
+            const value = parseEventDateTime('2026-09-24', '19:00', 'Europe/Bucharest');
+            assert.equal(value.toISOString(), '2026-09-24T16:00:00.000Z');
+            assert.equal(formatEventDateTime(value, 'Europe/Bucharest').time, '19:00');
+            console.log('Verified deployed event timezone conversion; no event data changed.');
+            NODE
       - name: Verify public DNS, TLS, application and OAuth configuration
         env:
           EXPECTED_REVISION: ${{ github.sha }}
@@ -68,14 +77,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Remove only fix/public-headers-copy when fully merged
+      - name: Remove only fix/event-time-and-edits when fully merged
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           MAIN_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          REF='heads/fix/public-headers-copy'
+          REF='heads/fix/event-time-and-edits'
           # Preserve every other branch and this branch if it advances after review.
           if ! BRANCH_SHA="$(gh api "repos/$GH_REPO/git/ref/$REF" --jq '.object.sha' 2>/dev/null)"; then
             echo 'Temporary branch could not be read or is already absent; leaving branches unchanged.'
