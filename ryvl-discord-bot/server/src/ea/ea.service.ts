@@ -1,3 +1,4 @@
+import { withEaMatchType, resolveEaMatchType, formatEaMatchType } from './ea-match-type';
 import { Injectable, Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { join } from 'path';
@@ -91,7 +92,11 @@ export class EaService {
     count = 10,
     platform = 'common-gen5',
   ): Promise<EaRawMatch[]> {
-    return this.runBridge('matches', [platform, String(clubId), matchType, String(count)]);
+    const matches = await this.runBridge('matches', [platform, String(clubId), matchType, String(count)]);
+    if (!Array.isArray(matches)) throw new Error('Invalid upstream match response');
+    // The numeric per-club type is not the textual category used by the embed.
+    return matches.filter((raw): raw is EaRawMatch => raw !== null && typeof raw === 'object')
+      .map(raw => withEaMatchType(raw, matchType));
   }
 
   async fetchClubInfo(clubId: string, platform = 'common-gen5'): Promise<any> {
@@ -285,7 +290,8 @@ export class EaService {
     return {
       matchId: String(raw.matchId),
       timestamp: new Date((raw.timestamp || Date.now() / 1000) * 1000),
-      matchType: trackedClubData?.matchType ? String(trackedClubData.matchType) : 'League',
+      matchType: resolveEaMatchType(raw),
+      matchTypeLabel: formatEaMatchType(resolveEaMatchType(raw)),
       trackedClubId,
       isHome,
       outcome,

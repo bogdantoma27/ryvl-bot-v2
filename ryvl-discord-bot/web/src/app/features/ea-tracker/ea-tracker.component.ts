@@ -238,7 +238,7 @@ import { GuildStore } from '../../core/guild.store';
                       {{ match.outcome === 'WIN' ? '🏆 VICTORY' : match.outcome === 'LOSS' ? '💔 DEFEAT' : '🤝 DRAW' }}
                     </span>
 
-                    <span class="text-slate-400 font-semibold">{{ match.matchType || 'League Match' }}</span>
+                    <span class="text-slate-400 font-semibold">{{ match.matchTypeLabel || 'Pro Clubs Match' }}</span>
                     <span class="text-slate-600">•</span>
                     <span class="text-slate-400">{{ formatTimestamp(match.timestamp) }}</span>
                   </div>

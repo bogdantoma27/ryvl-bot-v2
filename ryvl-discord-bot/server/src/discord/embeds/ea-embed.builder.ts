@@ -5,12 +5,11 @@ import {
   ButtonStyle,
 } from 'discord.js';
 import { ParsedEaMatch, ParsedEaPlayer } from '../../ea/ea.types';
+import { formatEaMatchType } from '../../ea/ea-match-type';
 
-export function formatMatchType(matchType: string): string {
-  const normalized = (matchType || '').toLowerCase();
-  if (normalized.includes('friendly')) return 'Friendly Match';
-  if (normalized.includes('playoff')) return 'Playoff Match';
-  return 'League Match';
+// Retain the existing export for callers while using one category formatter.
+export function formatMatchType(matchType: unknown): string {
+  return formatEaMatchType(matchType);
 }
 
 export function buildEaMatchEmbed(

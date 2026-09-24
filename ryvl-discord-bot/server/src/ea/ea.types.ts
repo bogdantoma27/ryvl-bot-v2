@@ -79,6 +79,11 @@ export interface EaMatchAggregate {
 }
 
 export interface EaRawMatch {
+  /** EA may supply a named or numeric type; never overwrite its original value. */
+  matchType?: string | number | null;
+  /** Application provenance retained when feed results are deduplicated/stored. */
+  sourceMatchTypes?: string[];
+  responseMatchTypes?: string[];
   matchId: string;
   timestamp: number;
   timeAgo?: {
@@ -111,6 +116,7 @@ export interface ParsedEaMatch {
   matchId: string;
   timestamp: Date;
   matchType: string;
+  matchTypeLabel: string;
   trackedClubId: string;
   isHome: boolean;
   outcome: 'WIN' | 'LOSS' | 'DRAW';

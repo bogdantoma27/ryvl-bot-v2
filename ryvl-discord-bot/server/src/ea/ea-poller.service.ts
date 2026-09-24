@@ -1,3 +1,4 @@
+import { mergeEaMatch } from './ea-match-type';
 import { buildClubWebUrl } from '../config/public-url';
 import {
   Injectable,
@@ -111,7 +112,7 @@ export class EaPollerService implements OnModuleInit, OnModuleDestroy {
         if (Array.isArray(matches)) {
           for (const m of matches) {
             if (m && m.matchId) {
-              rawMatchesMap.set(String(m.matchId), m);
+              rawMatchesMap.set(String(m.matchId), mergeEaMatch(rawMatchesMap.get(String(m.matchId)), m));
             }
           }
         }
@@ -282,7 +283,7 @@ export class EaPollerService implements OnModuleInit, OnModuleDestroy {
         if (Array.isArray(matches)) {
           for (const m of matches) {
             if (m && m.matchId) {
-              rawMatchesMap.set(String(m.matchId), m);
+              rawMatchesMap.set(String(m.matchId), mergeEaMatch(rawMatchesMap.get(String(m.matchId)), m));
             }
           }
         }
