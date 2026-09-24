@@ -5,9 +5,11 @@ on:
 permissions:
   contents: read
 jobs:
-  reproduce:
+  check:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -15,38 +17,37 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
-      - name: Build unchanged backend and reproduce mislabelled embeds
+          check-latest: true
+      - name: Apply the bounded category correction
+        run: python3 .maintenance/fix_ea_match_type.py
+      - name: Verify real parser, polling and embed behavior
         working-directory: ryvl-discord-bot/server
         run: |
           npm ci
           npm run build
           node --test test/ea-match-type.test.cjs
-  inspect-ea-categories:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Inspect recent match-type fields only; no database or Discord writes
-        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
-        with:
-          host: ${{ secrets.ORACLE_HOST }}
-          username: ${{ secrets.ORACLE_USER }}
-          key: ${{ secrets.ORACLE_SSH_KEY }}
-          script: |
-            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
-            node - <<'NODE'
-            require('./dist/config/config.module').ConfigModule.forRoot();
-            const { PrismaClient } = require('@prisma/client');
-            const { EaService } = require('./dist/ea/ea.service');
-            const db = new PrismaClient();
-            (async () => {
-              const config = await db.clubTrackerConfig.findFirst({ where: { enabled: true }, select: { clubId: true, platform: true } });
-              if (!config) { console.log('No enabled tracker; no live requests made.'); return; }
-              const ea = new EaService(db);
-              for (const requested of ['leagueMatch', 'friendlyMatch', 'playoffMatch', 'practiceMatch']) {
-                try {
-                  const matches = await ea.fetchMatchesRaw(config.clubId, requested, 2, config.platform || 'common-gen5');
-                  console.log(JSON.stringify({ requested, count: matches.length, samples: matches.map(m => ({ matchId: m.matchId, topLevelType: m.matchType ?? null, clubType: m.clubs?.[config.clubId]?.matchType ?? null })) }));
-                } catch { console.log(JSON.stringify({ requested, unavailable: true })); }
-              }
-            })().catch(error => { console.error(error.message); process.exitCode = 1; }).finally(() => db.$disconnect());
-            NODE
+      - name: Verify frontend compilation and existing browser checks
+        working-directory: ryvl-discord-bot/web
+        run: |
+          npm ci
+          npm run build
+          npm install --prefix "$RUNNER_TEMP/ryvl-browser" --no-save @playwright/test@1.56.1
+          export PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules"
+          node test/public-content-regressions.cjs
+          node test/admin-access.cjs
+      - name: Commit tested application changes to this temporary branch only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CHECKED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_NAME" = 'fix/ea-match-type-labels'
+          test "$(gh api "repos/$GH_REPO/git/ref/heads/fix/ea-match-type-labels" --jq '.object.sha')" = "$CHECKED_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add ryvl-discord-bot/server/src/ea/ea.types.ts ryvl-discord-bot/server/src/ea/ea.service.ts ryvl-discord-bot/server/src/ea/ea-poller.service.ts ryvl-discord-bot/server/src/ea/ea.controller.ts ryvl-discord-bot/server/src/discord/embeds/ea-embed.builder.ts ryvl-discord-bot/web/src/app/features/public/club.component.ts ryvl-discord-bot/web/src/app/features/ea-tracker/ea-tracker.component.ts
+          git diff --cached --check
+          git commit -m 'fix(ea): preserve match categories from API request through Discord and web'
+          gh auth setup-git
+          git push origin HEAD:refs/heads/fix/ea-match-type-labels
