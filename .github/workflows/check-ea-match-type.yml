@@ -1,0 +1,52 @@
+name: Check EA match category labels
+on:
+  push:
+    branches: [fix/ea-match-type-labels]
+permissions:
+  contents: read
+jobs:
+  reproduce:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Build unchanged backend and reproduce mislabelled embeds
+        working-directory: ryvl-discord-bot/server
+        run: |
+          npm ci
+          npm run build
+          node --test test/ea-match-type.test.cjs
+  inspect-ea-categories:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Inspect recent match-type fields only; no database or Discord writes
+        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
+            node - <<'NODE'
+            require('./dist/config/config.module').ConfigModule.forRoot();
+            const { PrismaClient } = require('@prisma/client');
+            const { EaService } = require('./dist/ea/ea.service');
+            const db = new PrismaClient();
+            (async () => {
+              const config = await db.clubTrackerConfig.findFirst({ where: { enabled: true }, select: { clubId: true, platform: true } });
+              if (!config) { console.log('No enabled tracker; no live requests made.'); return; }
+              const ea = new EaService(db);
+              for (const requested of ['leagueMatch', 'friendlyMatch', 'playoffMatch', 'practiceMatch']) {
+                try {
+                  const matches = await ea.fetchMatchesRaw(config.clubId, requested, 2, config.platform || 'common-gen5');
+                  console.log(JSON.stringify({ requested, count: matches.length, samples: matches.map(m => ({ matchId: m.matchId, topLevelType: m.matchType ?? null, clubType: m.clubs?.[config.clubId]?.matchType ?? null })) }));
+                } catch { console.log(JSON.stringify({ requested, unavailable: true })); }
+              }
+            })().catch(error => { console.error(error.message); process.exitCode = 1; }).finally(() => db.$disconnect());
+            NODE
