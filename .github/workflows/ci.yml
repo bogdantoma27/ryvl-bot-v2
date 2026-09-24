@@ -102,3 +102,4 @@ jobs:
           node ryvl-discord-bot/web/test/admin-access.cjs
           node ryvl-discord-bot/web/test/public-content-regressions.cjs
           node ryvl-discord-bot/web/test/public-header-regressions.cjs
+          node ryvl-discord-bot/web/test/ea-category-regressions.cjs

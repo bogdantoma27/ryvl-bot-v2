@@ -58,6 +58,18 @@ jobs:
             assert.equal(formatEventDateTime(value, 'Europe/Bucharest').time, '19:00');
             console.log('Verified deployed event timezone conversion; no event data changed.');
             NODE
+            # Construct an embed in memory; do not send a test match or alter history.
+            node - <<'NODE'
+            const assert = require('node:assert/strict');
+            const { EaService } = require('./ryvl-discord-bot/server/dist/ea/ea.service');
+            const { buildEaMatchEmbed } = require('./ryvl-discord-bot/server/dist/discord/embeds/ea-embed.builder');
+            const raw = { matchId: 'deployment-fixture', timestamp: 1790265600, sourceMatchTypes: ['friendlyMatch'], clubs: { home: { matchType: '5', goals: '2', details: { name: 'Fixture Home' } }, away: { matchType: '5', goals: '1', details: { name: 'Fixture Away' } } }, players: {}, aggregate: {} };
+            const parsed = new EaService({}).parseMatch(raw, 'home');
+            assert.equal(parsed.matchType, 'friendlyMatch');
+            assert.equal(parsed.matchTypeLabel, 'Friendly Match');
+            assert.match(buildEaMatchEmbed(parsed, 'https://ryvl.top/club').embed.toJSON().description, /\*\*Friendly Match\*\*/);
+            console.log('Verified deployed EA friendly embed classification; no Discord or database requests.');
+            NODE
       - name: Verify public DNS, TLS, application and OAuth configuration
         env:
           EXPECTED_REVISION: ${{ github.sha }}
@@ -77,14 +89,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Remove only fix/event-time-and-edits when fully merged
+      - name: Remove only fix/ea-match-categories when fully merged
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           MAIN_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          REF='heads/fix/event-time-and-edits'
+          REF='heads/fix/ea-match-categories'
           # Preserve every other branch and this branch if it advances after review.
           if ! BRANCH_SHA="$(gh api "repos/$GH_REPO/git/ref/$REF" --jq '.object.sha' 2>/dev/null)"; then
             echo 'Temporary branch could not be read or is already absent; leaving branches unchanged.'

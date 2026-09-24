@@ -31,7 +31,7 @@ export interface EaClubMatchData {
   goals: string | number;
   goalsAgainst: string | number;
   losses: string | number;
-  matchType: string;
+  matchType?: string | number | null;
   result: string;
   score: string | number;
   TEAM: string;
@@ -79,6 +79,9 @@ export interface EaMatchAggregate {
 }
 
 export interface EaRawMatch {
+  // Fetch provenance is preserved in stored rawPayload for later re-parsing.
+  sourceMatchTypes?: string[];
+  matchType?: string | number | null;
   matchId: string;
   timestamp: number;
   timeAgo?: {
@@ -111,6 +114,7 @@ export interface ParsedEaMatch {
   matchId: string;
   timestamp: Date;
   matchType: string;
+  matchTypeLabel?: string;
   trackedClubId: string;
   isHome: boolean;
   outcome: 'WIN' | 'LOSS' | 'DRAW';

@@ -1,3 +1,4 @@
+import { formatEaMatchType } from '../../ea/ea-match-type';
 import {
   EmbedBuilder,
   ActionRowBuilder,
@@ -6,11 +7,8 @@ import {
 } from 'discord.js';
 import { ParsedEaMatch, ParsedEaPlayer } from '../../ea/ea.types';
 
-export function formatMatchType(matchType: string): string {
-  const normalized = (matchType || '').toLowerCase();
-  if (normalized.includes('friendly')) return 'Friendly Match';
-  if (normalized.includes('playoff')) return 'Playoff Match';
-  return 'League Match';
+export function formatMatchType(matchType: unknown): string {
+  return formatEaMatchType(matchType);
 }
 
 export function buildEaMatchEmbed(
