@@ -54,9 +54,11 @@ export function mergeEaRawMatch(matches: Map<string, EaRawMatch>, incoming: EaRa
   const previous = matches.get(id);
   const previousSources = Array.isArray(previous?.sourceMatchTypes) ? previous.sourceMatchTypes : [];
   const incomingSources = Array.isArray(incoming.sourceMatchTypes) ? incoming.sourceMatchTypes : [];
+  const sourceMatchTypes = [...new Set([...previousSources, ...incomingSources])];
   matches.set(id, {
     ...previous,
     ...incoming,
-    sourceMatchTypes: [...new Set([...previousSources, ...incomingSources])],
+    // Do not add empty metadata to older untagged payloads or callers.
+    ...(sourceMatchTypes.length ? { sourceMatchTypes } : {}),
   });
 }

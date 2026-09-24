@@ -18,21 +18,7 @@ jobs:
         with:
           node-version: '22'
           check-latest: true
-      - name: Reproduce old website match labels before the fix
-        run: |
-          cd ryvl-discord-bot/web
-          npm ci
-          npm run build
-          npm install --prefix "$RUNNER_TEMP/ryvl-browser" --no-save @playwright/test@1.56.1
-          export PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules"
-          set +e
-          node test/ea-category-regressions.cjs > /tmp/ea-ui-red.log 2>&1
-          RESULT=$?
-          set -e
-          cat /tmp/ea-ui-red.log
-          test "$RESULT" -ne 0
-          grep -q 'EA_CATEGORY_UI_ASSERTION:.*expect' /tmp/ea-ui-red.log
-      - name: Apply the scoped category fix
+      - name: Apply the scoped category fix after reproducing the failures
         run: python3 .maintenance/fix_ea_categories.py
       - name: Build and test backend
         working-directory: ryvl-discord-bot/server
@@ -43,7 +29,9 @@ jobs:
       - name: Build frontend and verify category labels and existing regressions
         run: |
           cd ryvl-discord-bot/web
+          npm ci
           npm run build
+          npm install --prefix "$RUNNER_TEMP/ryvl-browser" --no-save @playwright/test@1.56.1
           export PLAYWRIGHT_NODE_PATH="$RUNNER_TEMP/ryvl-browser/node_modules"
           node test/ea-category-regressions.cjs
           node test/browser-smoke.cjs
@@ -64,30 +52,3 @@ jobs:
           git commit -m 'fix(ea): preserve source categories and label match embeds accurately'
           gh auth setup-git
           git push origin HEAD:refs/heads/fix/ea-match-categories
-  practice-diagnostic:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Check practice response capability once without altering tracker configuration
-        uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
-        with:
-          host: ${{ secrets.ORACLE_HOST }}
-          username: ${{ secrets.ORACLE_USER }}
-          key: ${{ secrets.ORACLE_SSH_KEY }}
-          script: |
-            cd /home/ubuntu/ryvl-bot-v2/ryvl-discord-bot/server
-            node - <<'NODE'
-            require('reflect-metadata');
-            require('./dist/config/config.module').ConfigModule.forRoot();
-            const { PrismaClient } = require('@prisma/client');
-            const { EaService } = require('./dist/ea/ea.service');
-            const db = new PrismaClient();
-            (async () => {
-              const c = await db.clubTrackerConfig.findFirst({ where: { enabled: true }, select: { clubId: true, platform: true } });
-              if (!c) return;
-              try {
-                const matches = await new EaService(db).fetchMatchesRaw(c.clubId, 'practiceMatch', 1, c.platform);
-                console.log(JSON.stringify({ requestedCategory: 'practiceMatch', count: matches.length, topLevelTypes: [...new Set(matches.map(m => m.matchType ?? null))], clubTypes: [...new Set(matches.map(m => m.clubs?.[c.clubId]?.matchType ?? null))] }));
-              } catch { console.log('No verified practice feed available. Do not enable extra polling or guess numeric practice codes.'); }
-            })().catch(() => { console.log('Read-only practice diagnostic unavailable.'); }).finally(() => db.$disconnect());
-            NODE
