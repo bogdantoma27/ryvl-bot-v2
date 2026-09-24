@@ -1,3 +1,4 @@
+import { resolveEaMatchType, formatEaMatchType } from './ea-match-type';
 import { Injectable, Logger } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { join } from 'path';
@@ -91,7 +92,12 @@ export class EaService {
     count = 10,
     platform = 'common-gen5',
   ): Promise<EaRawMatch[]> {
-    return this.runBridge('matches', [platform, String(clubId), matchType, String(count)]);
+    const matches = await this.runBridge('matches', [platform, String(clubId), matchType, String(count)]);
+    if (!Array.isArray(matches)) throw new Error('Invalid upstream match response');
+    // Keep the endpoint category through merging, persistence and embed creation.
+    // Copy each object so EA's original fields remain intact for diagnostics.
+    return matches.filter((match): match is EaRawMatch => Boolean(match && typeof match === 'object' && match.matchId))
+      .map(match => ({ ...match, sourceMatchTypes: [matchType] }));
   }
 
   async fetchClubInfo(clubId: string, platform = 'common-gen5'): Promise<any> {
@@ -279,13 +285,15 @@ export class EaService {
       .map((p) => this.parsePlayer(p))
       .sort((a, b) => b.rating - a.rating);
 
+    const matchType = resolveEaMatchType(raw, trackedClubId);
     const trackedAggregate = raw.aggregate?.[trackedClubId];
     const opponentAggregate = raw.aggregate?.[opponentClubId];
 
     return {
       matchId: String(raw.matchId),
       timestamp: new Date((raw.timestamp || Date.now() / 1000) * 1000),
-      matchType: trackedClubData?.matchType ? String(trackedClubData.matchType) : 'League',
+      matchType,
+      matchTypeLabel: formatEaMatchType(matchType),
       trackedClubId,
       isHome,
       outcome,

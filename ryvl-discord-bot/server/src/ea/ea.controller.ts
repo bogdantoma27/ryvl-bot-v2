@@ -1,3 +1,5 @@
+import { mergeEaRawMatch } from './ea-match-type';
+import { EaRawMatch } from './ea.types';
 import {
   Controller,
   Get,
@@ -105,7 +107,7 @@ export class EaController {
         ? config.matchTypes
         : ['leagueMatch', 'friendlyMatch', 'playoffMatch'];
 
-    const rawMatchesMap = new Map<string, any>();
+    const rawMatchesMap = new Map<string, EaRawMatch>();
     let successfulRequests = 0;
     for (const mType of matchTypes) {
       try {
@@ -120,7 +122,7 @@ export class EaController {
         if (Array.isArray(matches)) {
           for (const m of matches) {
             if (m && m.matchId) {
-              rawMatchesMap.set(String(m.matchId), m);
+              mergeEaRawMatch(rawMatchesMap, m);
             }
           }
         }
