@@ -1,3 +1,4 @@
+import { EventMessageService, EventDiscordSync } from './event-message.service';
 import {
   Injectable,
   NotFoundException,
@@ -19,6 +20,7 @@ export interface ListEventsFilter {
 }
 
 export type EventWithOccurrences = Event & {
+  discordSync?: EventDiscordSync;
   occurrences: (EventOccurrence & {
     rsvpCounts?: { accepted: number; tentative: number; declined: number };
   })[];
@@ -32,6 +34,7 @@ export class EventsService {
     private readonly prisma: PrismaService,
     private readonly recurrenceService: RecurrenceService,
     private readonly eventsGateway: EventsGateway,
+    private readonly eventMessages: EventMessageService,
   ) {}
 
   async createEvent(
@@ -205,93 +208,77 @@ export class EventsService {
     };
   }
 
-  async updateEvent(eventId: string, data: UpdateEventDto): Promise<EventWithOccurrences> {
+  async updateEvent(eventId: string, data: UpdateEventDto, occurrenceId?: string): Promise<EventWithOccurrences> {
     const parsed = updateEventSchema.safeParse(data);
     if (!parsed.success) {
-      const issues = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ');
-      throw new BadRequestException(`Validation error: ${issues}`);
+      throw new BadRequestException(`Validation error: ${parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')}`);
     }
-
-    const existingEvent = await this.prisma.event.findUnique({
-      where: { id: eventId },
-    });
-
-    if (!existingEvent) {
-      throw new NotFoundException(`Event with ID "${eventId}" not found`);
-    }
-
     const validData = parsed.data;
-    const recurrenceChanged =
-      (validData.rrule !== undefined && validData.rrule !== existingEvent.rrule) ||
-      (validData.duration !== undefined && validData.duration !== existingEvent.duration) ||
-      (validData.startsAt !== undefined);
-
-    const updatedEvent = await this.prisma.event.update({
-      where: { id: eventId },
-      data: {
-        title: validData.title,
-        description: validData.description,
-        location: validData.location,
-        imageUrl: validData.imageUrl === '' ? null : validData.imageUrl,
-        color: validData.color,
-        channelId: validData.channelId,
-        timezone: validData.timezone,
-        mentionRoleIds: validData.mentionRoleIds,
-        rrule: validData.rrule,
-        duration: validData.duration,
-        status: validData.status,
-      },
-    });
-
-    // If recurrence parameters changed, regenerate future scheduled occurrences
-    if (recurrenceChanged) {
+    // Commit event metadata and occurrence changes together. Lock the parent so
+    // concurrent edits cannot regenerate or overwrite each other's schedule.
+    const updatedEvent = await this.prisma.$transaction(async tx => {
+      await tx.$queryRaw(Prisma.sql`SELECT id FROM events WHERE id = ${eventId} FOR UPDATE`);
+      const existing = await tx.event.findUnique({ where: { id: eventId }, include: { occurrences: { orderBy: { startsAt: 'asc' }, include: { rsvps: true } } } });
+      if (!existing) throw new NotFoundException(`Event with ID "${eventId}" not found`);
       const now = new Date();
-      // Remove future scheduled occurrences that haven't been published or closed
-      await this.prisma.eventOccurrence.deleteMany({
-        where: {
-          eventId,
-          status: OccurrenceStatus.SCHEDULED,
-          startsAt: { gte: now },
-        },
-      });
-
-      const anchor = validData.startsAt ? new Date(validData.startsAt) : now;
-      const newOccurrences = this.recurrenceService.generateOccurrences(
-        {
-          id: eventId,
-          rrule: updatedEvent.rrule,
-          duration: updatedEvent.duration,
-        },
-        now,
-        10,
-        anchor,
-      );
-
-      // Get highest existing index
-      const maxIndexResult = await this.prisma.eventOccurrence.aggregate({
-        where: { eventId },
-        _max: { index: true },
-      });
-      const startIndex = (maxIndexResult._max.index ?? -1) + 1;
-
-      if (newOccurrences.length > 0) {
-        await this.prisma.eventOccurrence.createMany({
-          data: newOccurrences.map((occ, i) => ({
-            eventId,
-            index: startIndex + i,
-            startsAt: occ.startsAt,
-            endsAt: occ.endsAt,
-            status: OccurrenceStatus.SCHEDULED,
-            channelId: updatedEvent.channelId,
-          })),
-        });
+      const active = existing.occurrences.filter(o => o.status === OccurrenceStatus.SCHEDULED || o.status === OccurrenceStatus.PUBLISHED);
+      const target = occurrenceId ? existing.occurrences.find(o => o.id === occurrenceId) :
+        active.find(o => (o.endsAt || o.startsAt) >= now) || active[0] || (!existing.rrule ? existing.occurrences[0] : undefined);
+      if (occurrenceId && (!target || target.status === OccurrenceStatus.CANCELLED)) throw new BadRequestException('Invalid or cancelled event occurrence');
+      const recurrenceChanged = validData.rrule !== undefined && validData.rrule !== existing.rrule;
+      const { startsAt: requestedStart, ...metadata } = validData;
+      const event = await tx.event.update({ where: { id: eventId }, data: { ...metadata, imageUrl: validData.imageUrl === '' ? null : validData.imageUrl } });
+      let anchor = target?.startsAt || existing.occurrences[0]?.startsAt || now;
+      if (requestedStart !== undefined) {
+        anchor = new Date(requestedStart);
+        if (!Number.isFinite(anchor.getTime())) throw new BadRequestException('Invalid startsAt');
+        const endsAt = new Date(anchor.getTime() + event.duration * 60000);
+        if (target) {
+          // Do not delete/recreate the row: its message and attendee keys depend on its ID.
+          const reopen = target.status === OccurrenceStatus.CLOSED && endsAt > now;
+          await tx.eventOccurrence.update({ where: { id: target.id }, data: {
+            startsAt: anchor, endsAt,
+            ...(reopen ? { status: target.messageId ? OccurrenceStatus.PUBLISHED : OccurrenceStatus.SCHEDULED, closedAt: null } : {}),
+          } });
+        } else {
+          const index = Math.max(-1, ...existing.occurrences.map(o => o.index)) + 1;
+          await tx.eventOccurrence.create({ data: { eventId, index, startsAt: anchor, endsAt, channelId: event.channelId } });
+        }
       }
-    }
-
+      if (validData.duration !== undefined) {
+        for (const occurrence of active) {
+          if (requestedStart !== undefined && occurrence.id === target?.id) continue;
+          await tx.eventOccurrence.update({ where: { id: occurrence.id }, data: { endsAt: new Date(occurrence.startsAt.getTime() + event.duration * 60000) } });
+        }
+      }
+      if (validData.channelId !== undefined) {
+        // An existing Discord message stays in its original channel.
+        await tx.eventOccurrence.updateMany({ where: { eventId, status: OccurrenceStatus.SCHEDULED, messageId: null }, data: { channelId: event.channelId } });
+      }
+      if (recurrenceChanged) {
+        // Regenerate only unannounced future dates without attendee records.
+        await tx.eventOccurrence.deleteMany({ where: { eventId, status: OccurrenceStatus.SCHEDULED, messageId: null, startsAt: { gte: now }, rsvps: { none: {} }, ...(target ? { id: { not: target.id } } : {}) } });
+        if (event.rrule) {
+          const remaining = await tx.eventOccurrence.findMany({ where: { eventId } });
+          const occupied = new Set(remaining.map(o => o.startsAt.getTime()));
+          const generated = this.recurrenceService.generateOccurrences({ id: eventId, rrule: event.rrule, duration: event.duration }, new Date(Math.max(now.getTime(), anchor.getTime())), 10, anchor);
+          let index = Math.max(-1, ...remaining.map(o => o.index)) + 1;
+          const fresh = generated.filter(o => !occupied.has(o.startsAt.getTime()));
+          if (fresh.length) await tx.eventOccurrence.createMany({ data: fresh.map(o => ({ eventId, index: index++, startsAt: o.startsAt, endsAt: o.endsAt, status: OccurrenceStatus.SCHEDULED, channelId: event.channelId })) });
+        }
+      }
+      return event;
+    });
     const fullEvent = await this.getEvent(eventId);
     this.eventsGateway.emit(updatedEvent.guildId, 'EVENT_UPDATED', fullEvent);
-
-    return fullEvent;
+    // Web and Discord edits now refresh the same stored announcements.
+    let discordSync: EventDiscordSync;
+    try { discordSync = await this.eventMessages.syncEvent(eventId); }
+    catch (error) {
+      this.logger.warn(`Event saved but announcement refresh failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      discordSync = { updated: 0, failed: 1 };
+    }
+    return { ...fullEvent, discordSync };
   }
 
   async deleteEvent(eventId: string): Promise<Event> {

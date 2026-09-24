@@ -1,3 +1,4 @@
+import { DEFAULT_EVENT_TIMEZONE, parseEventDateTime, formatEventDateTime } from '../../events/event-time';
 import {
   ChatInputCommandInteraction,
   ModalBuilder,
@@ -42,7 +43,7 @@ export class EventCreateCommand {
       .setCustomId('event_date')
       .setLabel('Date')
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder('2026-10-15 or next friday')
+      .setPlaceholder('today, tomorrow, next friday or 2026-10-15')
       .setRequired(true);
 
     const timeInput = new TextInputBuilder()
@@ -85,18 +86,17 @@ export class EventCreateCommand {
     const timeStr = interaction.fields.getTextInputValue('event_time').trim();
     const description = interaction.fields.getTextInputValue('event_description')?.trim();
 
-    const parsedDate = this.parseDateTime(dateStr, timeStr);
-    if (!parsedDate) {
-      await interaction.reply({
-        content: `Could not parse date "${dateStr}" and time "${timeStr}". Please use format YYYY-MM-DD and HH:mm (e.g., 2026-10-15 at 19:00).`,
-        flags: MessageFlags.Ephemeral,
-      });
-      return;
-    }
-
+    const receivedAt = new Date();
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
+      const guild = await this.prisma.guild.findUnique({ where: { id: guildId }, select: { timezone: true } });
+      const timezone = guild?.timezone || DEFAULT_EVENT_TIMEZONE;
+      const parsedDate = parseEventDateTime(dateStr, timeStr, timezone, receivedAt);
+      if (!parsedDate) {
+        await interaction.editReply({ content: `Invalid date or time. Use YYYY-MM-DD (or today/tomorrow) and HH:mm in ${timezone}.` });
+        return;
+      }
       const channelId = interaction.channelId;
       if (!channelId) {
         throw new Error('No channel found for interaction');
@@ -110,6 +110,7 @@ export class EventCreateCommand {
           description: description || undefined,
           channelId,
           startsAt: parsedDate.toISOString(),
+          timezone,
           duration: 60,
         },
       );
@@ -144,7 +145,7 @@ export class EventCreateCommand {
       }
 
       await interaction.editReply({
-        content: `✅ Event **${title}** created successfully!`,
+        content: `✅ Event **${title}** created: ${formatEventDateTime(parsedDate, timezone).date} at ${formatEventDateTime(parsedDate, timezone).time} (${timezone}).`,
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -155,60 +156,4 @@ export class EventCreateCommand {
     }
   }
 
-  private parseDateTime(dateStr: string, timeStr: string): Date | null {
-    const cleanDate = dateStr.toLowerCase().trim();
-    const [hoursStr, minutesStr] = timeStr.trim().split(':');
-    const hours = parseInt(hoursStr || '0', 10);
-    const minutes = parseInt(minutesStr || '0', 10);
-
-    if (isNaN(hours) || isNaN(minutes) || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-      return null;
-    }
-
-    const now = new Date();
-    let target = new Date();
-
-    if (cleanDate === 'today') {
-      target = new Date(now);
-    } else if (cleanDate === 'tomorrow') {
-      target = new Date(now);
-      target.setDate(target.getDate() + 1);
-    } else if (cleanDate.includes('next ') || ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].includes(cleanDate.replace('next ', ''))) {
-      const dayName = cleanDate.replace('next ', '').trim();
-      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-      const targetDay = days.indexOf(dayName);
-      if (targetDay !== -1) {
-        const currentDay = now.getDay();
-        let daysToAdd = (targetDay - currentDay + 7) % 7;
-        if (daysToAdd === 0 || cleanDate.startsWith('next ')) {
-          daysToAdd += 7;
-        }
-        target = new Date(now);
-        target.setDate(target.getDate() + daysToAdd);
-      } else {
-        return null;
-      }
-    } else {
-      // Try parsing standard date string YYYY-MM-DD
-      const dateParts = cleanDate.split('-');
-      if (dateParts.length === 3) {
-        const year = parseInt(dateParts[0], 10);
-        const month = parseInt(dateParts[1], 10) - 1;
-        const day = parseInt(dateParts[2], 10);
-        if (isNaN(year) || isNaN(month) || isNaN(day)) {
-          return null;
-        }
-        target = new Date(year, month, day);
-      } else {
-        const directParsed = new Date(dateStr);
-        if (isNaN(directParsed.getTime())) {
-          return null;
-        }
-        target = directParsed;
-      }
-    }
-
-    target.setHours(hours, minutes, 0, 0);
-    return isNaN(target.getTime()) ? null : target;
-  }
 }

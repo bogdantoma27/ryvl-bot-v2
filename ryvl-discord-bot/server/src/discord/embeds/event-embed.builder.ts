@@ -1,3 +1,4 @@
+import { DEFAULT_EVENT_TIMEZONE, formatEventDateTime } from '../../events/event-time';
 import {
   EmbedBuilder,
   ActionRowBuilder,
@@ -9,6 +10,7 @@ import { Event, EventOccurrence, Rsvp, RsvpStatus } from '@prisma/client';
 export interface EventEmbedData {
   event: Pick<Event, 'id' | 'title' | 'description' | 'location' | 'color' | 'imageUrl'> & {
     createdById?: string;
+    timezone?: string;
   };
   occurrence: Pick<EventOccurrence, 'id' | 'index' | 'startsAt' | 'endsAt' | 'status'>;
   rsvps?: Rsvp[];
@@ -20,7 +22,7 @@ export function buildEventEmbed(data: EventEmbedData): {
   embed: EmbedBuilder;
   row: ActionRowBuilder<ButtonBuilder>;
 } {
-  const { event, occurrence, rsvps = [], creatorName, frontendUrl = 'http://localhost:4201' } = data;
+  const { event, occurrence, rsvps = [], creatorName, frontendUrl = process.env.FRONTEND_URL || 'https://ryvl.top' } = data;
 
   // Default color to #EAE905 (the exact yellow/gold from the screenshot)
   let colorNumber = 0xeae905;
@@ -40,7 +42,7 @@ export function buildEventEmbed(data: EventEmbedData): {
   const gcalStart = new Date(startUnix * 1000).toISOString().replace(/-|:|\.\d\d\d/g, '');
   const gcalEnd = new Date(endUnix * 1000).toISOString().replace(/-|:|\.\d\d\d/g, '');
   const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(event.title)}&dates=${gcalStart}/${gcalEnd}&details=${encodeURIComponent(event.description || '')}`;
-  const webUrl = `${frontendUrl.replace(/\/$/, '')}/events/${event.id}`;
+  const webUrl = `${frontendUrl.replace(/\/$/, '')}/admin/events/${event.id}`;
 
   const accepted = rsvps.filter((r) => r.status === RsvpStatus.ACCEPTED);
   const tentative = rsvps.filter((r) => r.status === RsvpStatus.TENTATIVE);
@@ -66,7 +68,10 @@ export function buildEventEmbed(data: EventEmbedData): {
   // Time field matching the attachment:
   // Tuesday, September 22, 2026 20:00 [+] [View on web]
   // 🕐 in 4 hours
+  const timeZone = event.timezone || DEFAULT_EVENT_TIMEZONE;
+  const local = formatEventDateTime(occurrence.startsAt, timeZone);
   const timeFieldLines = [
+    `**${local.date} · ${local.time} (${timeZone})**`,
     `<t:${startUnix}:F> [[+]](<${gcalUrl}>) [[View on web]](<${webUrl}>)`,
     `🕐 <t:${startUnix}:R>`,
   ];

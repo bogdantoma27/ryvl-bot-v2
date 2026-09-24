@@ -224,8 +224,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
           if (interaction.customId === EVENT_CREATE_MODAL_ID) {
             await this.eventCreateCommand.handleModalSubmit(interaction);
           } else if (interaction.customId.startsWith(EVENT_EDIT_MODAL_PREFIX)) {
-            const eventId = interaction.customId.replace(EVENT_EDIT_MODAL_PREFIX, '');
-            await this.eventEditCommand.handleModalSubmit(interaction, eventId);
+            const [eventId, occurrenceId] = interaction.customId.slice(EVENT_EDIT_MODAL_PREFIX.length).split(':');
+            await this.eventEditCommand.handleModalSubmit(interaction, eventId, occurrenceId);
           } else if (interaction.customId.startsWith(LINEUP_MODAL_SETUP_PREFIX)) {
             await this.lineupPostCommand.handleSetupModalSubmit(interaction);
           } else if (interaction.customId.startsWith(LINEUP_MODAL_CUSTOM_PREFIX)) {
