@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, Pa
 import { EventStatus } from '@prisma/client';
 import { EventsService, EventWithOccurrences } from './events.service';
 import { RsvpService, RsvpGrouped } from './rsvp.service';
+import { normalizeEventForm } from './event-form';
 import type { CreateEventDto } from './dto/create-event.dto';
 import type { UpdateEventDto } from './dto/update-event.dto';
 import { AuthGuard } from '../auth/auth.guard';
@@ -17,7 +18,7 @@ export class EventsController {
   // cause the global class-validator whitelist to discard every submitted field.
   @Post()
   async createEvent(@Param('guildId') guildId: string, @CurrentUser() user: JwtPayload, @Body() body: Record<string, unknown>): Promise<EventWithOccurrences> {
-    return this.eventsService.createEvent(guildId, user.userId, body as unknown as CreateEventDto);
+    return this.eventsService.createEvent(guildId, user.userId, normalizeEventForm(body) as unknown as CreateEventDto);
   }
   @Get()
   async listEvents(@Param('guildId') guildId: string, @Query('status') status?: EventStatus, @Query('upcoming', new DefaultValuePipe(false), ParseBoolPipe) upcoming?: boolean, @Query('page', new DefaultValuePipe(1), ParseIntPipe) page?: number, @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit?: number): Promise<EventWithOccurrences[]> {
