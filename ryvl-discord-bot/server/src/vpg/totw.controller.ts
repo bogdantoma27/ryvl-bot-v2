@@ -51,12 +51,33 @@ export class TotwController {
     @Query('isTots') isTots?: string,
   ) {
     const data = await this.totwService.generateTotw(leagueSlug, isTots === 'true');
+    const roster: any[] = [];
+    const posKeys = ['st', 'cam', 'lm', 'cm', 'rm', 'cdm', 'cb', 'gk', 'sub'];
+    for (const key of posKeys) {
+      const arr = (data.players as any)[key] || [];
+      for (const p of arr) {
+        roster.push({
+          targetPosition: key.toUpperCase(),
+          gamertag: p.display_name || p.username || 'Player',
+          club: p.team_name || 'Free Agent',
+          gamesPlayed: p.matches_played || 0,
+          goals: p.goals || 0,
+          assists: p.assists || 0,
+          averageRating: p.rating ? Number(p.rating).toFixed(1) : '-',
+          manOfTheMatch: p.motm || 0,
+          cleanSheets: p.clean_sheets || 0,
+          avatarUrl: p.avatar_url,
+        });
+      }
+    }
+
     return {
       leagueName: data.leagueName,
       season: data.season,
       week: data.week,
       isTots: data.isTots,
       players: data.players,
+      roster,
     };
   }
 

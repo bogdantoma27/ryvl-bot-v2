@@ -72,22 +72,23 @@ export class TotwRendererService {
 
   // Exact coordinates calibrated to totw-template.jpg (819 x 1024)
   private readonly pitchSlots = [
-    { key: 'st', label: 'LS', cx: 326, cy: 247, py: 300, idx: 0 },
-    { key: 'st', label: 'RS', cx: 493, cy: 247, py: 300, idx: 1 },
-    { key: 'cam', label: 'CAM', cx: 410, cy: 363, py: 414, idx: 0 },
-    { key: 'lm', label: 'LM', cx: 152, cy: 457, py: 498, idx: 0 },
-    { key: 'cm', label: 'LCM', cx: 292, cy: 476, py: 518, idx: 0 },
-    { key: 'cm', label: 'RCM', cx: 528, cy: 476, py: 518, idx: 1 },
-    { key: 'rm', label: 'RM', cx: 667, cy: 457, py: 498, idx: 0 },
-    { key: 'cdm', label: 'CDM', cx: 410, cy: 538, py: 585, idx: 0 },
-    { key: 'cb', label: 'LCB', cx: 255, cy: 658, py: 704, idx: 0 },
-    { key: 'cb', label: 'CCB', cx: 410, cy: 658, py: 704, idx: 1 },
-    { key: 'cb', label: 'RCB', cx: 565, cy: 658, py: 704, idx: 2 },
-    { key: 'gk', label: 'GK', cx: 410, cy: 784, py: 828, idx: 0 },
+    { key: 'st', label: 'LS', cx: 325, cy: 245, r: 35, py: 310, idx: 0 },
+    { key: 'st', label: 'RS', cx: 493, cy: 245, r: 35, py: 310, idx: 1 },
+    { key: 'cam', label: 'CAM', cx: 409, cy: 362, r: 35, py: 428, idx: 0 },
+    { key: 'lm', label: 'LM', cx: 145, cy: 448, r: 35, py: 514, idx: 0 },
+    { key: 'cm', label: 'LCM', cx: 293, cy: 469, r: 35, py: 532, idx: 0 },
+    { key: 'cm', label: 'RCM', cx: 525, cy: 468, r: 35, py: 532, idx: 1 },
+    { key: 'rm', label: 'RM', cx: 673, cy: 448, r: 35, py: 514, idx: 0 },
+    { key: 'cdm', label: 'CDM', cx: 409, cy: 537, r: 34, py: 601, idx: 0 },
+    { key: 'cb', label: 'LCB', cx: 258, cy: 657, r: 34, py: 721, idx: 0 },
+    { key: 'cb', label: 'CCB', cx: 409, cy: 652, r: 36, py: 721, idx: 1 },
+    { key: 'cb', label: 'RCB', cx: 561, cy: 657, r: 34, py: 721, idx: 2 },
+    { key: 'gk', label: 'GK', cx: 409, cy: 774, r: 40, py: 847, idx: 0 },
   ];
 
-  private async fetchCircleAvatarBuffer(url: string | null | undefined, diameter: number): Promise<Buffer | null> {
+  private async fetchCircleAvatarBuffer(url: string | null | undefined, r: number): Promise<Buffer | null> {
     if (!url) return null;
+    const D = r * 2;
     try {
       const res = await fetch(url, {
         headers: { 'User-Agent': 'RYVLBot/2.0' },
@@ -97,12 +98,14 @@ export class TotwRendererService {
       const arrayBuffer = await res.arrayBuffer();
       const inputBuffer = Buffer.from(arrayBuffer);
 
-      const circleSvg = `<svg width="${diameter}" height="${diameter}"><circle cx="${diameter / 2}" cy="${diameter / 2}" r="${diameter / 2}" fill="#fff"/></svg>`;
-      const mask = Buffer.from(circleSvg);
+      // Arch cutout at bottom follows the golden position arch badge
+      const maskSvg = Buffer.from(
+        `<svg width="${D}" height="${D}"><circle cx="${r}" cy="${r}" r="${r - 1}" fill="#fff"/><path d="M ${r - 20} ${D} Q ${r} ${D - 6} ${r + 20} ${D} Z" fill="#000"/></svg>`
+      );
 
       return sharp(inputBuffer)
-        .resize(diameter, diameter, { fit: 'cover' })
-        .composite([{ input: mask, blend: 'dest-in' }])
+        .resize(D, D, { fit: 'cover' })
+        .composite([{ input: maskSvg, blend: 'dest-in' }])
         .png()
         .toBuffer();
     } catch {
@@ -110,18 +113,22 @@ export class TotwRendererService {
     }
   }
 
-  private getDefaultAvatarBuffer(diameter: number): Buffer {
-    const r = diameter / 2;
+  private async getDefaultAvatarBuffer(r: number): Promise<Buffer> {
+    const D = r * 2;
+    const maskSvg = Buffer.from(
+      `<svg width="${D}" height="${D}"><circle cx="${r}" cy="${r}" r="${r - 1}" fill="#fff"/><path d="M ${r - 20} ${D} Q ${r} ${D - 6} ${r + 20} ${D} Z" fill="#000"/></svg>`
+    );
     const svg = `
-      <svg width="${diameter}" height="${diameter}" viewBox="0 0 ${diameter} ${diameter}" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="${r}" cy="${r}" r="${r}" fill="#0d111d"/>
-        <!-- Head -->
+      <svg width="${D}" height="${D}" viewBox="0 0 ${D} ${D}" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${D}" height="${D}" fill="#111828"/>
         <circle cx="${r}" cy="${r * 0.72}" r="${r * 0.32}" fill="#2a354d"/>
-        <!-- Shoulders / Torso -->
-        <path d="M ${r * 0.28} ${diameter} C ${r * 0.28} ${r * 1.2}, ${r * 1.72} ${r * 1.2}, ${r * 1.72} ${diameter} Z" fill="#2a354d"/>
+        <path d="M ${r * 0.28} ${D} C ${r * 0.28} ${r * 1.2}, ${r * 1.72} ${r * 1.2}, ${r * 1.72} ${D} Z" fill="#2a354d"/>
       </svg>
     `;
-    return Buffer.from(svg);
+    return sharp(Buffer.from(svg))
+      .composite([{ input: maskSvg, blend: 'dest-in' }])
+      .png()
+      .toBuffer();
   }
 
   renderSvg(options: RenderTotwOptions): string {
@@ -144,15 +151,20 @@ export class TotwRendererService {
         player = alt[slot.idx];
       }
 
-      const displayName = player ? (player.display_name || player.username || 'PLAYER') : slot.label;
+      // If no player has been selected for this position, do not render any placeholder label
+      if (!player) continue;
+
+      const displayName = player.display_name || player.username || '';
       const cleanName = displayName.toUpperCase().trim();
+      if (!cleanName) continue;
+
       const rating = player?.rating ? ` ${player.rating}` : '';
       const labelText = cleanName + (rating ? ` (${rating})` : '');
       const fontSize = labelText.length > 15 ? 9 : labelText.length > 11 ? 10.5 : 12;
 
-      // Position text exactly in the middle of the dark purple nameplate (py)
+      // Position text centered inside the purple nameplate box (py)
       playerNamesSvg += `
-        <text x="${slot.cx}" y="${slot.py || (slot.cy + 64)}" text-anchor="middle" font-family="'Segoe UI', Roboto, 'Arial Black', sans-serif" font-weight="800" font-size="${fontSize}" fill="#ffffff" letter-spacing="0.5">
+        <text x="${slot.cx}" y="${slot.py}" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI', Roboto, 'Arial Black', sans-serif" font-weight="800" font-size="${fontSize}" fill="#ffffff" letter-spacing="0.5">
           ${escapeXml(labelText.length > 18 ? labelText.slice(0, 17) + '…' : labelText)}
         </text>
       `;
@@ -167,12 +179,6 @@ export class TotwRendererService {
 
         <!-- Player Names on existing purple nameplates -->
         ${playerNamesSvg}
-
-        <!-- Footer League Name Override -->
-        <rect x="240" y="924" width="339" height="24" rx="4" fill="#0c071e" fill-opacity="0.95" />
-        <text x="${W / 2}" y="941" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="800" letter-spacing="2" fill="#EAE905">
-          ${escapeXml(options.leagueName.toUpperCase())}
-        </text>
       </svg>
     `;
   }
@@ -180,12 +186,9 @@ export class TotwRendererService {
   async renderPng(options: RenderTotwOptions): Promise<Buffer> {
     const W = 819;
     const H = 1024;
-    const diameter = 76;
-    const radius = diameter / 2;
     const templatePath = this.getTotwTemplatePath();
 
     const avatarOverlays: OverlayOptions[] = [];
-    const defaultAvatarBuf = this.getDefaultAvatarBuffer(diameter);
 
     // Parallel avatar fetching for slots
     for (const slot of this.pitchSlots) {
@@ -195,16 +198,20 @@ export class TotwRendererService {
       let avatarBuf: Buffer | null = null;
       if (player?.avatar_url) {
         try {
-          avatarBuf = await this.fetchCircleAvatarBuffer(player.avatar_url, diameter);
+          avatarBuf = await this.fetchCircleAvatarBuffer(player.avatar_url, slot.r);
         } catch {
           // ignore error
         }
       }
 
+      if (!avatarBuf) {
+        avatarBuf = await this.getDefaultAvatarBuffer(slot.r);
+      }
+
       avatarOverlays.push({
-        input: avatarBuf || defaultAvatarBuf,
-        top: Math.round(slot.cy - radius),
-        left: Math.round(slot.cx - radius),
+        input: avatarBuf,
+        top: Math.round(slot.cy - slot.r),
+        left: Math.round(slot.cx - slot.r),
       });
     }
 
@@ -218,9 +225,8 @@ export class TotwRendererService {
     if (templatePath) {
       try {
         return sharp(templatePath)
-          .resize(W, H)
           .composite([...avatarOverlays, svgOverlay])
-          .png({ quality: 95, compressionLevel: 8 })
+          .png({ quality: 100, compressionLevel: 6 })
           .toBuffer();
       } catch (err: any) {
         this.logger.warn(`Failed compositing on totw-template.jpg: ${err.message}. Rendering fallback.`);
@@ -229,7 +235,7 @@ export class TotwRendererService {
 
     return sharp(Buffer.from(svg))
       .resize(W, H)
-      .png({ quality: 95, compressionLevel: 8 })
+      .png({ quality: 100, compressionLevel: 6 })
       .toBuffer();
   }
 }

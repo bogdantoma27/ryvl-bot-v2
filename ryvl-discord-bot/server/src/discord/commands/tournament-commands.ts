@@ -274,40 +274,74 @@ export class TournamentCommands {
       await interaction.editReply(`📋 **${active.name}**: ${signups.length} signed up.`);
     } else if (customId.startsWith('tourney:signup:') || customId.startsWith('tourney:register:')) {
       const tournamentId = customId.replace('tourney:signup:', '').replace('tourney:register:', '');
+      const tournament = await this.tournamentService.getTournament(tournamentId);
+
       const modal = new ModalBuilder()
         .setCustomId(`tourney:modal:signup:${tournamentId}`)
-        .setTitle('Înscriere Turneu');
+        .setTitle(tournament.type === 'DRAFT' ? 'Înscriere Jucător Draft' : 'Înscriere Echipă Turneu');
 
-      const gamertagInput = new TextInputBuilder()
-        .setCustomId('gamertag')
-        .setLabel('Gamertag (PSN/Xbox/PC ID)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Numele exact din joc')
-        .setRequired(true);
+      if (tournament.type === 'DRAFT') {
+        const gamertagInput = new TextInputBuilder()
+          .setCustomId('gamertag')
+          .setLabel('Gamertag (PSN/Xbox/PC ID)')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder('Numele exact din joc')
+          .setRequired(true);
 
-      const pos1Input = new TextInputBuilder()
-        .setCustomId('pos1')
-        .setLabel('Poziție Principală (ex: ST, CAM, CB, GK)')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
+        const pos1Input = new TextInputBuilder()
+          .setCustomId('pos1')
+          .setLabel('Poziție Principală (ex: ST, CAM, CB, GK)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true);
 
-      const pos2Input = new TextInputBuilder()
-        .setCustomId('pos2')
-        .setLabel('Poziție Secundară (opțional)')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false);
+        const pos2Input = new TextInputBuilder()
+          .setCustomId('pos2')
+          .setLabel('Poziție Secundară (opțional)')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false);
 
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(gamertagInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(pos1Input),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(pos2Input),
-      );
+        modal.addComponents(
+          new ActionRowBuilder<TextInputBuilder>().addComponents(gamertagInput),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(pos1Input),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(pos2Input),
+        );
+      } else {
+        const teamNameInput = new TextInputBuilder()
+          .setCustomId('team_name')
+          .setLabel('Nume Echipă')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder('ex: RYVL Esports')
+          .setRequired(true);
+
+        const gamertagInput = new TextInputBuilder()
+          .setCustomId('gamertag')
+          .setLabel('Gamertag Căpitan')
+          .setStyle(TextInputStyle.Short)
+          .setPlaceholder('ID PSN/Xbox/PC al căpitanului')
+          .setRequired(true);
+
+        const notesInput = new TextInputBuilder()
+          .setCustomId('notes')
+          .setLabel('Detalii / Discord Căpitan')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false);
+
+        modal.addComponents(
+          new ActionRowBuilder<TextInputBuilder>().addComponents(teamNameInput),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(gamertagInput),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(notesInput),
+        );
+      }
 
       await interaction.showModal(modal);
     } else if (customId.startsWith('tourney:pullout:') || customId.startsWith('tourney:unregister:')) {
       const tournamentId = customId.replace('tourney:pullout:', '').replace('tourney:unregister:', '');
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      await this.tournamentService.removeSignup(tournamentId, interaction.user.id);
+      const updated = await this.tournamentService.removeSignup(tournamentId, interaction.user.id);
+      const channels = (updated.discordChannels as any) || {};
+      if (channels.registration) {
+        await this.tournamentService.postRegistrationEmbed(channels.registration, updated);
+      }
       await interaction.editReply('✅ Te-ai retras cu succes din turneu.');
     } else if (customId.startsWith('tourney:view_roster:')) {
       const tournamentId = customId.replace('tourney:view_roster:', '');
@@ -466,19 +500,48 @@ export class TournamentCommands {
       const tournamentId = customId.replace('tourney:modal:signup:', '');
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-      const gamertag = interaction.fields.getTextInputValue('gamertag').trim();
-      const pos1 = interaction.fields.getTextInputValue('pos1').trim().toUpperCase();
-      const pos2 = interaction.fields.getTextInputValue('pos2')?.trim()?.toUpperCase() || undefined;
+      try {
+        const tournament = await this.tournamentService.getTournament(tournamentId);
+        const isDraft = tournament.type === 'DRAFT';
 
-      await this.tournamentService.addSignup(tournamentId, {
-        userId: interaction.user.id,
-        displayName: interaction.user.username,
-        gamertag,
-        pos1,
-        pos2,
-      });
+        let teamName: string | undefined;
+        let pos1 = 'ALL';
+        let pos2: string | undefined;
+        const gamertag = interaction.fields.getTextInputValue('gamertag').trim();
 
-      await interaction.editReply(`✅ Te-ai înscris cu succes cu gamertag-ul **${gamertag}** (${pos1})!`);
+        if (isDraft) {
+          pos1 = interaction.fields.getTextInputValue('pos1').trim().toUpperCase();
+          pos2 = interaction.fields.getTextInputValue('pos2')?.trim()?.toUpperCase() || undefined;
+        } else {
+          try {
+            teamName = interaction.fields.getTextInputValue('team_name').trim();
+          } catch {
+            // fallback
+          }
+        }
+
+        const updated = await this.tournamentService.addSignup(tournamentId, {
+          userId: interaction.user.id,
+          displayName: interaction.user.username,
+          gamertag,
+          teamName,
+          pos1,
+          pos2,
+        });
+
+        const channels = (updated.discordChannels as any) || {};
+        if (channels.registration) {
+          await this.tournamentService.postRegistrationEmbed(channels.registration, updated);
+        }
+
+        const msg = isDraft
+          ? `✅ Te-ai înscris cu succes cu gamertag-ul **${gamertag}** (${pos1})!`
+          : `✅ Echipa **${teamName || 'Ta'}** (Căpitan: \`${gamertag}\`) a fost înscrisă cu succes în turneu!`;
+
+        await interaction.editReply(msg);
+      } catch (err: any) {
+        await interaction.editReply(`❌ Eroare la înscriere: ${err?.message || err}`);
+      }
     } else if (customId.startsWith('tourney:modal:result:')) {
       const tournamentId = customId.replace('tourney:modal:result:', '');
       await interaction.deferReply();

@@ -164,8 +164,8 @@ import { TournamentInstance } from '../../core/models';
                   <span class="font-bold text-white">{{ activeTournament()?.formation }}</span>
                 </div>
                 <div class="flex justify-between py-1.5">
-                  <span class="text-slate-400">Target Teams</span>
-                  <span class="font-bold text-white">{{ activeTournament()?.numTeams }} Teams</span>
+                  <span class="text-slate-400">Bracket Sizing</span>
+                  <span class="font-bold text-emerald-400">Auto (8 / 16 / 32 teams)</span>
                 </div>
               </div>
             </div>
@@ -477,17 +477,6 @@ import { TournamentInstance } from '../../core/models';
                   </select>
                 </div>
               }
-
-              <div>
-                <label class="block text-xs font-semibold text-slate-300 mb-1">Number of Teams</label>
-                <input
-                  type="number"
-                  [(ngModel)]="newTournamentTeams"
-                  min="2"
-                  max="16"
-                  class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
             </div>
 
             <div class="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">

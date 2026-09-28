@@ -90,4 +90,13 @@ export class TournamentController {
     res.setHeader('Content-Type', 'image/png');
     return res.send(buffer);
   }
+
+  @Post(':tournamentId/finalize-bracket')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async finalizeBracket(
+    @Param('guildId') guildId: string,
+    @Param('tournamentId') tournamentId: string,
+  ) {
+    return this.tournamentService.finalizeTournamentBracket(tournamentId);
+  }
 }

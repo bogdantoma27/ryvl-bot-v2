@@ -1,4 +1,5 @@
 import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { DiscordService } from '../discord/discord.service';
 import { TotwRendererService, TotwPositionsMap, TotwPlayer } from './totw-renderer.service';
@@ -50,8 +51,8 @@ export class TotwService {
         leagueSlug,
         communitySlug: 'VPGRoPS5',
         channelId: guild?.defaultChannelId || null,
-        formation: '3-4-3',
-        cronSchedule: '0 18 * * 1', // Mondays at 18:00
+        formation: '3-5-2',
+        cronSchedule: '0 20 * * 6', // Saturdays at 20:00 Romania time
         enabled: true,
       },
     });
@@ -77,8 +78,8 @@ export class TotwService {
         leagueSlug,
         communitySlug: 'VPGRoPS5',
         channelId: data.channelId || null,
-        formation: data.formation || '3-4-3',
-        cronSchedule: data.cronSchedule || '0 18 * * 1',
+        formation: data.formation || '3-5-2',
+        cronSchedule: data.cronSchedule || '0 20 * * 6',
         enabled: data.enabled !== undefined ? data.enabled : true,
       },
     });
@@ -287,4 +288,26 @@ export class TotwService {
       week: totwData.week,
     };
   }
+
+  @Cron('0 20 * * 6', { name: 'totw-weekly-publisher', timeZone: 'Europe/Bucharest' })
+  async handleWeeklyTotwPublish(): Promise<void> {
+    this.logger.log('Executing weekly Team of the Week publisher (Saturday 20:00 Romania)...');
+    try {
+      const activeConfigs = await this.prisma.totwConfig.findMany({
+        where: { enabled: true, channelId: { not: null } },
+      });
+      for (const config of activeConfigs) {
+        if (!config.channelId) continue;
+        try {
+          await this.postTotwToDiscord(config.guildId, config.channelId, false);
+          this.logger.log(`Posted weekly TOTW for guild ${config.guildId} to channel ${config.channelId}`);
+        } catch (err: any) {
+          this.logger.warn(`Failed posting weekly TOTW for guild ${config.guildId}: ${err.message}`);
+        }
+      }
+    } catch (err: any) {
+      this.logger.error(`Error in weekly TOTW publisher: ${err.message}`);
+    }
+  }
 }
+

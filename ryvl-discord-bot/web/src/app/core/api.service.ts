@@ -919,6 +919,14 @@ export class ApiService {
       }),
     );
   }
+
+  finalizeTournamentBracket(guildId: string, tournamentId: string): Promise<any> {
+    return firstValueFrom(
+      this.http.post<any>(`${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/finalize-bracket`, {}, {
+        headers: this.headers(),
+      }),
+    );
+  }
 }
 
 

@@ -44,7 +44,7 @@ import { TotwConfig } from '../../core/models';
               </span>
             </div>
             <p class="text-sm text-slate-400 mt-1">
-              Automated high-resolution graphic cards and official Discord announcements powered by VPG Romania statistics.
+              Automated high-resolution graphic cards and official Discord announcements.
             </p>
           </div>
 
@@ -202,7 +202,7 @@ import { TotwConfig } from '../../core/models';
             <div class="flex items-center justify-between p-3 rounded-xl bg-[#11192e] border border-slate-800">
               <div>
                 <div class="text-xs font-bold text-white">Automated Weekly Cron</div>
-                <div class="text-[11px] text-slate-400">Posts automatically every Tuesday morning</div>
+                <div class="text-[11px] text-slate-400">Posts automatically every Saturday at 20:00 (Romania time)</div>
               </div>
               <input
                 type="checkbox"
@@ -267,7 +267,7 @@ import { TotwConfig } from '../../core/models';
                 </p>
               </div>
               <span class="text-xs bg-slate-800 px-2.5 py-1 rounded-lg text-amber-400 font-bold">
-                {{ previewData()?.players?.length || 0 }} Players Selected
+                {{ rosterList().length }} Players Selected
               </span>
             </div>
 
@@ -276,7 +276,7 @@ import { TotwConfig } from '../../core/models';
                 <div class="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
                 <p class="text-xs font-medium">Resolving player positions & computing ratings...</p>
               </div>
-            } @else if (!previewData() || !previewData().players || previewData().players.length === 0) {
+            } @else if (rosterList().length === 0) {
               <div class="py-24 text-center text-slate-400 space-y-3">
                 <div class="text-3xl">📊</div>
                 <h3 class="text-base font-bold text-white">No Match Data Available</h3>
@@ -298,7 +298,7 @@ import { TotwConfig } from '../../core/models';
                     </tr>
                   </thead>
                   <tbody class="divide-y divide-slate-800/80">
-                    @for (p of previewData().players; track p.gamertag; let i = $index) {
+                    @for (p of rosterList(); track p.gamertag; let i = $index) {
                       <tr class="hover:bg-slate-800/30 transition" [class.bg-amber-500/5]="i < 11">
                         <td class="py-2.5 px-3 text-center font-extrabold text-xs">
                           <span
@@ -349,6 +349,35 @@ export class AdminTotwComponent implements OnInit {
   readonly config = signal<TotwConfig | null>(null);
   readonly previewData = signal<any>(null);
   readonly previewImageUrl = signal<string | null>(null);
+
+  readonly rosterList = computed<any[]>(() => {
+    const data = this.previewData();
+    if (!data) return [];
+    if (Array.isArray(data.roster) && data.roster.length > 0) return data.roster;
+    if (Array.isArray(data.players)) return data.players;
+    if (data.players && typeof data.players === 'object') {
+      const list: any[] = [];
+      const posKeys = ['st', 'cam', 'lm', 'cm', 'rm', 'cdm', 'cb', 'gk', 'sub'];
+      for (const key of posKeys) {
+        const arr = data.players[key] || [];
+        for (const p of arr) {
+          list.push({
+            targetPosition: key.toUpperCase(),
+            gamertag: p.display_name || p.username || 'Player',
+            club: p.team_name || 'Free Agent',
+            gamesPlayed: p.matches_played || 0,
+            goals: p.goals || 0,
+            assists: p.assists || 0,
+            averageRating: p.rating ? Number(p.rating).toFixed(1) : '-',
+            manOfTheMatch: p.motm || 0,
+            cleanSheets: p.clean_sheets || 0,
+          });
+        }
+      }
+      return list;
+    }
+    return [];
+  });
 
   readonly selectedLeague = signal<string>('Superliga-Romania');
   readonly selectedLeagueTitle = signal<string>('Superliga România');

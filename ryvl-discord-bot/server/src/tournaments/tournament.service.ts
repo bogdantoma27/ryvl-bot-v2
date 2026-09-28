@@ -43,7 +43,8 @@ export interface TournamentSignupItem {
   userId: string;
   displayName: string;
   gamertag: string;
-  pos1: string;
+  teamName?: string;
+  pos1?: string;
   pos2?: string;
   isBackup?: boolean;
   isManager?: boolean;
@@ -140,9 +141,9 @@ export class TournamentService {
   ) {
     const type = data.type === 'DRAFT' ? 'DRAFT' : 'STANDARD';
     const formation = normalizeDraftFormation(data.formation);
-    const numTeams = data.numTeams || 6;
+    const numTeams = data.numTeams || 32;
 
-    const defaultTeams: TournamentTeamRoster[] = Array.from({ length: numTeams }, (_, i) => ({
+    const defaultTeams: TournamentTeamRoster[] = Array.from({ length: 8 }, (_, i) => ({
       id: `team_${i + 1}`,
       name: `FC 27 Draft RO ${i + 1}`,
       managerName: undefined,
@@ -152,13 +153,13 @@ export class TournamentService {
     // Snake draft order: 10 rounds of picking to complete an 11-player squad
     const snakeOrder: number[] = [];
     for (let round = 0; round < 10; round++) {
-      const roundOrder = Array.from({ length: numTeams }, (_, i) => i);
+      const roundOrder = Array.from({ length: 8 }, (_, i) => i);
       if (round % 2 === 1) roundOrder.reverse();
       snakeOrder.push(...roundOrder);
     }
 
     const teamJokers: Record<number, number> = {};
-    for (let i = 0; i < numTeams; i++) {
+    for (let i = 0; i < 8; i++) {
       teamJokers[i] = 4; // 4 jokers per team as defined in rules
     }
 
@@ -191,10 +192,14 @@ export class TournamentService {
 
   async addSignup(
     tournamentId: string,
-    data: { userId: string; displayName: string; gamertag: string; pos1: string; pos2?: string; notes?: string; isManager?: boolean },
+    data: { userId: string; displayName: string; gamertag: string; teamName?: string; pos1?: string; pos2?: string; notes?: string; isManager?: boolean },
   ) {
     const t = await this.getTournament(tournamentId);
     const signups: TournamentSignupItem[] = (t.signupsData as any) || [];
+
+    if (signups.length >= 32) {
+      throw new BadRequestException('Turneul este deja complet (maxim 32 echipe / participanți)!');
+    }
 
     const existingIdx = signups.findIndex((s) => s.userId === data.userId);
     const newEntry: TournamentSignupItem = {
@@ -202,11 +207,12 @@ export class TournamentService {
       userId: data.userId,
       displayName: data.displayName,
       gamertag: data.gamertag,
-      pos1: data.pos1,
+      teamName: data.teamName,
+      pos1: data.pos1 || 'ALL',
       pos2: data.pos2,
-      isManager: Boolean(data.isManager),
+      isManager: Boolean(data.isManager || data.teamName),
       notes: data.notes,
-      isBackup: signups.length >= 66,
+      isBackup: signups.length >= 32,
       createdAt: new Date().toISOString(),
     };
 
@@ -237,6 +243,77 @@ export class TournamentService {
     return updated;
   }
 
+  async finalizeTournamentBracket(tournamentId: string) {
+    const tournament = await this.getTournament(tournamentId);
+    const signups: TournamentSignupItem[] = (tournament.signupsData as any) || [];
+    const total = signups.length;
+
+    let bracketSize = 0;
+    if (total >= 32) bracketSize = 32;
+    else if (total >= 16) bracketSize = 16;
+    else if (total >= 8) bracketSize = 8;
+    else {
+      throw new BadRequestException(`Sunt necesare minim 8 echipe înscrise (în prezent sunt ${total}).`);
+    }
+
+    const accepted = signups.slice(0, bracketSize);
+    const excess = signups.slice(bracketSize);
+
+    // Notify each cut team captain
+    for (let i = 0; i < excess.length; i++) {
+      const cut = excess[i];
+      const spot = bracketSize + i + 1;
+      const teamLabel = cut.teamName || cut.displayName;
+      try {
+        const user = await this.discordService.client.users.fetch(cut.userId);
+        if (user) {
+          await user.send(
+            `⚠️ **Notificare Turneu — ${tournament.name}**\n\n` +
+            `Pe baza înscrierilor, turneul a fost configurat pentru un tablou de **${bracketSize} echipe**.\n` +
+            `Echipa ta **${teamLabel}** a fost înregistrată pe poziția #${spot} și nu a putut fi inclusă pe tabloul principal în această ediție.\n\n` +
+            `Îți mulțumim pentru participare și te așteptăm cu drag la ediția următoare!`,
+          );
+        }
+      } catch {
+        const channels = (tournament.discordChannels as any) || {};
+        const notifyChanId = channels.announcements || channels.chat || channels.registration;
+        if (notifyChanId) {
+          try {
+            await this.discordService.sendMessageToChannel(
+              notifyChanId,
+              new EmbedBuilder()
+                .setTitle(`⚠️ Notificare Înscriere — ${tournament.name}`)
+                .setColor(0xf39c12)
+                .setDescription(
+                  `<@${cut.userId}>: Echipa **${teamLabel}** (poziția #${spot}) nu a putut fi inclusă în tabloul principal de **${bracketSize} echipe**.\nMulțumim pentru înscriere!`,
+                ),
+            );
+          } catch {
+            // ignore channel ping failure
+          }
+        }
+      }
+    }
+
+    // Convert accepted signups to teamsData
+    const teamsData: TournamentTeamRoster[] = accepted.map((s, idx) => ({
+      id: `team_${idx + 1}`,
+      name: s.teamName || (tournament.type === 'DRAFT' ? `Draft Team ${idx + 1}` : `${s.displayName}'s Team`),
+      managerName: s.displayName,
+      picks: [],
+    }));
+
+    const updated = await this.prisma.tournamentInstance.update({
+      where: { id: tournamentId },
+      data: {
+        status: 'ACTIVE',
+        teamsData: teamsData as any,
+      },
+    });
+
+    return { tournament: updated, bracketSize, cutCount: excess.length };
+  }
+
   // ----------------------------------------------------
   // Discord-Native Draft Wheel System
   // ----------------------------------------------------
@@ -265,7 +342,7 @@ export class TournamentService {
 
     // Filter available candidates
     const available = signups.filter((s) => !s.isBackup && !pickedUserIds.has(s.userId));
-    let candidates = available.filter((s) => s.pos1.toUpperCase() === position.toUpperCase());
+    let candidates = available.filter((s) => s.pos1 && s.pos1.toUpperCase() === position.toUpperCase());
 
     if (candidates.length === 0) {
       // Fallback to secondary position
@@ -313,7 +390,7 @@ export class TournamentService {
       (s) => !s.isBackup && !pickedUserIds.has(s.userId) && s.userId !== draft.currentCandidate?.userId,
     );
 
-    let candidates = available.filter((s) => s.pos1.toUpperCase() === draft.currentLockedPosition);
+    let candidates = available.filter((s) => s.pos1 && s.pos1.toUpperCase() === draft.currentLockedPosition);
     if (candidates.length === 0) {
       candidates = available.filter((s) => s.pos2 && s.pos2.toUpperCase() === draft.currentLockedPosition);
     }
@@ -661,31 +738,58 @@ export class TournamentService {
   async postRegistrationEmbed(channelId: string, tournament: any) {
     const signups: TournamentSignupItem[] = (tournament.signupsData as any) || [];
     const formation = normalizeDraftFormation(tournament.formation);
+    const count = signups.length;
 
-    const participantsList = signups.length > 0
-      ? signups
-          .slice(0, 20)
-          .map((s, idx) => `${idx + 1}. **${s.displayName}** (\`${s.gamertag}\` - ${s.pos1})`)
-          .join('\n')
-      : 'No participants registered yet.';
+    let participantsList = 'No participants or teams registered yet.';
+    if (count > 0) {
+      const lines: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const s = signups[i];
+        const label = s.teamName
+          ? `**${s.teamName}** (Captain: <@${s.userId}> • \`${s.gamertag}\`)`
+          : `**${s.displayName}** (\`${s.gamertag}\` - ${s.pos1})`;
+        lines.push(`${i + 1}. ${label}`);
+
+        // Milestone arrows:
+        // - At 8 teams: show ⬆️ 8-team tournament unless >= 16
+        // - At 16 teams: show ⬆️ 16-team tournament unless >= 32
+        // - At 32 teams: show ⬆️ 32-team tournament (Full)
+        if (i === 7 && count < 16) {
+          lines.push(`⬆️ **8-team tournament**`);
+        } else if (i === 15 && count < 32) {
+          lines.push(`⬆️ **16-team tournament**`);
+        } else if (i === 31) {
+          lines.push(`⬆️ **32-team tournament (Full)**`);
+        }
+      }
+      participantsList = lines.join('\n');
+    }
+
+    const isFull = count >= 32;
+    const statusText = isFull ? 'REGISTRATION_CLOSED (FULL)' : tournament.status;
 
     const embed = new EmbedBuilder()
       .setTitle(`📋 Registration Portal — ${tournament.name}`)
-      .setColor(0x00d26a)
+      .setColor(isFull ? 0xed4245 : 0x00d26a)
       .setDescription(
-        `⭐ **Registration Status**: \`${tournament.status}\`\n\n` +
-        `**Registered Participants** (${signups.length} Players):\n${participantsList}\n\n` +
-        `• Formation: **${formation}**\n` +
-        `• Click **Sign Up** below to register your gamertag and position.`,
+        `⭐ **Registration Status**: \`${statusText}\`\n\n` +
+        `**Registered Participants / Teams** (${count} Registered):\n${participantsList}\n\n` +
+        `• Format: **${tournament.type === 'DRAFT' ? 'FC Draft Wheel' : 'Standard Tournament'}**\n` +
+        `• Tactical Formation: **${formation}**\n` +
+        `• Bracket Sizing: **Auto-scales to 8, 16, or 32 teams**\n` +
+        (isFull
+          ? `🚫 **Registration is now full (32 teams reached)!**`
+          : `• Click **Sign Up** below to register your team or gamertag.`),
       )
       .setFooter({ text: 'RYVL Esports Bot • Tournament Registration' });
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(`tourney:signup:${tournament.id}`)
-        .setLabel('Sign Up')
-        .setStyle(ButtonStyle.Success)
-        .setEmoji('⬆'),
+        .setLabel(isFull ? 'Registration Full' : 'Sign Up')
+        .setStyle(isFull ? ButtonStyle.Secondary : ButtonStyle.Success)
+        .setEmoji('⬆')
+        .setDisabled(isFull),
       new ButtonBuilder()
         .setCustomId(`tourney:pullout:${tournament.id}`)
         .setLabel('Pull Out')
