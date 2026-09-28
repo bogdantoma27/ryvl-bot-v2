@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { rrulestr, RRule } from 'rrule';
 import { OccurrenceStatus } from '@prisma/client';
-import { formatEventDateTime, parseEventDateTime } from './event-time';
 
 export interface RecurrenceEventInput {
   id: string;
@@ -47,8 +46,6 @@ export class RecurrenceService {
     try {
       // Ensure DTSTART is provided if not present in the RRULE string
       let ruleString = event.rrule.trim();
-      const tzidMatch = /TZID=([^:\s;]+)/i.exec(ruleString);
-      const tzid = tzidMatch ? tzidMatch[1] : null;
 
       let rule: RRule;
       if (ruleString.includes('DTSTART')) {
@@ -57,25 +54,12 @@ export class RecurrenceService {
         rule = rrulestr(ruleString, { dtstart: anchorDate }) as RRule;
       }
 
-      let queryFrom = fromDate;
-      if (tzid) {
-        const local = formatEventDateTime(fromDate, tzid);
-        queryFrom = new Date(`${local.date}T${local.time}:00.000Z`);
-      }
-
       const occurrences: GeneratedOccurrence[] = [];
-      let currentDate: Date | null = rule.after(queryFrom, true);
+      let currentDate: Date | null = rule.after(fromDate, true);
       let index = 0;
 
       while (currentDate && index < count) {
-        let startsAt: Date;
-        if (tzid) {
-          const dStr = currentDate.toISOString().slice(0, 10);
-          const tStr = currentDate.toISOString().slice(11, 16);
-          startsAt = parseEventDateTime(dStr, tStr, tzid) || new Date(currentDate);
-        } else {
-          startsAt = new Date(currentDate);
-        }
+        const startsAt = new Date(currentDate);
         const endsAt = new Date(startsAt.getTime() + durationMinutes * 60 * 1000);
 
         occurrences.push({
