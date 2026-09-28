@@ -20,6 +20,7 @@ import {
   TextChannel,
   Message,
   AttachmentBuilder,
+  PermissionFlagsBits,
 } from 'discord.js';
 import { ConfigService } from '../config/config.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -37,6 +38,8 @@ import { EaCommands } from './commands/ea-commands';
 import { VpgCommands } from './commands/vpg-commands';
 import { SuperligaCommands } from './commands/superliga-commands';
 import { RyvlCommands } from './commands/ryvl-commands';
+import { TotwCommands } from './commands/totw-commands';
+import { TournamentCommands } from './commands/tournament-commands';
 import { RsvpButtonHandler } from './interactions/rsvp-button.handler';
 
 
@@ -86,6 +89,10 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     private readonly superligaCommands: SuperligaCommands,
     @Inject(forwardRef(() => RyvlCommands))
     private readonly ryvlCommands: RyvlCommands,
+    @Inject(forwardRef(() => TotwCommands))
+    private readonly totwCommands: TotwCommands,
+    @Inject(forwardRef(() => TournamentCommands))
+    private readonly tournamentCommands: TournamentCommands,
   ) {
     this.client = new Client({
       intents: [
@@ -194,6 +201,12 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             await this.eaCommands.handleStats(interaction);
           } else if (interaction.commandName === 'ea_latest') {
             await this.eaCommands.handleLatest(interaction);
+          } else if (interaction.commandName === 'stats') {
+            await this.eaCommands.handlePlayerStats(interaction);
+          } else if (interaction.commandName === 'register-player') {
+            await this.eaCommands.handleRegisterPlayer(interaction);
+          } else if (interaction.commandName === 'unregister-player') {
+            await this.eaCommands.handleUnregisterPlayer(interaction);
           } else if (interaction.commandName === 'vpg_transfers') {
             const subcommand = interaction.options.getSubcommand();
             if (subcommand === 'setup') {
@@ -209,6 +222,10 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             await this.superligaCommands.handleLiveResults(interaction);
           } else if (interaction.commandName === 'ryvl') {
             await this.ryvlCommands.handleRyvl(interaction);
+          } else if (interaction.commandName === 'totw') {
+            await this.totwCommands.handleTotw(interaction);
+          } else if (interaction.commandName === 'tournament') {
+            await this.tournamentCommands.handleTournament(interaction);
           }
         } else if (interaction.isAutocomplete()) {
 
@@ -230,6 +247,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             await this.lineupPostCommand.handleSetupModalSubmit(interaction);
           } else if (interaction.customId.startsWith(LINEUP_MODAL_CUSTOM_PREFIX)) {
             await this.lineupPostCommand.handleCustomNameModalSubmit(interaction);
+          } else if (interaction.customId.startsWith('tourney:')) {
+            await this.tournamentCommands.handleModalSubmit(interaction);
           }
         } else if (interaction.isUserSelectMenu()) {
           if (interaction.customId.startsWith('lineup:user:')) {
@@ -240,6 +259,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             await this.rsvpButtonHandler.handle(interaction);
           } else if (interaction.customId.startsWith('lineup:')) {
             await this.lineupPostCommand.handleButton(interaction);
+          } else if (interaction.customId.startsWith('tourney:')) {
+            await this.tournamentCommands.handleButton(interaction);
           } else if (interaction.customId.startsWith('event:edit:')) {
             const eventId = interaction.customId.replace('event:edit:', '');
             await this.eventEditCommand.showModal(interaction, eventId);
@@ -511,6 +532,29 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     const message = await textChannel.messages.fetch(messageId).catch(() => null);
     if (message) {
       await message.delete();
+    }
+  }
+
+  async checkUserIsAdmin(guildId: string, userId: string): Promise<boolean> {
+    try {
+      const clientGuild =
+        this.client.guilds.cache.get(guildId) ||
+        (await this.client.guilds.fetch(guildId).catch(() => null));
+      if (!clientGuild) return false;
+      if (clientGuild.ownerId === userId) return true;
+
+      const member =
+        clientGuild.members.cache.get(userId) ||
+        (await clientGuild.members.fetch(userId).catch(() => null));
+      if (!member) return false;
+
+      return (
+        member.permissions.has(PermissionFlagsBits.Administrator) ||
+        member.permissions.has(PermissionFlagsBits.ManageGuild)
+      );
+    } catch (err: any) {
+      this.logger.warn(`Could not verify admin permissions for user ${userId} in guild ${guildId}: ${err?.message || err}`);
+      return false;
     }
   }
 }

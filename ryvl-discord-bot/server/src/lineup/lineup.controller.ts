@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
+import { GuildAdminGuard } from '../auth/guild-admin.guard';
 import { CurrentUser } from '../auth/user.decorator';
 import type { JwtPayload } from '../auth/auth.service';
 import {
@@ -54,7 +55,7 @@ export class LineupController {
   }
 
   @Post('post')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postLineup(
     @Param('guildId') guildId: string,
     @Body() dto: LineupPostDto,
@@ -63,13 +64,13 @@ export class LineupController {
   }
 
   @Get('drafts')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async listDrafts(@Param('guildId') guildId: string) {
     return this.lineupService.listDrafts(guildId);
   }
 
   @Get('drafts/:draftId')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async getDraft(
     @Param('guildId') guildId: string,
     @Param('draftId') draftId: string,
@@ -78,6 +79,7 @@ export class LineupController {
   }
 
   @Post('drafts')
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async createDraft(
     @Param('guildId') guildId: string,
     @CurrentUser() user: JwtPayload,
@@ -87,6 +89,7 @@ export class LineupController {
   }
 
   @Patch('drafts/:draftId')
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async updateDraft(
     @Param('guildId') guildId: string,
     @Param('draftId') draftId: string,
@@ -96,6 +99,7 @@ export class LineupController {
   }
 
   @Delete('drafts/:draftId')
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async deleteDraft(
     @Param('guildId') guildId: string,
     @Param('draftId') draftId: string,

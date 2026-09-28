@@ -28,10 +28,21 @@ export const authGuard: CanMatchFn = async () => {
 
 export const routes: Routes = [
   // ---------------------------------------------------------------------------
+  // Bot Console Subdomain Handler (bot.ryvl.top)
+  // ---------------------------------------------------------------------------
+  {
+    path: '',
+    pathMatch: 'full',
+    canMatch: [() => typeof window !== 'undefined' && window.location.hostname.startsWith('bot.')],
+    redirectTo: 'admin/dashboard',
+  },
+
+  // ---------------------------------------------------------------------------
   // Public Organization Website (Official RYVL Esports Shell & Pages)
   // ---------------------------------------------------------------------------
   {
     path: '',
+    canMatch: [() => typeof window === 'undefined' || !window.location.hostname.startsWith('bot.')],
     loadComponent: () =>
       import('./features/public/public-shell.component').then((m) => m.PublicShellComponent),
     children: [
@@ -90,16 +101,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/public/contact.component').then((m) => m.ContactComponent),
       },
-      // Public viewer access to Club & Transfers from website
+      // Public viewer access to Club from website
       {
         path: 'club',
         loadComponent: () =>
           import('./features/public/club.component').then((m) => m.PublicClubComponent),
-      },
-      {
-        path: 'transfers',
-        loadComponent: () =>
-          import('./features/vpg-transfers/vpg-transfers.component').then((m) => m.VpgTransfersComponent),
       },
     ],
   },
@@ -167,6 +173,18 @@ export const routes: Routes = [
       import('./features/vpg-transfers/vpg-transfers.component').then((m) => m.VpgTransfersComponent),
   },
   {
+    path: 'admin/totw',
+    canMatch: [authGuard],
+    loadComponent: () =>
+      import('./features/totw/admin-totw.component').then((m) => m.AdminTotwComponent),
+  },
+  {
+    path: 'admin/tournaments',
+    canMatch: [authGuard],
+    loadComponent: () =>
+      import('./features/tournaments/admin-tournaments.component').then((m) => m.AdminTournamentsComponent),
+  },
+  {
     path: 'admin/performance',
     canMatch: [authGuard],
     loadComponent: () =>
@@ -209,10 +227,23 @@ export const routes: Routes = [
     redirectTo: 'admin/lineup/drafts',
   },
   {
+    path: 'totw',
+    redirectTo: 'admin/totw',
+  },
+  {
+    path: 'tournaments',
+    redirectTo: 'admin/tournaments',
+  },
+  {
     path: 'settings',
     redirectTo: 'admin/settings',
   },
 
+  {
+    path: '**',
+    canMatch: [() => typeof window !== 'undefined' && window.location.hostname.startsWith('bot.')],
+    redirectTo: 'admin/dashboard',
+  },
   {
     path: '**',
     redirectTo: '',

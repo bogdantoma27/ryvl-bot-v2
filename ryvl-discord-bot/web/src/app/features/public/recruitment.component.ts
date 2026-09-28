@@ -78,9 +78,9 @@ import { ApiService } from '../../core/api.service';
           } @else {
             <form (ngSubmit)="submitApplication()" class="space-y-6">
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                <!-- Gamertag / EA ID -->
+                <!-- Gamertag (PSN/Xbox/PC ID) -->
                 <div>
-                  <label class="block text-xs font-semibold text-slate-300 mb-1.5">EA SPORTS FC 27 ID / PSN *</label>
+                  <label class="block text-xs font-semibold text-slate-300 mb-1.5">Gamertag (PSN/Xbox/PC ID) <span class="text-[#EAE905]">*</span></label>
                   <input
                     type="text"
                     required

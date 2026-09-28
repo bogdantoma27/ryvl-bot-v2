@@ -2,7 +2,7 @@
 export const SOCIAL_LINKS = {
   discord: 'https://discord.gg/nEvvHvqZQX',
   twitch: 'https://twitch.tv/ryvlesports',
-  youtube: 'https://www.youtube.com/@ryvlesports',
+  youtube: 'https://www.youtube.com/@mardem3970',
 } as const;
 export function isRyvlName(value: unknown): boolean {
   if (typeof value !== 'string') return false;

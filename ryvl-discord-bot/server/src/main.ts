@@ -12,11 +12,19 @@ async function bootstrap(): Promise<void> {
   // Local development still works when FRONTEND_URL explicitly names localhost.
   // CORS is a browser policy, not a replacement for endpoint authentication.
   const frontendOrigin = new URL(configService.frontendUrl).origin;
+  const isLocalDev = frontendOrigin.includes('localhost') || frontendOrigin.includes('127.0.0.1');
+  const allowedOrigins = new Set([
+    frontendOrigin,
+    'https://ryvl.top',
+    'https://www.ryvl.top',
+    'https://bot.ryvl.top',
+    ...(isLocalDev ? ['http://localhost:4200', 'http://127.0.0.1:4200'] : []),
+  ]);
   app.enableCors({
     origin: (
       origin: string | undefined,
       callback: (err: Error | null, allow?: boolean) => void,
-    ) => callback(null, !origin || origin === frontendOrigin),
+    ) => callback(null, !origin || allowedOrigins.has(origin)),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],

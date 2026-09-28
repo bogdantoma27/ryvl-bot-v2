@@ -23,6 +23,10 @@ import {
   ContactSubmission,
   RecruitmentSubmission,
   RosterPlayer,
+  RegisteredDiscordPlayer,
+  PlayerRegistrationAudit,
+  TotwConfig,
+  TournamentInstance,
 } from './models';
 
 const DEVELOPMENT_API_BASE_URL = 'http://localhost:3000';
@@ -674,6 +678,169 @@ export class ApiService {
     return firstValueFrom(this.http.post<{ updated: number; skipped: number; failed: number; inspected: number; limit: number }>(`${this.baseUrl}/api/guilds/${guildId}/vpg/notifications/repair-club-links`, {}, { headers: this.headers() }));
   }
 
+  // ----------------------------------------------------
+  // EA Pro Clubs Player Registrations & Individual Stats
+  // ----------------------------------------------------
+
+  getRegisteredPlayers(guildId: string): Promise<RegisteredDiscordPlayer[]> {
+    return firstValueFrom(
+      this.http.get<RegisteredDiscordPlayer[]>(`${this.baseUrl}/api/guilds/${guildId}/ea/players`, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  registerPlayer(
+    guildId: string,
+    body: { discordUserId: string; eaPlayerName: string; preferredPos?: string },
+  ): Promise<RegisteredDiscordPlayer> {
+    return firstValueFrom(
+      this.http.post<RegisteredDiscordPlayer>(`${this.baseUrl}/api/guilds/${guildId}/ea/players`, body, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  unregisterPlayer(guildId: string, discordUserId: string): Promise<{ success: boolean; unlinked: string }> {
+    return firstValueFrom(
+      this.http.delete<{ success: boolean; unlinked: string }>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/players/${discordUserId}`,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  getPlayerRegistrationAudit(guildId: string): Promise<PlayerRegistrationAudit[]> {
+    return firstValueFrom(
+      this.http.get<PlayerRegistrationAudit[]>(`${this.baseUrl}/api/guilds/${guildId}/ea/players-audit`, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  getPlayerStats(guildId: string, identifier: string): Promise<any> {
+    return firstValueFrom(
+      this.http.get<any>(`${this.baseUrl}/api/guilds/${guildId}/ea/players/${identifier}/stats`, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  // ----------------------------------------------------
+  // VPG Team of the Week (TOTW)
+  // ----------------------------------------------------
+
+  getTotwConfig(guildId: string, leagueSlug = 'Superliga-Romania'): Promise<TotwConfig> {
+    return firstValueFrom(
+      this.http.get<TotwConfig>(`${this.baseUrl}/api/guilds/${guildId}/vpg/totw/config`, {
+        headers: this.headers(),
+        params: { leagueSlug },
+      }),
+    );
+  }
+
+  updateTotwConfig(
+    guildId: string,
+    leagueSlug: string,
+    body: { channelId?: string | null; formation?: string; enabled?: boolean; cronSchedule?: string },
+  ): Promise<TotwConfig> {
+    return firstValueFrom(
+      this.http.patch<TotwConfig>(`${this.baseUrl}/api/guilds/${guildId}/vpg/totw/config`, body, {
+        headers: this.headers(),
+        params: { leagueSlug },
+      }),
+    );
+  }
+
+  getTotwPreview(guildId: string, leagueSlug = 'Superliga-Romania', isTots = false): Promise<any> {
+    return firstValueFrom(
+      this.http.get<any>(`${this.baseUrl}/api/guilds/${guildId}/vpg/totw/preview`, {
+        headers: this.headers(),
+        params: { leagueSlug, isTots: String(isTots) },
+      }),
+    );
+  }
+
+  postTotw(guildId: string, body: { channelId?: string; isTots?: boolean }): Promise<{ success: boolean; messageId?: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; messageId?: string }>(`${this.baseUrl}/api/guilds/${guildId}/vpg/totw/post`, body, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  // ----------------------------------------------------
+  // FC Draft RO Tournaments
+  // ----------------------------------------------------
+
+  getTournaments(guildId: string): Promise<TournamentInstance[]> {
+    return firstValueFrom(
+      this.http.get<TournamentInstance[]>(`${this.baseUrl}/api/guilds/${guildId}/tournaments`, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  createTournament(
+    guildId: string,
+    body: { name: string; formation?: string; numTeams?: number },
+  ): Promise<TournamentInstance> {
+    return firstValueFrom(
+      this.http.post<TournamentInstance>(`${this.baseUrl}/api/guilds/${guildId}/tournaments`, body, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  getTournament(guildId: string, tournamentId: string): Promise<TournamentInstance> {
+    return firstValueFrom(
+      this.http.get<TournamentInstance>(`${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}`, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  provisionTournamentDiscord(guildId: string, tournamentId: string): Promise<{ success: boolean; categoryId: string; channels: any }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; categoryId: string; channels: any }>(
+        `${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/provision-discord`,
+        {},
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  addTournamentSignup(
+    guildId: string,
+    tournamentId: string,
+    body: { userId: string; displayName: string; gamertag: string; pos1: string; pos2?: string; notes?: string },
+  ): Promise<any> {
+    return firstValueFrom(
+      this.http.post<any>(`${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/signups`, body, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  removeTournamentSignup(guildId: string, tournamentId: string, userId: string): Promise<any> {
+    return firstValueFrom(
+      this.http.delete<any>(`${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/signups/${userId}`, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  recordTournamentResult(
+    guildId: string,
+    tournamentId: string,
+    body: { homeTeam: string; awayTeam: string; homeScore: number; awayScore: number },
+  ): Promise<any> {
+    return firstValueFrom(
+      this.http.post<any>(`${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/results`, body, {
+        headers: this.headers(),
+      }),
+    );
+  }
 }
 
 

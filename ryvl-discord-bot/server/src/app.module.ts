@@ -10,6 +10,7 @@ import { SchedulerModule } from './scheduler/scheduler.module';
 import { LineupModule } from './lineup/lineup.module';
 import { EaModule } from './ea/ea.module';
 import { VpgModule } from './vpg/vpg.module';
+import { TournamentModule } from './tournaments/tournament.module';
 
 import { AppController } from './app.controller';
 
@@ -26,6 +27,7 @@ import { AppController } from './app.controller';
     LineupModule,
     EaModule,
     VpgModule,
+    TournamentModule,
   ],
   controllers: [AppController],
 })

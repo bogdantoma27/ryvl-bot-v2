@@ -29,10 +29,37 @@ www.ryvl.top {
 	redir https://ryvl.top{uri} 308
 }
 
+# Bot Admin Console subdomain
+bot.ryvl.top {
+	encode zstd gzip
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+
+	@api path /api /api/*
+	handle @api {
+		reverse_proxy 127.0.0.1:3000
+	}
+
+	handle {
+		root * /var/www/ryvl
+		route {
+			try_files {path} /index.html
+			@entry path /index.html /release.json
+			header @entry Cache-Control "no-cache"
+			file_server
+		}
+	}
+}
+
 # Explicit HTTP routes avoid a two-hop www redirect; the catch-all also moves
 # legacy IP bookmarks to the canonical site. ACME challenges remain automatic.
 http://ryvl.top, http://www.ryvl.top {
 	redir https://ryvl.top{uri} 308
+}
+http://bot.ryvl.top {
+	redir https://bot.ryvl.top{uri} 308
 }
 :80 {
 	redir https://ryvl.top{uri} 308

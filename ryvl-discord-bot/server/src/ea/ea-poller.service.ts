@@ -175,6 +175,8 @@ export class EaPollerService implements OnModuleInit, OnModuleDestroy {
         },
       });
 
+      await this.eaService.recordMatchPlayerStats(String(latestRaw.matchId), config.clubId, latestRaw);
+
       return { postedCount: 0, latestMatch: latestParsed };
     }
 
@@ -233,6 +235,8 @@ export class EaPollerService implements OnModuleInit, OnModuleDestroy {
             rawPayload: raw as any,
           },
         });
+
+        await this.eaService.recordMatchPlayerStats(matchId, config.clubId, raw);
 
         await this.prisma.clubTrackerConfig.update({
           where: { guildId: config.guildId },

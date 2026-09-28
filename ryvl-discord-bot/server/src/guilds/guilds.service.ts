@@ -270,31 +270,17 @@ export class GuildsService {
               isOwner
             : isOwner;
 
-          if (member || isOwner) {
+          if (hasAdmin) {
             result.push({
               id: guild.id,
               name: guild.name,
               iconUrl: guild.iconURL({ extension: 'png', size: 256 }) || null,
               botPresent: true,
-              hasAdminPermission: hasAdmin,
+              hasAdminPermission: true,
             });
           }
         } catch (memberErr) {
           this.logger.debug(`Could not check user permissions in guild ${guild.id}: ${memberErr}`);
-        }
-      }
-
-      if (result.length === 0) {
-        const dbGuilds = await this.prisma.guild.findMany();
-        for (const g of dbGuilds) {
-          const clientGuild = client.guilds.cache.get(g.id);
-          result.push({
-            id: g.id,
-            name: clientGuild?.name || g.name,
-            iconUrl: clientGuild?.iconURL({ extension: 'png', size: 256 }) || g.iconUrl,
-            botPresent: true,
-            hasAdminPermission: true,
-          });
         }
       }
     } catch (err) {

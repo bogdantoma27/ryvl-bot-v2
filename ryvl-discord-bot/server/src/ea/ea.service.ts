@@ -391,5 +391,236 @@ export class EaService {
       updatedAt: new Date(),
     };
   }
+
+  async recordMatchPlayerStats(matchId: string, clubId: string, raw: EaRawMatch): Promise<void> {
+    try {
+      const clubPlayers = raw.players?.[clubId];
+      if (!clubPlayers || typeof clubPlayers !== 'object') return;
+
+      const timestamp = new Date((raw.timestamp || Date.now() / 1000) * 1000);
+
+      for (const [playerProId, stat] of Object.entries(clubPlayers)) {
+        if (!stat || !stat.playername) continue;
+
+        const rating = parseFloat(String(stat.rating || '0')) || 0;
+        const goals = parseInt(String(stat.goals || '0'), 10) || 0;
+        const assists = parseInt(String(stat.assists || '0'), 10) || 0;
+        const shots = parseInt(String(stat.shots || '0'), 10) || 0;
+        const passesMade = parseInt(String(stat.passesmade || '0'), 10) || 0;
+        const passAttempts = parseInt(String(stat.passattempts || '0'), 10) || 0;
+        const tacklesMade = parseInt(String(stat.tacklesmade || '0'), 10) || 0;
+        const tackleAttempts = parseInt(String(stat.tackleattempts || '0'), 10) || 0;
+        const saves = parseInt(String(stat.saves || '0'), 10) || 0;
+        const mom = stat.mom === true || stat.mom === 1 || String(stat.mom) === '1' ? 1 : 0;
+        const cleanSheetDef = parseInt(String(stat.cleansheetsdef || '0'), 10) || 0;
+        const cleanSheetGk = parseInt(String(stat.cleansheetsgk || '0'), 10) || 0;
+        const redCards = parseInt(String(stat.redcards || '0'), 10) || 0;
+
+        await this.prisma.eaPlayerMatchStat.upsert({
+          where: {
+            eaMatchId_playerProName_clubId: {
+              eaMatchId: matchId,
+              playerProName: stat.playername,
+              clubId,
+            },
+          },
+          update: {
+            rating,
+            goals,
+            assists,
+            shots,
+            passesMade,
+            passAttempts,
+            tacklesMade,
+            tackleAttempts,
+            saves,
+            mom,
+            cleanSheetDef,
+            cleanSheetGk,
+            redCards,
+            pos: stat.pos || null,
+            timestamp,
+          },
+          create: {
+            eaMatchId: matchId,
+            clubId,
+            playerProId: String(playerProId),
+            playerProName: stat.playername,
+            pos: stat.pos || null,
+            rating,
+            goals,
+            assists,
+            shots,
+            passesMade,
+            passAttempts,
+            tacklesMade,
+            tackleAttempts,
+            saves,
+            mom,
+            cleanSheetDef,
+            cleanSheetGk,
+            redCards,
+            timestamp,
+          },
+        });
+      }
+    } catch (err: any) {
+      this.logger.warn(`Failed to persist player match stats for match ${matchId}: ${err?.message || err}`);
+    }
+  }
+
+  async getPlayerStats(guildId: string, playerIdentifier: string) {
+    const trimmed = playerIdentifier.trim();
+
+    // Check if playerIdentifier is a Discord user ID or mention (<@123456>)
+    const mentionMatch = trimmed.match(/^<@!?(\d+)>$/);
+    const discordId = mentionMatch ? mentionMatch[1] : trimmed;
+
+    let registered = await this.prisma.registeredDiscordPlayer.findFirst({
+      where: {
+        guildId,
+        OR: [
+          { discordUserId: discordId },
+          { eaPlayerName: { equals: trimmed, mode: 'insensitive' } },
+        ],
+      },
+    });
+
+    const eaName = registered ? registered.eaPlayerName : trimmed;
+
+    // Fetch individual match records for this player
+    const stats = await this.prisma.eaPlayerMatchStat.findMany({
+      where: {
+        playerProName: { equals: eaName, mode: 'insensitive' },
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 50,
+    });
+
+    const totalMatches = stats.length;
+    let totalGoals = 0;
+    let totalAssists = 0;
+    let totalShots = 0;
+    let totalPassesMade = 0;
+    let totalPassAttempts = 0;
+    let totalTacklesMade = 0;
+    let totalSaves = 0;
+    let totalMom = 0;
+    let totalCleanSheets = 0;
+    let totalRedCards = 0;
+    let ratingSum = 0;
+
+    for (const s of stats) {
+      totalGoals += s.goals;
+      totalAssists += s.assists;
+      totalShots += s.shots;
+      totalPassesMade += s.passesMade;
+      totalPassAttempts += s.passAttempts;
+      totalTacklesMade += s.tacklesMade;
+      totalSaves += s.saves;
+      totalMom += s.mom;
+      totalCleanSheets += Math.max(s.cleanSheetDef, s.cleanSheetGk);
+      totalRedCards += s.redCards;
+      ratingSum += s.rating;
+    }
+
+    const avgRating = totalMatches > 0 ? (ratingSum / totalMatches).toFixed(2) : '0.0';
+    const passAccuracy = totalPassAttempts > 0 ? Math.round((totalPassesMade / totalPassAttempts) * 100) : 0;
+
+    return {
+      eaPlayerName: eaName,
+      discordUserId: registered?.discordUserId || null,
+      preferredPos: registered?.preferredPos || stats[0]?.pos || null,
+      totalMatches,
+      goals: totalGoals,
+      assists: totalAssists,
+      shots: totalShots,
+      avgRating,
+      passesMade: totalPassesMade,
+      passAttempts: totalPassAttempts,
+      passAccuracy,
+      tacklesMade: totalTacklesMade,
+      saves: totalSaves,
+      cleanSheets: totalCleanSheets,
+      redCards: totalRedCards,
+      momAwards: totalMom,
+      recentMatches: stats.slice(0, 5),
+    };
+  }
+
+  async getRegisteredPlayers(guildId: string) {
+    return this.prisma.registeredDiscordPlayer.findMany({
+      where: { guildId },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async registerPlayer(
+    guildId: string,
+    discordUserId: string,
+    eaPlayerName: string,
+    preferredPos?: string,
+    actorId = 'system',
+  ) {
+    const record = await this.prisma.registeredDiscordPlayer.upsert({
+      where: {
+        guildId_discordUserId: { guildId, discordUserId },
+      },
+      update: {
+        eaPlayerName: eaPlayerName.trim(),
+        preferredPos: preferredPos?.trim() || null,
+      },
+      create: {
+        guildId,
+        discordUserId,
+        eaPlayerName: eaPlayerName.trim(),
+        preferredPos: preferredPos?.trim() || null,
+      },
+    });
+
+    await this.prisma.playerRegistrationAudit.create({
+      data: {
+        guildId,
+        action: 'LINK',
+        discordUserId,
+        eaPlayerName: eaPlayerName.trim(),
+        performedById: actorId,
+      },
+    });
+
+    return record;
+  }
+
+  async unregisterPlayer(guildId: string, discordUserId: string, actorId = 'system') {
+    const existing = await this.prisma.registeredDiscordPlayer.findUnique({
+      where: { guildId_discordUserId: { guildId, discordUserId } },
+    });
+
+    if (existing) {
+      await this.prisma.registeredDiscordPlayer.delete({
+        where: { id: existing.id },
+      });
+
+      await this.prisma.playerRegistrationAudit.create({
+        data: {
+          guildId,
+          action: 'UNLINK',
+          discordUserId,
+          eaPlayerName: existing.eaPlayerName,
+          performedById: actorId,
+        },
+      });
+    }
+
+    return { success: true };
+  }
+
+  async getRegistrationAuditLog(guildId: string) {
+    return this.prisma.playerRegistrationAudit.findMany({
+      where: { guildId },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+  }
 }
 

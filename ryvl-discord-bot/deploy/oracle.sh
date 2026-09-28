@@ -48,9 +48,11 @@ if [ ! -s "$WEB_DIST/index.html" ]; then WEB_DIST="$WEB/dist/web"; fi
 test -s "$WEB_DIST/index.html"
 sudo caddy validate --config "$ROOT/ryvl-discord-bot/Caddyfile" --adapter caddyfile
 
-# This is the existing reviewed additive upgrade, never a reset or blanket db push.
+# This is the reviewed additive upgrade, never a reset or blanket db push.
 cd "$SERVER"
 npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
+npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/stats-totw-tournaments.sql
+
 
 # Publish a complete release without deleting files from the current release.
 printf '{"revision":"%s"}\n' "$RELEASE_SHA" > "$WEB_DIST/release.json"

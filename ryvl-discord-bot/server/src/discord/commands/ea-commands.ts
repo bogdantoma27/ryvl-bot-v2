@@ -213,4 +213,126 @@ export class EaCommands {
       await interaction.editReply(`❌ Error posting latest match: ${error.message}`);
     }
   }
+
+  async handlePlayerStats(interaction: ChatInputCommandInteraction): Promise<void> {
+    await interaction.deferReply();
+
+    const guildId = interaction.guildId;
+    if (!guildId) {
+      await interaction.editReply('This command can only be run inside a Discord server.');
+      return;
+    }
+
+    const targetUser = interaction.options.getUser('user');
+    const targetName = interaction.options.getString('player')?.trim();
+
+    let identifier = targetName || (targetUser ? targetUser.id : interaction.user.id);
+    if (identifier.toLowerCase() === 'me') {
+      identifier = interaction.user.id;
+    }
+
+    try {
+      const stats = await this.eaService.getPlayerStats(guildId, identifier);
+
+      if (stats.totalMatches === 0 && !stats.discordUserId) {
+        await interaction.editReply(
+          `⚠️ No stats found for **${stats.eaPlayerName}**.\n\n` +
+          `• If you want to link your account, run: \`/register-player <gamertag>\`\n` +
+          `• Or search by exact in-game Pro Clubs name: \`/stats player: <gamertag>\``,
+        );
+        return;
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle(`👤 ${stats.eaPlayerName} — Pro Clubs Player Stats`)
+        .setColor(0x00d26a)
+        .setDescription(
+          (stats.discordUserId ? `Linked Discord: <@${stats.discordUserId}>\n` : '') +
+          `Position: **${stats.preferredPos || 'All-Rounder'}** • Tracked Matches: **${stats.totalMatches}**`,
+        )
+        .addFields(
+          {
+            name: '⚽ Attack & Output',
+            value:
+              `Goals: **${stats.goals}**\n` +
+              `Assists: **${stats.assists}**\n` +
+              `Shots: **${stats.shots}**`,
+            inline: true,
+          },
+          {
+            name: '⭐ Performance',
+            value:
+              `Average Rating: **${stats.avgRating}**\n` +
+              `Man of the Match: **${stats.momAwards}**\n` +
+              `Red Cards: **${stats.redCards}**`,
+            inline: true,
+          },
+          {
+            name: '🛡️ Defense & Distribution',
+            value:
+              `Pass Accuracy: **${stats.passAccuracy}%** (${stats.passesMade}/${stats.passAttempts})\n` +
+              `Tackles Made: **${stats.tacklesMade}**\n` +
+              `Clean Sheets: **${stats.cleanSheets}**` +
+              (stats.saves > 0 ? `\nSaves: **${stats.saves}**` : ''),
+            inline: true,
+          },
+        )
+        .setFooter({ text: 'RYVL Esports Bot • Continuous Pro Clubs Telemetry' });
+
+      await interaction.editReply({ embeds: [embed] });
+    } catch (err: any) {
+      this.logger.error(`Error in /stats command: ${err?.message || err}`);
+      await interaction.editReply(`❌ Error retrieving player stats: ${err?.message || err}`);
+    }
+  }
+
+  async handleRegisterPlayer(interaction: ChatInputCommandInteraction): Promise<void> {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const guildId = interaction.guildId;
+    if (!guildId) {
+      await interaction.editReply('This command can only be run inside a Discord server.');
+      return;
+    }
+
+    const gamertag = interaction.options.getString('gamertag', true).trim();
+    const position = interaction.options.getString('position')?.trim() || undefined;
+
+    try {
+      await this.eaService.registerPlayer(
+        guildId,
+        interaction.user.id,
+        gamertag,
+        position,
+        interaction.user.id,
+      );
+
+      await interaction.editReply(
+        `✅ Successfully linked your Discord account to EA Pro Clubs gamertag **${gamertag}**` +
+        (position ? ` (Preferred: **${position}**)` : '') +
+        `!\n\nYour match statistics are tracked continuously. You and other members can now check your stats anytime with \`/stats me\` or \`/stats user:@${interaction.user.username}\`.`,
+      );
+    } catch (err: any) {
+      this.logger.error(`Error registering player: ${err?.message || err}`);
+      await interaction.editReply(`❌ Failed to register player: ${err?.message || err}`);
+    }
+  }
+
+  async handleUnregisterPlayer(interaction: ChatInputCommandInteraction): Promise<void> {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const guildId = interaction.guildId;
+    if (!guildId) {
+      await interaction.editReply('This command can only be run inside a Discord server.');
+      return;
+    }
+
+    try {
+      await this.eaService.unregisterPlayer(guildId, interaction.user.id, interaction.user.id);
+      await interaction.editReply('✅ Successfully unlinked your Pro Clubs gamertag.');
+    } catch (err: any) {
+      this.logger.error(`Error unregistering player: ${err?.message || err}`);
+      await interaction.editReply(`❌ Failed to unlink player: ${err?.message || err}`);
+    }
+  }
 }

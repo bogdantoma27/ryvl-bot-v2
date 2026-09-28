@@ -15,6 +15,9 @@ import { VpgModule } from '../vpg/vpg.module';
 import { VpgCommands } from './commands/vpg-commands';
 import { SuperligaCommands } from './commands/superliga-commands';
 import { RyvlCommands } from './commands/ryvl-commands';
+import { TotwCommands } from './commands/totw-commands';
+import { TournamentCommands } from './commands/tournament-commands';
+import { TournamentModule } from '../tournaments/tournament.module';
 
 @Global()
 @Module({
@@ -23,6 +26,7 @@ import { RyvlCommands } from './commands/ryvl-commands';
     EventsModule,
     forwardRef(() => EaModule),
     forwardRef(() => VpgModule),
+    forwardRef(() => TournamentModule),
   ],
   providers: [
     DiscordService,
@@ -37,6 +41,8 @@ import { RyvlCommands } from './commands/ryvl-commands';
     VpgCommands,
     SuperligaCommands,
     RyvlCommands,
+    TotwCommands,
+    TournamentCommands,
   ],
   exports: [DiscordService, RyvlCommands],
 })

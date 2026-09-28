@@ -35,6 +35,10 @@ model Guild {
   ryvlCompetitions       RyvlCompetition[]
   vpgNotificationConfig VpgNotificationConfig?
   vpgNotificationDeliveries VpgNotificationDelivery[]
+  registeredPlayers     RegisteredDiscordPlayer[]
+  totwConfigs           TotwConfig[]
+  tournamentConfig      TournamentConfig?
+  tournamentInstances   TournamentInstance[]
 
   @@map("guilds")
 }
@@ -290,4 +294,115 @@ model VpgNotificationDelivery {
   @@unique([guildId, channelId, topic, itemKey], map: "vpg_delivery_destination_key")
   @@index([guildId, topic])
   @@map("vpg_notification_deliveries")
+}
+
+model EaPlayerMatchStat {
+  id               String   @id @default(uuid())
+  eaMatchId        String   @map("ea_match_id")
+  clubId           String   @map("club_id")
+  playerProId      String   @map("player_pro_id")
+  playerProName    String   @map("player_pro_name")
+  pos              String?
+  rating           Float    @default(0)
+  goals            Int      @default(0)
+  assists          Int      @default(0)
+  shots            Int      @default(0)
+  passesMade       Int      @default(0) @map("passes_made")
+  passAttempts     Int      @default(0) @map("pass_attempts")
+  tacklesMade      Int      @default(0) @map("tackles_made")
+  tackleAttempts   Int      @default(0) @map("tackle_attempts")
+  interceptions    Int      @default(0)
+  saves            Int      @default(0)
+  mom              Int      @default(0)
+  cleanSheetDef    Int      @default(0) @map("clean_sheet_def")
+  cleanSheetGk     Int      @default(0) @map("clean_sheet_gk")
+  redCards         Int      @default(0) @map("red_cards")
+  timestamp        DateTime
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([eaMatchId, playerProName, clubId])
+  @@index([playerProName])
+  @@index([clubId])
+  @@map("ea_player_match_stats")
+}
+
+model RegisteredDiscordPlayer {
+  id               String   @id @default(uuid())
+  guildId          String   @map("guild_id")
+  guild            Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  discordUserId    String   @map("discord_user_id")
+  eaPlayerName     String   @map("ea_player_name")
+  preferredPos     String?  @map("preferred_pos")
+  platform         String?  @default("common-gen5")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([guildId, discordUserId])
+  @@index([guildId, eaPlayerName])
+  @@map("registered_discord_players")
+}
+
+model PlayerRegistrationAudit {
+  id               String   @id @default(uuid())
+  guildId          String   @map("guild_id")
+  action           String   // LINK, UNLINK, UPDATE
+  discordUserId    String   @map("discord_user_id")
+  eaPlayerName     String   @map("ea_player_name")
+  performedById    String   @map("performed_by_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("player_registration_audits")
+}
+
+model TotwConfig {
+  id             String    @id @default(uuid())
+  guildId        String    @map("guild_id")
+  guild          Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  channelId      String?   @map("channel_id")
+  communitySlug  String    @default("VPGRoPS5") @map("community_slug")
+  leagueSlug     String    @default("Superliga-Romania") @map("league_slug")
+  formation      String    @default("433")
+  cronSchedule   String?   @default("0 18 * * 1") @map("cron_schedule")
+  enabled        Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@unique([guildId, leagueSlug])
+  @@map("totw_configs")
+}
+
+model TournamentConfig {
+  id                   String   @id @default(uuid())
+  guildId              String   @unique @map("guild_id")
+  guild                Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  adminChannelId       String?  @map("admin_channel_id")
+  signupChannelId      String?  @map("signup_channel_id")
+  tournamentCategoryId String?  @map("tournament_category_id")
+  resultsChannelId     String?  @map("results_channel_id")
+  chatChannelId        String?  @map("chat_channel_id")
+  standingsChannelId   String?  @map("standings_channel_id")
+  rostersChannelId     String?  @map("rosters_channel_id")
+  adminRoleIds         String[] @default([]) @map("admin_role_ids")
+  captainRoleIds       String[] @default([]) @map("captain_role_ids")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("tournament_configs")
+}
+
+model TournamentInstance {
+  id                String   @id @default(uuid())
+  guildId           String   @map("guild_id")
+  guild             Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  name              String
+  status            String   @default("PENDING") // PENDING, SIGNUPS_OPEN, DRAFTING, ACTIVE, COMPLETED
+  formation         String   @default("3-4-1-2")
+  teamsData         Json     @default("[]") @map("teams_data")
+  signupsData       Json     @default("[]") @map("signups_data")
+  matchesData       Json     @default("[]") @map("matches_data")
+  currentDraftRound Int      @default(1) @map("current_draft_round")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("tournament_instances")
 }

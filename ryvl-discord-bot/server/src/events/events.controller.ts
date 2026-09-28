@@ -6,11 +6,12 @@ import { normalizeEventForm } from './event-form';
 import type { CreateEventDto } from './dto/create-event.dto';
 import type { UpdateEventDto } from './dto/update-event.dto';
 import { AuthGuard } from '../auth/auth.guard';
+import { GuildAdminGuard } from '../auth/guild-admin.guard';
 import { CurrentUser } from '../auth/user.decorator';
 import { JwtPayload } from '../auth/auth.service';
 
 @Controller('api/guilds/:guildId/events')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, GuildAdminGuard)
 export class EventsController {
   constructor(private readonly eventsService: EventsService, private readonly rsvpService: RsvpService) {}
 

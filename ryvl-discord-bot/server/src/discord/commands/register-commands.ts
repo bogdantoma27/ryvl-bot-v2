@@ -95,6 +95,139 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .setName('ea_latest')
     .setDescription('Post the most recent EA Pro Clubs match results immediately');
 
+  const statsCommand = new SlashCommandBuilder()
+    .setName('stats')
+    .setDescription('View Pro Clubs individual player stats or your own record')
+    .addStringOption((opt) =>
+      opt
+        .setName('player')
+        .setDescription('Pro Clubs player gamertag (or "me")')
+        .setRequired(false),
+    )
+    .addUserOption((opt) =>
+      opt
+        .setName('user')
+        .setDescription('Discord member to look up')
+        .setRequired(false),
+    );
+
+  const registerPlayerCommand = new SlashCommandBuilder()
+    .setName('register-player')
+    .setDescription('Link your Discord user account to your EA Pro Clubs gamertag')
+    .addStringOption((opt) =>
+      opt
+        .setName('gamertag')
+        .setDescription('Your in-game Pro Clubs player name')
+        .setRequired(true),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName('position')
+        .setDescription('Preferred position (e.g. ST, CAM, CDM, CB, GK)')
+        .setRequired(false),
+    );
+
+  const unregisterPlayerCommand = new SlashCommandBuilder()
+    .setName('unregister-player')
+    .setDescription('Unlink your Discord account from EA Pro Clubs');
+
+  const totwCommand = new SlashCommandBuilder()
+    .setName('totw')
+    .setDescription('Team of the Week & Team of the Season generator')
+    .addSubcommand((sub) =>
+      sub
+        .setName('post')
+        .setDescription('Generate and post Team of the Week image to Discord')
+        .addChannelOption((opt) =>
+          opt
+            .setName('channel')
+            .setDescription('Target text channel (optional; uses configured channel by default)')
+            .setRequired(false),
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName('league')
+            .setDescription('League slug (e.g. Superliga-Romania, Balkan-Premier)')
+            .setRequired(false),
+        )
+        .addBooleanOption((opt) =>
+          opt
+            .setName('is_tots')
+            .setDescription('True for Team of the Season, false for Team of the Week')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('preview')
+        .setDescription('Preview the generated TOTW visual graphic')
+        .addStringOption((opt) =>
+          opt
+            .setName('league')
+            .setDescription('League slug (e.g. Superliga-Romania, Balkan-Premier)')
+            .setRequired(false),
+        )
+        .addBooleanOption((opt) =>
+          opt
+            .setName('is_tots')
+            .setDescription('True for Team of the Season')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('setup')
+        .setDescription('Configure default channel for TOTW posts')
+        .addChannelOption((opt) =>
+          opt
+            .setName('channel')
+            .setDescription('Announcement text channel')
+            .setRequired(true),
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName('league')
+            .setDescription('League slug (defaults to Superliga-Romania)')
+            .setRequired(false),
+        ),
+    );
+
+  const tournamentCommand = new SlashCommandBuilder()
+    .setName('tournament')
+    .setDescription('FC Draft RO tournament management and setup')
+    .addSubcommand((sub) =>
+      sub
+        .setName('setup-admin')
+        .setDescription('Post the tournament administration control panel with action buttons'),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('create')
+        .setDescription('Create a new tournament and provision Discord category and channels')
+        .addStringOption((opt) =>
+          opt
+            .setName('name')
+            .setDescription('Tournament name (e.g. Cupa României Draft)')
+            .setRequired(true),
+        )
+        .addStringOption((opt) =>
+          opt
+            .setName('formation')
+            .setDescription('Formation (e.g. 3-4-1-2 or 3-5-2)')
+            .setRequired(false),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('status')
+        .setDescription('Check current signup numbers and player registrations'),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('generate-standings')
+        .setDescription('Render and post updated standings table graphic'),
+    );
+
   const vpgTransfersCommand = new SlashCommandBuilder()
     .setName('vpg_transfers')
     .setDescription('VPG Superliga România transfers tracker')
@@ -305,6 +438,11 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     eaSetupCommand.toJSON(),
     eaStatsCommand.toJSON(),
     eaLatestCommand.toJSON(),
+    statsCommand.toJSON(),
+    registerPlayerCommand.toJSON(),
+    unregisterPlayerCommand.toJSON(),
+    totwCommand.toJSON(),
+    tournamentCommand.toJSON(),
     vpgTransfersCommand.toJSON(),
     superligaCommand.toJSON(),
     liveResultsCommand.toJSON(),

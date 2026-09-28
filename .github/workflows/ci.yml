@@ -58,6 +58,8 @@ jobs:
           NODE
           npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
           npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
+          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/stats-totw-tournaments.sql
+          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/stats-totw-tournaments.sql
       - name: Backend build and regression tests
         working-directory: ryvl-discord-bot/server
         run: npm test

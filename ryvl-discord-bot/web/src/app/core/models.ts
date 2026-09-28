@@ -375,3 +375,57 @@ export interface VpgNotificationResponse {
   timezone: string;
   channels: Record<string, string | null | undefined>;
 }
+
+export interface RegisteredDiscordPlayer {
+  id: string;
+  guildId: string;
+  discordUserId: string;
+  eaPlayerName: string;
+  preferredPos?: string | null;
+  registeredBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlayerRegistrationAudit {
+  id: string;
+  guildId: string;
+  discordUserId: string;
+  eaPlayerName: string;
+  action: string;
+  performedBy: string;
+  reason?: string | null;
+  createdAt: string;
+}
+
+export interface TotwConfig {
+  id: string;
+  guildId: string;
+  leagueSlug: string;
+  channelId?: string | null;
+  formation: string;
+  enabled: boolean;
+  cronSchedule: string;
+  lastPostedAt?: string | null;
+}
+
+export interface TournamentInstance {
+  id: string;
+  guildId: string;
+  name: string;
+  status: 'DRAFT' | 'SIGNUPS' | 'ACTIVE' | 'COMPLETED';
+  formation: string;
+  numTeams: number;
+  categoryId?: string | null;
+  chatChannelId?: string | null;
+  resultsChannelId?: string | null;
+  standingsChannelId?: string | null;
+  rostersChannelId?: string | null;
+  signupChannelId?: string | null;
+  signupMessageId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  signups?: any[];
+  teams?: any[];
+  matches?: any[];
+}

@@ -5,6 +5,7 @@ import {
   Get,
   Patch,
   Post,
+  Delete,
   Param,
   Body,
   Query,
@@ -13,6 +14,9 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import { GuildAdminGuard } from '../auth/guild-admin.guard';
+import { CurrentUser } from '../auth/user.decorator';
+import { JwtPayload } from '../auth/auth.service';
 import { EaService } from './ea.service';
 import { EaPollerService } from './ea-poller.service';
 
@@ -160,7 +164,7 @@ export class EaController {
   // ----------------------------------------------------
 
   @Patch('api/guilds/:guildId/ea/config')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async updateConfig(
     @Param('guildId') guildId: string,
     @Body()
@@ -178,7 +182,7 @@ export class EaController {
   }
 
   @Get('api/guilds/:guildId/ea/search')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async searchClubs(
     @Query('query') query: string,
     @Query('platform') platform = 'common-gen5',
@@ -188,7 +192,7 @@ export class EaController {
   }
 
   @Post('api/guilds/:guildId/ea/post-latest')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postLatest(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string },
@@ -197,9 +201,60 @@ export class EaController {
   }
 
   @Post('api/guilds/:guildId/ea/poll-now')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async pollNow(@Param('guildId') guildId: string) {
     const config = await this.eaService.getOrCreateTrackerConfig(guildId);
     return this.eaPollerService.pollGuild(config);
+  }
+
+  // ----------------------------------------------------
+  // Player Registration & Individual Stats Endpoints
+  // ----------------------------------------------------
+
+  @Get('api/guilds/:guildId/ea/players')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async getRegisteredPlayers(@Param('guildId') guildId: string) {
+    return this.eaService.getRegisteredPlayers(guildId);
+  }
+
+  @Post('api/guilds/:guildId/ea/players')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async registerPlayer(
+    @Param('guildId') guildId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { discordUserId: string; eaPlayerName: string; preferredPos?: string },
+  ) {
+    return this.eaService.registerPlayer(
+      guildId,
+      body.discordUserId,
+      body.eaPlayerName,
+      body.preferredPos,
+      user.userId,
+    );
+  }
+
+  @Delete('api/guilds/:guildId/ea/players/:discordUserId')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async unregisterPlayer(
+    @Param('guildId') guildId: string,
+    @CurrentUser() user: JwtPayload,
+    @Param('discordUserId') discordUserId: string,
+  ) {
+    return this.eaService.unregisterPlayer(guildId, discordUserId, user.userId);
+  }
+
+  @Get('api/guilds/:guildId/ea/players/:identifier/stats')
+  @UseGuards(AuthGuard)
+  async getPlayerStats(
+    @Param('guildId') guildId: string,
+    @Param('identifier') identifier: string,
+  ) {
+    return this.eaService.getPlayerStats(guildId, identifier);
+  }
+
+  @Get('api/guilds/:guildId/ea/players-audit')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async getRegistrationAuditLog(@Param('guildId') guildId: string) {
+    return this.eaService.getRegistrationAuditLog(guildId);
   }
 }

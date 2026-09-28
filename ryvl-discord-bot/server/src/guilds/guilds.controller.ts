@@ -1,11 +1,12 @@
 import { Controller, Get, Patch, Param, Body, UseGuards } from '@nestjs/common';
 import { GuildsService, UserGuildItem, GuildBootstrapData } from './guilds.service';
 import { AuthGuard } from '../auth/auth.guard';
+import { GuildAdminGuard } from '../auth/guild-admin.guard';
 import { CurrentUser } from '../auth/user.decorator';
 import { JwtPayload } from '../auth/auth.service';
 
 @Controller('api/guilds')
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, GuildAdminGuard)
 export class GuildsController {
   constructor(private readonly guildsService: GuildsService) {}
 
