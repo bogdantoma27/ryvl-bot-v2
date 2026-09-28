@@ -13,11 +13,6 @@ ryvl.top {
 		reverse_proxy 127.0.0.1:3000
 	}
 
-	@admin path /admin /admin/*
-	handle @admin {
-		redir https://bot.ryvl.top{uri} 308
-	}
-
 	handle {
 		root * /var/www/ryvl
 		route {

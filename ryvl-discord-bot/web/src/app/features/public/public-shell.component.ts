@@ -17,7 +17,7 @@ import { SOCIAL_LINKS } from './presentation';
               <a [routerLink]="item.path" routerLinkActive="public-nav-active" [routerLinkActiveOptions]="{ exact: item.path === '/' }" ariaCurrentWhenActive="page" class="public-nav-link">{{ item.label }}</a>
             }
           </nav>
-          <div class="hidden lg:flex items-center gap-2 shrink-0"><a [href]="social.discord" target="_blank" rel="noopener noreferrer" aria-label="Discord" class="social-brand-link public-button"><img src="/assets/brands/discord.svg" class="social-brand-icon" width="20" height="20" alt="" aria-hidden="true" /><span class="hidden xl:inline">Discord</span></a><a [href]="social.youtube" target="_blank" rel="noopener noreferrer" aria-label="YouTube" class="social-brand-link public-button"><img src="/assets/brands/youtube.svg" class="social-brand-icon" width="20" height="20" alt="" aria-hidden="true" /><span class="hidden xl:inline">YouTube</span></a><a [href]="adminUrl" class="text-xs text-slate-400 hover:text-white px-2 py-2">Admin</a></div>
+          <div class="hidden lg:flex items-center gap-2 shrink-0"><a [href]="social.discord" target="_blank" rel="noopener noreferrer" aria-label="Discord" class="social-brand-link public-button"><img src="/assets/brands/discord.svg" class="social-brand-icon" width="20" height="20" alt="" aria-hidden="true" /><span class="hidden xl:inline">Discord</span></a><a [href]="social.youtube" target="_blank" rel="noopener noreferrer" aria-label="YouTube" class="social-brand-link public-button"><img src="/assets/brands/youtube.svg" class="social-brand-icon" width="20" height="20" alt="" aria-hidden="true" /><span class="hidden xl:inline">YouTube</span></a><a routerLink="/admin/dashboard" class="text-xs text-slate-400 hover:text-white px-2 py-2">Admin</a></div>
           <button type="button" #menuToggle class="lg:hidden public-button" (click)="mobileNavOpen.set(!mobileNavOpen())" [attr.aria-expanded]="mobileNavOpen()" aria-controls="public-mobile-navigation" aria-label="Toggle navigation">{{ mobileNavOpen() ? 'Close' : 'Menu' }}</button>
         </div>
         @if(mobileNavOpen()) {
@@ -25,7 +25,7 @@ import { SOCIAL_LINKS } from './presentation';
             @for (item of navigation; track item.path) {
               <a [routerLink]="item.path" routerLinkActive="public-nav-active" [routerLinkActiveOptions]="{ exact: item.path === '/' }" ariaCurrentWhenActive="page" (click)="mobileNavOpen.set(false)" class="public-nav-link">{{ item.label }}</a>
             }
-            <div class="flex flex-wrap gap-2 pt-3 mt-2 border-t border-white/10"><a [href]="social.discord" target="_blank" rel="noopener noreferrer" class="social-brand-link public-button"><img src="/assets/brands/discord.svg" class="social-brand-icon" width="20" height="20" alt="" aria-hidden="true" />Discord</a><a [href]="social.youtube" target="_blank" rel="noopener noreferrer" class="social-brand-link public-button"><img src="/assets/brands/youtube.svg" class="social-brand-icon" width="20" height="20" alt="" aria-hidden="true" />YouTube</a><a [href]="adminUrl" class="public-button" (click)="mobileNavOpen.set(false)">Admin</a></div>
+            <div class="flex flex-wrap gap-2 pt-3 mt-2 border-t border-white/10"><a [href]="social.discord" target="_blank" rel="noopener noreferrer" class="social-brand-link public-button"><img src="/assets/brands/discord.svg" class="social-brand-icon" width="20" height="20" alt="" aria-hidden="true" />Discord</a><a [href]="social.youtube" target="_blank" rel="noopener noreferrer" class="social-brand-link public-button"><img src="/assets/brands/youtube.svg" class="social-brand-icon" width="20" height="20" alt="" aria-hidden="true" />YouTube</a><a routerLink="/admin/dashboard" class="public-button" (click)="mobileNavOpen.set(false)">Admin</a></div>
           </nav>
         }
       </header>
@@ -37,7 +37,7 @@ import { SOCIAL_LINKS } from './presentation';
             <div><h2 class="font-semibold text-sm text-white mb-4">Explore</h2><div class="grid gap-2.5 text-sm text-slate-400"><a routerLink="/performance" class="hover:text-white">Team performance</a><a routerLink="/match-center" class="hover:text-white">Match Center</a><a routerLink="/club" class="hover:text-white">Club Tracker</a><a routerLink="/docs" class="hover:text-white">Bot Docs</a><a routerLink="/recruitment" class="hover:text-white">Join the team</a><a routerLink="/contact" class="hover:text-white">Contact</a></div></div>
             <div><h2 class="font-semibold text-sm text-white mb-4">Follow RYVL</h2><div class="grid gap-2.5 text-sm text-slate-400"><a [href]="social.discord" target="_blank" rel="noopener noreferrer" class="social-brand-link hover:text-white"><img src="/assets/brands/discord.svg" class="social-brand-icon" width="24" height="24" alt="" aria-hidden="true" />Discord ↗</a><a [href]="social.twitch" target="_blank" rel="noopener noreferrer" class="social-brand-link hover:text-white"><img src="/assets/brands/twitch.svg" class="social-brand-icon" width="24" height="24" alt="" aria-hidden="true" />Twitch ↗</a><a [href]="social.youtube" target="_blank" rel="noopener noreferrer" class="social-brand-link hover:text-white"><img src="/assets/brands/youtube.svg" class="social-brand-icon" width="24" height="24" alt="" aria-hidden="true" />YouTube ↗</a><a href="https://virtualprogaming.com" target="_blank" rel="noopener noreferrer" class="hover:text-white">Virtual Pro Gaming ↗</a></div></div>
           </div>
-          <div class="mt-10 pt-6 border-t border-white/10 flex flex-col lg:flex-row justify-between gap-4 text-xs text-slate-500"><p>© {{ year }} RYVL Esports. Powered by Virtual Pro Gaming &amp; RYVL</p><div class="flex flex-wrap gap-5"><a routerLink="/privacy" class="hover:text-white">Privacy Policy</a><a routerLink="/terms" class="hover:text-white">Terms of Service</a><a [href]="adminUrl" class="hover:text-white">Staff login</a></div></div>
+          <div class="mt-10 pt-6 border-t border-white/10 flex flex-col lg:flex-row justify-between gap-4 text-xs text-slate-500"><p>© {{ year }} RYVL Esports. Powered by Virtual Pro Gaming &amp; RYVL</p><div class="flex flex-wrap gap-5"><a routerLink="/privacy" class="hover:text-white">Privacy Policy</a><a routerLink="/terms" class="hover:text-white">Terms of Service</a><a routerLink="/admin/dashboard" class="hover:text-white">Staff login</a></div></div>
         </div>
       </footer>
     </div>
@@ -53,12 +53,6 @@ export class PublicShellComponent {
     { path: '/club', label: 'Club Tracker' },
     { path: '/recruitment', label: 'Recruitment' }, { path: '/about', label: 'About' }, { path: '/contact', label: 'Contact' },
   ];
-  get adminUrl(): string {
-    if (typeof window !== 'undefined' && (window.location.hostname === 'ryvl.top' || window.location.hostname === 'www.ryvl.top')) {
-      return 'https://bot.ryvl.top/admin';
-    }
-    return '/admin/dashboard';
-  }
   private readonly destroyRef = inject(DestroyRef);
   private readonly cdr = inject(ChangeDetectorRef);
 
