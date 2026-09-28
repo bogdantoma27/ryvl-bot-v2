@@ -28,21 +28,10 @@ export const authGuard: CanMatchFn = async () => {
 
 export const routes: Routes = [
   // ---------------------------------------------------------------------------
-  // Bot Console Subdomain Handler (bot.ryvl.top)
-  // ---------------------------------------------------------------------------
-  {
-    path: '',
-    pathMatch: 'full',
-    canMatch: [() => typeof window !== 'undefined' && window.location.hostname.startsWith('bot.')],
-    redirectTo: 'admin/dashboard',
-  },
-
-  // ---------------------------------------------------------------------------
   // Public Organization Website (Official RYVL Esports Shell & Pages)
   // ---------------------------------------------------------------------------
   {
     path: '',
-    canMatch: [() => typeof window === 'undefined' || !window.location.hostname.startsWith('bot.')],
     loadComponent: () =>
       import('./features/public/public-shell.component').then((m) => m.PublicShellComponent),
     children: [
@@ -239,11 +228,6 @@ export const routes: Routes = [
     redirectTo: 'admin/settings',
   },
 
-  {
-    path: '**',
-    canMatch: [() => typeof window !== 'undefined' && window.location.hostname.startsWith('bot.')],
-    redirectTo: 'admin/dashboard',
-  },
   {
     path: '**',
     redirectTo: '',
