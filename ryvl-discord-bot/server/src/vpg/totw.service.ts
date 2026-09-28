@@ -165,15 +165,17 @@ export class TotwService {
 
     const fillSlot = (slotKey: keyof TotwPositionsMap, sourcePos: string, count: number) => {
       const list = leaderboards[sourcePos] || [];
+      if (!result[slotKey]) result[slotKey] = [];
+      const slot = result[slotKey]!;
       for (const p of list) {
-        if (result[slotKey].length >= count) break;
+        if (slot.length >= count) break;
         const u = p.username || p.player_name;
         if (used.has(u)) continue;
 
         const best = bestFor.get(u);
-        if (!best || best.pos === sourcePos || result[slotKey].length < count) {
+        if (!best || best.pos === sourcePos || slot.length < count) {
           used.add(u);
-          result[slotKey].push(mapToPlayer(p));
+          slot.push(mapToPlayer(p));
         }
       }
     };

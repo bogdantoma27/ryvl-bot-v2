@@ -4,6 +4,7 @@ import {
   EmbedBuilder,
   ChannelType,
   MessageFlags,
+  PermissionFlagsBits,
 } from 'discord.js';
 import { EaService } from '../../ea/ea.service';
 import { EaPollerService } from '../../ea/ea-poller.service';
@@ -18,6 +19,131 @@ export class EaCommands {
     private readonly eaPollerService: EaPollerService,
     private readonly prisma: PrismaService,
   ) {}
+
+  async handleTrackTeam(interaction: ChatInputCommandInteraction): Promise<void> {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const guildId = interaction.guildId;
+    if (!guildId) {
+      await interaction.editReply('This command can only be run inside a Discord server.');
+      return;
+    }
+
+    if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
+      await interaction.editReply('⛔ Only server administrators can configure tracked clubs.');
+      return;
+    }
+
+    const teamName = interaction.options.getString('name', true).trim();
+    const channel = interaction.options.getChannel('channel', true);
+
+    if (
+      channel.type !== ChannelType.GuildText &&
+      channel.type !== ChannelType.GuildAnnouncement
+    ) {
+      await interaction.editReply('Please select a valid text channel for match stats notifications.');
+      return;
+    }
+
+    try {
+      const searchResults = await this.eaService.searchClubs(teamName);
+      if (!searchResults || searchResults.length === 0) {
+        await interaction.editReply(
+          `⚠️ Could not find any EA Pro Clubs matching **"${teamName}"** on EA servers. Please verify the exact spelling.`,
+        );
+        return;
+      }
+
+      const match = searchResults[0];
+      const tracked = await this.eaService.addTrackedClub(
+        guildId,
+        String(match.clubId),
+        match.name || teamName,
+        channel.id,
+        'common-gen5',
+        match.crestUrl,
+      );
+
+      const embed = new EmbedBuilder()
+        .setTitle('⚽ EA Pro Club Added to Multi-Club Tracking')
+        .setColor(0x00d26a)
+        .setDescription(
+          `**${tracked.clubName}** has been verified and registered for continuous match tracking!`,
+        )
+        .addFields(
+          { name: 'Club Name', value: `**${tracked.clubName}**`, inline: true },
+          { name: 'Club ID', value: `\`${tracked.clubId}\``, inline: true },
+          { name: 'Initial ELO', value: `⭐ **${tracked.elo}**`, inline: true },
+          { name: 'Channel', value: `<#${tracked.channelId}>`, inline: true },
+          { name: 'Division', value: match.currentDivision ? `Div ${match.currentDivision}` : 'Pro Clubs', inline: true },
+          { name: 'Record', value: `${match.wins || 0}W - ${match.ties || 0}D - ${match.losses || 0}L`, inline: true },
+        )
+        .setFooter({ text: 'RYVL Esports Bot • Multi-Club Pro Clubs Tracking' });
+
+      if (tracked.crestUrl) {
+        embed.setThumbnail(tracked.crestUrl);
+      }
+
+      await interaction.editReply({ embeds: [embed] });
+    } catch (err: any) {
+      this.logger.error(`Error in /track_team: ${err?.message || err}`);
+      await interaction.editReply(`❌ Error verifying club: ${err?.message || err}`);
+    }
+  }
+
+  async handleTeamStats(interaction: ChatInputCommandInteraction): Promise<void> {
+    await interaction.deferReply();
+
+    const guildId = interaction.guildId;
+    if (!guildId) {
+      await interaction.editReply('This command can only be run inside a Discord server.');
+      return;
+    }
+
+    const clubName = interaction.options.getString('name')?.trim();
+
+    try {
+      const stats = await this.eaService.getClubStats(guildId, clubName);
+
+      const diff = stats.goalDifference;
+      const diffStr = diff >= 0 ? `+${diff}` : `${diff}`;
+
+      const topScorersList = stats.topScorers.length > 0
+        ? stats.topScorers.map((s, idx) => `${idx + 1}. **${s.name}** — **${s.goals}** goals, **${s.assists}** assists (${s.matches} games)`).join('\n')
+        : 'No player match stats recorded yet.';
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🏆 ${stats.clubName} — Club Stats & Form`)
+        .setColor(0x00d26a)
+        .setDescription(
+          `**Record**: **${stats.wins}W - ${stats.draws}D - ${stats.losses}L** (${stats.winRate}% win rate)\n` +
+          `**ELO Rating**: ⭐ **${stats.elo}** • **Tracked Matches**: **${stats.totalMatches}**`,
+        )
+        .addFields(
+          {
+            name: '⚽ Goal Telemetry',
+            value: `Scored: **${stats.goalsFor}**\nConceded: **${stats.goalsAgainst}**\nGoal Diff: **${diffStr}**`,
+            inline: true,
+          },
+          {
+            name: '🛡️ Defense & Consistency',
+            value: `Clean Sheets: **${stats.cleanSheets}**\nClub ID: \`${stats.clubId}\``,
+            inline: true,
+          },
+          {
+            name: '👟 Top Club Performers',
+            value: topScorersList,
+            inline: false,
+          },
+        )
+        .setFooter({ text: 'RYVL Esports Bot • Continuous Pro Clubs Telemetry' });
+
+      await interaction.editReply({ embeds: [embed] });
+    } catch (err: any) {
+      this.logger.error(`Error in /team_stats: ${err?.message || err}`);
+      await interaction.editReply(`❌ Error retrieving team stats: ${err?.message || err}`);
+    }
+  }
 
   async handleSetup(interaction: ChatInputCommandInteraction): Promise<void> {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -224,7 +350,7 @@ export class EaCommands {
     }
 
     const targetUser = interaction.options.getUser('user');
-    const targetName = interaction.options.getString('player')?.trim();
+    const targetName = interaction.options.getString('player')?.trim() || interaction.options.getString('name')?.trim();
 
     let identifier = targetName || (targetUser ? targetUser.id : interaction.user.id);
     if (identifier.toLowerCase() === 'me') {
@@ -256,28 +382,40 @@ export class EaCommands {
             value:
               `Goals: **${stats.goals}**\n` +
               `Assists: **${stats.assists}**\n` +
-              `Shots: **${stats.shots}**`,
+              `Shots: **${stats.shots}**` +
+              (stats.events?.shotsOnTarget ? ` (${stats.events.shotsOnTarget} on target)` : ''),
             inline: true,
           },
           {
-            name: '⭐ Performance',
+            name: '⭐ Performance & Awards',
             value:
               `Average Rating: **${stats.avgRating}**\n` +
               `Man of the Match: **${stats.momAwards}**\n` +
-              `Red Cards: **${stats.redCards}**`,
+              `Red Cards: **${stats.redCards}**` +
+              (stats.events?.yellowCards ? ` • Yellow: **${stats.events.yellowCards}**` : ''),
             inline: true,
           },
           {
-            name: '🛡️ Defense & Distribution',
+            name: '🎯 Passing & Playmaking',
             value:
               `Pass Accuracy: **${stats.passAccuracy}%** (${stats.passesMade}/${stats.passAttempts})\n` +
-              `Tackles Made: **${stats.tacklesMade}**\n` +
-              `Clean Sheets: **${stats.cleanSheets}**` +
-              (stats.saves > 0 ? `\nSaves: **${stats.saves}**` : ''),
+              (stats.events
+                ? `Short: **${stats.events.passesShortSuccess}** • Long: **${stats.events.passesLongSuccess}**\nThrough Balls: **${stats.events.throughBalls}** • Crosses: **${stats.events.crossesSuccess}**`
+                : ''),
             inline: true,
           },
+          {
+            name: '🛡️ Defending & Dribbling',
+            value:
+              `Tackles Made: **${stats.tacklesMade}**` +
+              (stats.events ? ` (${stats.events.cleanTackles} clean)` : '') +
+              `\nClean Sheets: **${stats.cleanSheets}**` +
+              (stats.saves > 0 ? ` • Saves: **${stats.saves}**` : '') +
+              (stats.events?.dribblesCompleted ? `\nDribbles Completed: **${stats.events.dribblesCompleted}** (${stats.events.dribbleBeat} beat opp)` : ''),
+            inline: false,
+          },
         )
-        .setFooter({ text: 'RYVL Esports Bot • Continuous Pro Clubs Telemetry' });
+        .setFooter({ text: 'RYVL Esports Bot • Continuous Pro Clubs Telemetry (EA Event Aggregates)' });
 
       await interaction.editReply({ embeds: [embed] });
     } catch (err: any) {

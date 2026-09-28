@@ -146,21 +146,38 @@ export class EventsService {
     }
 
     const now = new Date();
-    // Auto-clean finished one-off events where occurrences have ended/closed so they do not clutter the list
-    await this.prisma.event.deleteMany({
-      where: {
-        guildId,
-        rrule: null,
-        occurrences: {
-          every: {
-            OR: [
-              { status: OccurrenceStatus.CLOSED },
-              { endsAt: { lt: now } },
-            ],
-          },
-        },
-      },
-    }).catch(() => {});
+    // Auto-clean finished events where occurrences have ended/closed so they do not clutter the list
+    try {
+      const candidates = await this.prisma.event.findMany({
+        where: { guildId },
+        include: { occurrences: true },
+      });
+      const toDeleteIds: string[] = [];
+      for (const ev of candidates) {
+        if (ev.status === EventStatus.ARCHIVED) {
+          toDeleteIds.push(ev.id);
+          continue;
+        }
+        if (!ev.occurrences || ev.occurrences.length === 0) {
+          continue;
+        }
+        const allDone = ev.occurrences.every((occ) => {
+          if (occ.status === OccurrenceStatus.CLOSED || occ.status === OccurrenceStatus.CANCELLED) return true;
+          const occEnd = occ.endsAt ? occ.endsAt.getTime() : occ.startsAt.getTime() + (ev.duration || 60) * 60000;
+          return occEnd < now.getTime();
+        });
+        if (allDone) {
+          toDeleteIds.push(ev.id);
+        }
+      }
+      if (toDeleteIds.length > 0) {
+        await this.prisma.event.deleteMany({
+          where: { id: { in: toDeleteIds } },
+        });
+      }
+    } catch {
+      // Continue gracefully
+    }
 
     const events = await this.prisma.event.findMany({
       where,
@@ -183,9 +200,10 @@ export class EventsService {
       let declined = 0;
       for (const occ of event.occurrences) {
         for (const r of occ.rsvps) {
-          if (r.status === 'ACCEPTED') accepted++;
-          else if (r.status === 'TENTATIVE') tentative++;
-          else if (r.status === 'DECLINED') declined++;
+          const st = String(r.status || '').toUpperCase();
+          if (st === 'ACCEPTED') accepted++;
+          else if (st === 'TENTATIVE') tentative++;
+          else if (st === 'DECLINED') declined++;
         }
       }
       return {
@@ -196,9 +214,9 @@ export class EventsService {
           return {
             ...rest,
             rsvpCounts: {
-              accepted: rsvps.filter((r) => r.status === 'ACCEPTED').length,
-              tentative: rsvps.filter((r) => r.status === 'TENTATIVE').length,
-              declined: rsvps.filter((r) => r.status === 'DECLINED').length,
+              accepted: rsvps.filter((r) => String(r.status).toUpperCase() === 'ACCEPTED').length,
+              tentative: rsvps.filter((r) => String(r.status).toUpperCase() === 'TENTATIVE').length,
+              declined: rsvps.filter((r) => String(r.status).toUpperCase() === 'DECLINED').length,
             },
           };
         }),
@@ -228,9 +246,10 @@ export class EventsService {
     let declined = 0;
     for (const occ of event.occurrences) {
       for (const r of occ.rsvps) {
-        if (r.status === 'ACCEPTED') accepted++;
-        else if (r.status === 'TENTATIVE') tentative++;
-        else if (r.status === 'DECLINED') declined++;
+        const st = String(r.status || '').toUpperCase();
+        if (st === 'ACCEPTED') accepted++;
+        else if (st === 'TENTATIVE') tentative++;
+        else if (st === 'DECLINED') declined++;
       }
     }
 
@@ -242,9 +261,9 @@ export class EventsService {
         return {
           ...rest,
           rsvpCounts: {
-            accepted: rsvps.filter((r) => r.status === 'ACCEPTED').length,
-            tentative: rsvps.filter((r) => r.status === 'TENTATIVE').length,
-            declined: rsvps.filter((r) => r.status === 'DECLINED').length,
+            accepted: rsvps.filter((r) => String(r.status).toUpperCase() === 'ACCEPTED').length,
+            tentative: rsvps.filter((r) => String(r.status).toUpperCase() === 'TENTATIVE').length,
+            declined: rsvps.filter((r) => String(r.status).toUpperCase() === 'DECLINED').length,
           },
         };
       }),

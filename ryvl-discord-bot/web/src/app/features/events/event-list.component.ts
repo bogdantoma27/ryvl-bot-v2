@@ -260,13 +260,15 @@ export class EventListComponent implements OnInit {
   isEventFinished(event: EventItem): boolean {
     const now = Date.now();
     if (event.status === 'archived') return true;
+    const durMs = (event.durationMinutes || (event as any).duration || 60) * 60000;
     if (!event.occurrences || event.occurrences.length === 0) {
       const start = new Date(event.startsAt).getTime();
-      return !isNaN(start) && start + (event.durationMinutes || 60) * 60000 < now;
+      return !isNaN(start) && start + durMs < now;
     }
     return event.occurrences.every((occ: any) => {
-      const end = occ.endsAt ? new Date(occ.endsAt).getTime() : new Date(occ.startsAt).getTime() + 3600000;
-      return occ.status === 'closed' || occ.status === 'CLOSED' || end < now;
+      const start = new Date(occ.startsAt).getTime();
+      const end = occ.endsAt ? new Date(occ.endsAt).getTime() : start + durMs;
+      return occ.status === 'closed' || occ.status === 'CLOSED' || occ.status === 'cancelled' || occ.status === 'CANCELLED' || end < now;
     });
   }
 
@@ -290,20 +292,35 @@ export class EventListComponent implements OnInit {
   });
 
   getEventCounts(event: EventItem): RsvpCounts {
-    if (event.rsvpsCount && (event.rsvpsCount.accepted || event.rsvpsCount.tentative || event.rsvpsCount.declined)) {
-      return event.rsvpsCount;
-    }
     let accepted = 0;
     let tentative = 0;
     let declined = 0;
-    for (const occ of (event.occurrences || [])) {
-      const counts = (occ as any).rsvpCounts || (occ as any).counts;
-      if (counts) {
-        accepted += counts.accepted || 0;
-        tentative += counts.tentative || 0;
-        declined += counts.declined || 0;
+
+    if (event.rsvpsCount) {
+      accepted = Number(event.rsvpsCount.accepted) || 0;
+      tentative = Number(event.rsvpsCount.tentative) || 0;
+      declined = Number(event.rsvpsCount.declined) || 0;
+    }
+
+    if (accepted === 0 && tentative === 0 && declined === 0 && event.occurrences) {
+      for (const occ of event.occurrences) {
+        const counts = (occ as any).rsvpCounts || (occ as any).counts;
+        if (counts) {
+          accepted += Number(counts.accepted) || 0;
+          tentative += Number(counts.tentative) || 0;
+          declined += Number(counts.declined) || 0;
+        }
+        if (Array.isArray((occ as any).rsvps)) {
+          for (const r of (occ as any).rsvps) {
+            const st = String(r.status || '').toUpperCase();
+            if (st === 'ACCEPTED') accepted++;
+            else if (st === 'TENTATIVE') tentative++;
+            else if (st === 'DECLINED') declined++;
+          }
+        }
       }
     }
+
     return { accepted, tentative, declined, total: accepted + tentative + declined };
   }
 

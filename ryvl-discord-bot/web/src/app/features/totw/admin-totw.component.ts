@@ -235,11 +235,10 @@ import { TotwConfig } from '../../core/models';
               <label class="block text-xs font-semibold text-slate-300 mb-1.5">Pitch Formation</label>
               <select
                 [(ngModel)]="editFormation"
-                class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
+                class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
               >
-                <option value="4-3-3">4-3-3 (Default Attack)</option>
-                <option value="4-4-2">4-4-2 (Classic)</option>
-                <option value="3-5-2">3-5-2 (Midfield Wingers)</option>
+                <option value="3-5-2">3-5-2 (Twin Strikers, CAM & Midfield)</option>
+                <option value="3-1-4-2">3-1-4-2 (Holding CDM & Twin Strikers)</option>
               </select>
             </div>
 
@@ -404,7 +403,7 @@ export class AdminTotwComponent implements OnInit {
   readonly isSearchingLeagues = signal<boolean>(false);
 
   readonly editChannelId = signal<string | null>(null);
-  readonly editFormation = signal<string>('4-3-3');
+  readonly editFormation = signal<string>('3-5-2');
   readonly editEnabled = signal<boolean>(false);
 
   async onSearchLeagues(): Promise<void> {

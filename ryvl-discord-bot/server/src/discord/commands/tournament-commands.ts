@@ -21,6 +21,61 @@ export class TournamentCommands {
     private readonly tournamentService: TournamentService,
   ) {}
 
+  async handleCreateTournament(interaction: ChatInputCommandInteraction): Promise<void> {
+    const guildId = interaction.guildId;
+    if (!guildId) {
+      await interaction.reply({
+        content: 'This command can only be run inside a Discord server.',
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    await interaction.deferReply();
+    const name = interaction.options.getString('name', true);
+    const type = (interaction.options.getString('type') || 'standard').toUpperCase();
+    const formation = interaction.options.getString('formation') || '3-5-2';
+    const maxTeams = interaction.options.getInteger('max_teams') || 6;
+
+    try {
+      const tournament = await this.tournamentService.createTournament(guildId, {
+        name,
+        type,
+        formation,
+        numTeams: maxTeams,
+      });
+      const setup = await this.tournamentService.setupTournamentChannels(guildId, tournament.id);
+
+      let channelsDesc =
+        `• **Category**: <#${setup.categoryId}>\n` +
+        `• **Rules & Info**: <#${setup.channels.info}>\n` +
+        `• **Announcements**: <#${setup.channels.announcements}>\n` +
+        `• **Registration Portal**: <#${setup.channels.registration}>\n` +
+        `• **Fixtures & Results**: <#${setup.channels.fixtures}>\n` +
+        `• **Standings Table**: <#${setup.channels.standings}>\n` +
+        `• **Chat Channel**: <#${setup.channels.chat}>`;
+
+      if (setup.channels.draft) {
+        channelsDesc += `\n• **Draft Wheel**: <#${setup.channels.draft}>`;
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle(`🏆 Tournament Created: ${name}`)
+        .setColor(0x00d26a)
+        .setDescription(
+          `**Type**: \`${type}\` • **Formation**: \`${formation}\` • **Teams**: \`${maxTeams}\`\n\n` +
+          `**Provisioned Channel Suite**:\n${channelsDesc}\n\n` +
+          `Participants and managers can now interact directly via buttons in the channels above.`,
+        )
+        .setFooter({ text: 'RYVL Esports Bot • Tournament Engine' });
+
+      await interaction.editReply({ embeds: [embed] });
+    } catch (err: any) {
+      this.logger.error(`Error creating tournament: ${err?.message || err}`);
+      await interaction.editReply(`❌ Failed to create tournament: ${err?.message || err}`);
+    }
+  }
+
   async handleTournament(interaction: ChatInputCommandInteraction): Promise<void> {
     const subcommand = interaction.options.getSubcommand();
     const guildId = interaction.guildId;
@@ -45,23 +100,91 @@ export class TournamentCommands {
     } else if (subcommand === 'create') {
       await interaction.deferReply();
       const name = interaction.options.getString('name', true);
-      const formation = interaction.options.getString('formation') || '3-4-1-2';
+      const formation = interaction.options.getString('formation') || '3-5-2';
 
       try {
-        const tournament = await this.tournamentService.createTournament(guildId, { name, formation });
+        const tournament = await this.tournamentService.createTournament(guildId, {
+          name,
+          type: 'DRAFT',
+          formation,
+        });
         const setup = await this.tournamentService.setupTournamentChannels(guildId, tournament.id);
         await interaction.editReply(
-          `🏆 **Tournament "${name}" Created Successfully!**\n\n` +
+          `🏆 **Draft Tournament "${name}" Created Successfully!**\n\n` +
           `• Category: <#${setup.categoryId}>\n` +
-          `• Signups Channel: <#${setup.channels.signup}>\n` +
-          `• Chat: <#${setup.channels.chat}>\n` +
-          `• Results: <#${setup.channels.results}>\n` +
+          `• Info & Rules: <#${setup.channels.info}>\n` +
+          `• Registration: <#${setup.channels.registration}>\n` +
+          `• Draft Wheel: <#${setup.channels.draft || setup.channels.registration}>\n` +
+          `• Fixtures & Results: <#${setup.channels.fixtures}>\n` +
           `• Standings: <#${setup.channels.standings}>\n` +
-          `• Rosters: <#${setup.channels.rosters}>`,
+          `• Tournament Chat: <#${setup.channels.chat}>`,
         );
       } catch (err: any) {
         this.logger.error(`Error creating tournament: ${err?.message || err}`);
         await interaction.editReply(`❌ Failed to create tournament: ${err?.message || err}`);
+      }
+    } else if (subcommand === 'spin') {
+      await interaction.deferReply();
+      try {
+        const tournaments = await this.tournamentService.listTournaments(guildId);
+        const activeDraft = tournaments.find((t) => t.type === 'DRAFT' && t.status !== 'COMPLETED');
+        if (!activeDraft) {
+          await interaction.editReply('No active draft tournament found in this server.');
+          return;
+        }
+
+        const draft: any = (activeDraft.draftState as any) || {};
+        if (draft.complete) {
+          await interaction.editReply('Draft is already complete!');
+          return;
+        }
+
+        const teams: any[] = (activeDraft.teamsData as any) || [];
+        const currentTeamIdx = draft.snakeOrder[draft.currentTurn] ?? 0;
+        const currentTeam = teams[currentTeamIdx] || { name: `Team ${currentTeamIdx + 1}` };
+
+        await interaction.editReply(
+          `🎰 **Active Draft Turn**: **${currentTeam.name}**\n` +
+          `Navigate to the <#${(activeDraft.discordChannels as any)?.draft || interaction.channelId}> channel and click **Spin Wheel** to select a position!`,
+        );
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error: ${err?.message || err}`);
+      }
+    } else if (subcommand === 'draft-status') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const tournaments = await this.tournamentService.listTournaments(guildId);
+        const activeDraft = tournaments.find((t) => t.type === 'DRAFT');
+        if (!activeDraft) {
+          await interaction.editReply('No draft tournament found in this server.');
+          return;
+        }
+
+        const draft: any = (activeDraft.draftState as any) || {};
+        const teams: any[] = (activeDraft.teamsData as any) || [];
+        const currentTeamIdx = draft.snakeOrder?.[draft.currentTurn] ?? 0;
+        const currentTeam = teams[currentTeamIdx] || { name: `Team ${currentTeamIdx + 1}` };
+        const roundNum = Math.min(10, Math.floor((draft.currentTurn || 0) / (teams.length || 6)) + 1);
+
+        const embed = new EmbedBuilder()
+          .setTitle(`🎡 Draft Status — ${activeDraft.name}`)
+          .setColor(draft.complete ? 0x5865f2 : 0xf1c40f)
+          .setDescription(
+            `Status: **${draft.complete ? 'COMPLETE' : 'IN PROGRESS'}**\n` +
+            `Round: **${roundNum} / 10** • Current Turn: **${currentTeam.name}**\n\n` +
+            `**Total Picks Made**: ${draft.picks?.length || 0} / ${(teams.length || 6) * 10}\n\n` +
+            teams
+              .map(
+                (t, idx) =>
+                  `• **${t.name}**: ${t.picks?.length || 0}/10 picks (${draft.teamJokers?.[idx] ?? 4} Jokers left)`,
+              )
+              .join('\n'),
+          )
+          .setFooter({ text: 'RYVL Esports Bot • Draft Engine' });
+
+        await interaction.editReply({ embeds: [embed] });
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error: ${err?.message || err}`);
       }
     } else if (subcommand === 'status') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -99,7 +222,11 @@ export class TournamentCommands {
           await interaction.editReply('No active tournament or standings channel configured.');
           return;
         }
-        await this.tournamentService.postStandingsAndRosters(config.standingsChannelId, config.rostersChannelId || config.standingsChannelId, active);
+        await this.tournamentService.postStandingsAndRosters(
+          config.standingsChannelId,
+          config.rostersChannelId || config.standingsChannelId,
+          active,
+        );
         await interaction.editReply('✅ Standings graphic generated and posted to standings channel!');
       } catch (err: any) {
         await interaction.editReply(`❌ Error: ${err?.message || err}`);
@@ -124,9 +251,9 @@ export class TournamentCommands {
 
       const formationInput = new TextInputBuilder()
         .setCustomId('formation')
-        .setLabel('Formation')
+        .setLabel('Formation (3-5-2 or 3-1-4-2)')
         .setStyle(TextInputStyle.Short)
-        .setValue('3-4-1-2')
+        .setValue('3-5-2')
         .setRequired(false);
 
       modal.addComponents(
@@ -145,8 +272,8 @@ export class TournamentCommands {
       }
       const signups: any[] = (active.signupsData as any) || [];
       await interaction.editReply(`📋 **${active.name}**: ${signups.length} signed up.`);
-    } else if (customId.startsWith('tourney:signup:')) {
-      const tournamentId = customId.replace('tourney:signup:', '');
+    } else if (customId.startsWith('tourney:signup:') || customId.startsWith('tourney:register:')) {
+      const tournamentId = customId.replace('tourney:signup:', '').replace('tourney:register:', '');
       const modal = new ModalBuilder()
         .setCustomId(`tourney:modal:signup:${tournamentId}`)
         .setTitle('Înscriere Turneu');
@@ -177,11 +304,85 @@ export class TournamentCommands {
       );
 
       await interaction.showModal(modal);
-    } else if (customId.startsWith('tourney:pullout:')) {
-      const tournamentId = customId.replace('tourney:pullout:', '');
+    } else if (customId.startsWith('tourney:pullout:') || customId.startsWith('tourney:unregister:')) {
+      const tournamentId = customId.replace('tourney:pullout:', '').replace('tourney:unregister:', '');
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       await this.tournamentService.removeSignup(tournamentId, interaction.user.id);
       await interaction.editReply('✅ Te-ai retras cu succes din turneu.');
+    } else if (customId.startsWith('tourney:view_roster:')) {
+      const tournamentId = customId.replace('tourney:view_roster:', '');
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const tournament = await this.tournamentService.getTournament(tournamentId);
+        const signups: any[] = (tournament.signupsData as any) || [];
+        const embed = new EmbedBuilder()
+          .setTitle(`📋 Roster & Registrations — ${tournament.name}`)
+          .setColor(0x5865f2)
+          .setDescription(
+            `Total Signups: **${signups.length}**\n\n` +
+            (signups.length > 0
+              ? signups.map((s, idx) => `${idx + 1}. **${s.displayName}** (\`${s.gamertag}\` - ${s.pos1})`).join('\n')
+              : 'No players registered yet.'),
+          );
+        await interaction.editReply({ embeds: [embed] });
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error: ${err?.message || err}`);
+      }
+    } else if (customId.startsWith('tourney:draft:spin_modal:')) {
+      const tournamentId = customId.replace('tourney:draft:spin_modal:', '');
+      const modal = new ModalBuilder()
+        .setCustomId(`tourney:modal:draft_spin:${tournamentId}`)
+        .setTitle('Spin Draft Wheel');
+
+      const positionInput = new TextInputBuilder()
+        .setCustomId('draft_position')
+        .setLabel('Select Position to Spin')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('e.g. ST, CAM, LM, RM, CM, CDM, CB, GK')
+        .setRequired(true);
+
+      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(positionInput));
+      await interaction.showModal(modal);
+    } else if (customId.startsWith('tourney:draft:confirm:')) {
+      const tournamentId = customId.replace('tourney:draft:confirm:', '');
+      await interaction.deferReply();
+      try {
+        const result = await this.tournamentService.confirmDraftPick(tournamentId);
+        if (interaction.channelId) {
+          await this.tournamentService.postDraftWheelEmbed(interaction.channelId, result.tournament);
+        }
+        await interaction.editReply(
+          `✅ **Pick Confirmed!** **${result.pick.displayName}** (\`${result.pick.gamertag}\`) joins **${result.pick.teamName}** as ${result.pick.position}!${result.complete ? '\n\n🎉 **The draft is complete!**' : ''}`,
+        );
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error confirming pick: ${err?.message || err}`);
+      }
+    } else if (customId.startsWith('tourney:draft:joker:')) {
+      const tournamentId = customId.replace('tourney:draft:joker:', '');
+      await interaction.deferReply();
+      try {
+        const result = await this.tournamentService.useDraftJoker(tournamentId);
+        if (interaction.channelId) {
+          await this.tournamentService.postDraftWheelEmbed(interaction.channelId, result.tournament);
+        }
+        await interaction.editReply(
+          `🃏 **Joker Used!** New candidate: **${result.candidate?.displayName}** (\`${result.candidate?.gamertag}\`). Jokers left: **${result.jokersLeft}**.`,
+        );
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error using joker: ${err?.message || err}`);
+      }
+    } else if (customId.startsWith('tourney:draft:autodraft:')) {
+      const tournamentId = customId.replace('tourney:draft:autodraft:', '');
+      await interaction.deferReply();
+      try {
+        const updated = await this.tournamentService.autoDraftRemaining(tournamentId);
+        if (interaction.channelId) {
+          await this.tournamentService.postDraftWheelEmbed(interaction.channelId, updated);
+        }
+        await interaction.editReply(`⚡ **Auto-Draft Complete!** All remaining squad positions have been allocated.`);
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error running auto-draft: ${err?.message || err}`);
+      }
     } else if (customId.startsWith('tourney:result:enter:')) {
       const tournamentId = customId.replace('tourney:result:enter:', '');
       const modal = new ModalBuilder()
@@ -235,12 +436,32 @@ export class TournamentCommands {
     if (customId === 'tourney:modal:create') {
       await interaction.deferReply();
       const name = interaction.fields.getTextInputValue('tournament_name').trim();
-      const formation = interaction.fields.getTextInputValue('formation')?.trim() || '3-4-1-2';
+      const formation = interaction.fields.getTextInputValue('formation')?.trim() || '3-5-2';
 
-      const tournament = await this.tournamentService.createTournament(interaction.guildId!, { name, formation });
+      const tournament = await this.tournamentService.createTournament(interaction.guildId!, {
+        name,
+        type: 'DRAFT',
+        formation,
+      });
       const setup = await this.tournamentService.setupTournamentChannels(interaction.guildId!, tournament.id);
 
       await interaction.editReply(`✅ Turneul **${name}** a fost inițializat în categoria <#${setup.categoryId}>!`);
+    } else if (customId.startsWith('tourney:modal:draft_spin:')) {
+      const tournamentId = customId.replace('tourney:modal:draft_spin:', '');
+      await interaction.deferReply();
+      try {
+        const position = interaction.fields.getTextInputValue('draft_position').trim().toUpperCase();
+        const res = await this.tournamentService.spinDraftWheel(tournamentId, position);
+        if (interaction.channelId) {
+          await this.tournamentService.postDraftWheelEmbed(interaction.channelId, res.tournament);
+        }
+        await interaction.editReply(
+          `🎰 **Roata a selectat**: **${res.candidate.displayName}** (\`${res.candidate.gamertag}\`) pentru poziția **${res.position}**!\n` +
+          `Apasă **Confirm Pick** pentru a accepta sau **Use Joker** pentru a roti din nou.`,
+        );
+      } catch (err: any) {
+        await interaction.editReply(`❌ Eroare la rotirea roții: ${err?.message || err}`);
+      }
     } else if (customId.startsWith('tourney:modal:signup:')) {
       const tournamentId = customId.replace('tourney:modal:signup:', '');
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });

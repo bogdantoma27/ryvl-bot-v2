@@ -104,10 +104,48 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .setDescription('Pro Clubs player gamertag (or "me")')
         .setRequired(false),
     )
+    .addStringOption((opt) =>
+      opt
+        .setName('name')
+        .setDescription('Pro Clubs player gamertag alias')
+        .setRequired(false),
+    )
     .addUserOption((opt) =>
       opt
         .setName('user')
         .setDescription('Discord member to look up')
+        .setRequired(false),
+    );
+
+  const trackTeamCommand = new SlashCommandBuilder()
+    .setName('track_team')
+    .setDescription('Track an EA Pro Clubs team for auto match results and ELO ratings (Admin only)')
+    .addStringOption((opt) =>
+      opt
+        .setName('name')
+        .setDescription('Exact EA Pro Clubs team name to search and track')
+        .setRequired(true),
+    )
+    .addChannelOption((opt) =>
+      opt
+        .setName('channel')
+        .setDescription('Channel where match results will be posted (optional)')
+        .setRequired(false),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName('platform')
+        .setDescription('Platform (common-gen5, etc.)')
+        .setRequired(false),
+    );
+
+  const teamStatsCommand = new SlashCommandBuilder()
+    .setName('team_stats')
+    .setDescription('View stats, ELO rating, record and top performers for a tracked EA club')
+    .addStringOption((opt) =>
+      opt
+        .setName('name')
+        .setDescription('Tracked club name')
         .setRequired(false),
     );
 
@@ -213,9 +251,23 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .addStringOption((opt) =>
           opt
             .setName('formation')
-            .setDescription('Formation (e.g. 3-4-1-2 or 3-5-2)')
-            .setRequired(false),
+            .setDescription('Formation (3-5-2 or 3-1-4-2)')
+            .setRequired(false)
+            .addChoices(
+              { name: '3-5-2', value: '3-5-2' },
+              { name: '3-1-4-2', value: '3-1-4-2' },
+            ),
         ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('spin')
+        .setDescription('Spin the draft wheel for your turn (Managers only)'),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('draft-status')
+        .setDescription('View current draft board and remaining picks'),
     )
     .addSubcommand((sub) =>
       sub
@@ -226,6 +278,36 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
       sub
         .setName('generate-standings')
         .setDescription('Render and post updated standings table graphic'),
+    );
+
+  const createTournamentCommand = new SlashCommandBuilder()
+    .setName('create_tournament')
+    .setDescription('Create a tournament and auto-provision Discord category and channels')
+    .addStringOption((opt) =>
+      opt.setName('name').setDescription('Tournament name').setRequired(true),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName('type')
+        .setDescription('Tournament type: draft or standard')
+        .setRequired(false)
+        .addChoices(
+          { name: 'FC Draft Tournament (with wheel & draft)', value: 'draft' },
+          { name: 'Standard Club Tournament', value: 'standard' },
+        ),
+    )
+    .addStringOption((opt) =>
+      opt
+        .setName('formation')
+        .setDescription('Formation for draft (3-5-2 or 3-1-4-2)')
+        .setRequired(false)
+        .addChoices(
+          { name: '3-5-2', value: '3-5-2' },
+          { name: '3-1-4-2', value: '3-1-4-2' },
+        ),
+    )
+    .addIntegerOption((opt) =>
+      opt.setName('max_teams').setDescription('Number of teams (e.g. 6, 8, 16)').setRequired(false),
     );
 
   const vpgTransfersCommand = new SlashCommandBuilder()
@@ -443,6 +525,9 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     unregisterPlayerCommand.toJSON(),
     totwCommand.toJSON(),
     tournamentCommand.toJSON(),
+    createTournamentCommand.toJSON(),
+    trackTeamCommand.toJSON(),
+    teamStatsCommand.toJSON(),
     vpgTransfersCommand.toJSON(),
     superligaCommand.toJSON(),
     liveResultsCommand.toJSON(),

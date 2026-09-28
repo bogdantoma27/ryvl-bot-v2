@@ -226,6 +226,12 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             await this.totwCommands.handleTotw(interaction);
           } else if (interaction.commandName === 'tournament') {
             await this.tournamentCommands.handleTournament(interaction);
+          } else if (interaction.commandName === 'create_tournament') {
+            await this.tournamentCommands.handleCreateTournament(interaction);
+          } else if (interaction.commandName === 'track_team') {
+            await this.eaCommands.handleTrackTeam(interaction);
+          } else if (interaction.commandName === 'team_stats') {
+            await this.eaCommands.handleTeamStats(interaction);
           }
         } else if (interaction.isAutocomplete()) {
 
@@ -463,21 +469,36 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
 
   async sendMessageToChannel(
     channelId: string,
-    embed: EmbedBuilder,
-    components?: ActionRowBuilder<ButtonBuilder>[],
+    messageOptions: any,
+    components?: any[],
     content?: string,
-  ): Promise<Message> {
+  ): Promise<any> {
     const channel = await this.client.channels.fetch(channelId).catch(() => null);
     if (!channel || !('send' in channel)) {
       throw new NotFoundException(`Text channel with ID "${channelId}" not found or cannot receive messages`);
     }
 
     const textChannel = channel as TextChannel;
-    return textChannel.send({
-      content: content && content.trim() ? content : undefined,
-      embeds: [embed],
-      components: components || [],
-    });
+    let payload: any;
+    if (messageOptions instanceof EmbedBuilder || (messageOptions && messageOptions.data && !messageOptions.content)) {
+      payload = {
+        content: content && content.trim() ? content : undefined,
+        embeds: [messageOptions],
+        components: components || [],
+      };
+    } else if (typeof messageOptions === 'string') {
+      payload = {
+        content: messageOptions,
+        components: components || [],
+      };
+    } else {
+      payload = {
+        ...messageOptions,
+        ...(components ? { components } : {}),
+      };
+    }
+
+    return textChannel.send(payload);
   }
 
   async sendImageMessageToChannel(

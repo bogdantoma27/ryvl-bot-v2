@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { rrulestr, RRule } from 'rrule';
 import { OccurrenceStatus } from '@prisma/client';
+import { formatEventDateTime, parseEventDateTime } from './event-time';
 
 export interface RecurrenceEventInput {
   id: string;
@@ -46,7 +47,6 @@ export class RecurrenceService {
     try {
       // Ensure DTSTART is provided if not present in the RRULE string
       let ruleString = event.rrule.trim();
-
       let rule: RRule;
       if (ruleString.includes('DTSTART')) {
         rule = rrulestr(ruleString) as RRule;

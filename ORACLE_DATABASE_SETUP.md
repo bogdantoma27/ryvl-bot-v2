@@ -1,6 +1,12 @@
-# Oracle Cloud VM Database & Production Isolation Guide
+# Database Architecture & Production Isolation Guide
 
-This document explains the architecture, database isolation, schema migration process, and backup strategies for **RYVL Esports** and the **RYVL Bot Multi-Server Management Console**.
+> [!NOTE]
+> **Primary Production Database: Supabase PostgreSQL**
+> 
+> The application is configured to connect to **Supabase PostgreSQL** as its primary, authoritative production database.
+> The local PostgreSQL instance on Oracle Cloud VM described below is an **unused alternative / local fallback**.
+> 
+> When GitHub Actions builds and deploys updates to Oracle Cloud or when Prisma client generates, existing Supabase tables and data remain completely safe and untouched because all migrations are strictly additive.
 
 ---
 

@@ -12,6 +12,8 @@ import { VpgController } from './vpg.controller';
 import { VpgNotificationsController } from './vpg-notifications.controller';
 import { TotwController } from './totw.controller';
 
+import { MatchResultRendererService } from './match-result-renderer.service';
+
 @Module({
   imports: [
     PrismaModule,
@@ -25,6 +27,7 @@ import { TotwController } from './totw.controller';
     VpgSuperligaPollerService,
     TotwService,
     TotwRendererService,
+    MatchResultRendererService,
   ],
   controllers: [VpgController, VpgNotificationsController, TotwController],
   exports: [
@@ -33,6 +36,7 @@ import { TotwController } from './totw.controller';
     VpgSuperligaPollerService,
     TotwService,
     TotwRendererService,
+    MatchResultRendererService,
   ],
 })
 export class VpgModule {}

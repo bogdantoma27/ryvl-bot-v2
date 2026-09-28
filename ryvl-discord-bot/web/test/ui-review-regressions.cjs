@@ -56,6 +56,8 @@ const server = http.createServer((req, res) => {
       await expect(page.locator('#public-mobile-navigation')).toBeVisible();
       await page.setViewportSize({ width: 1440, height: 900 });
       await expect(toggle).toBeHidden({ timeout: 1500 });
+      await page.waitForFunction(() => window.innerWidth >= 1024);
+      await page.waitForTimeout(100);
       await page.setViewportSize({ width: 390, height: 844 });
       await expect(toggle).toHaveAttribute('aria-expanded', 'false');
       await expect(page.locator('#public-mobile-navigation')).toHaveCount(0);

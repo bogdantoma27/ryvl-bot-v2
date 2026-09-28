@@ -39,6 +39,7 @@ model Guild {
   totwConfigs           TotwConfig[]
   tournamentConfig      TournamentConfig?
   tournamentInstances   TournamentInstance[]
+  trackedClubs          TrackedClub[]
 
   @@map("guilds")
 }
@@ -297,33 +298,63 @@ model VpgNotificationDelivery {
 }
 
 model EaPlayerMatchStat {
-  id               String   @id @default(uuid())
-  eaMatchId        String   @map("ea_match_id")
-  clubId           String   @map("club_id")
-  playerProId      String   @map("player_pro_id")
-  playerProName    String   @map("player_pro_name")
-  pos              String?
-  rating           Float    @default(0)
-  goals            Int      @default(0)
-  assists          Int      @default(0)
-  shots            Int      @default(0)
-  passesMade       Int      @default(0) @map("passes_made")
-  passAttempts     Int      @default(0) @map("pass_attempts")
-  tacklesMade      Int      @default(0) @map("tackles_made")
-  tackleAttempts   Int      @default(0) @map("tackle_attempts")
-  interceptions    Int      @default(0)
-  saves            Int      @default(0)
-  mom              Int      @default(0)
-  cleanSheetDef    Int      @default(0) @map("clean_sheet_def")
-  cleanSheetGk     Int      @default(0) @map("clean_sheet_gk")
-  redCards         Int      @default(0) @map("red_cards")
-  timestamp        DateTime
-  createdAt        DateTime @default(now()) @map("created_at")
+  id                   String   @id @default(uuid())
+  eaMatchId            String   @map("ea_match_id")
+  clubId               String   @map("club_id")
+  playerProId          String   @map("player_pro_id")
+  playerProName        String   @map("player_pro_name")
+  pos                  String?
+  rating               Float    @default(0)
+  goals                Int      @default(0)
+  assists              Int      @default(0)
+  shots                Int      @default(0)
+  passesMade           Int      @default(0) @map("passes_made")
+  passAttempts         Int      @default(0) @map("pass_attempts")
+  tacklesMade          Int      @default(0) @map("tackles_made")
+  tackleAttempts       Int      @default(0) @map("tackle_attempts")
+  interceptions        Int      @default(0)
+  saves                Int      @default(0)
+  mom                  Int      @default(0)
+  cleanSheetDef        Int      @default(0) @map("clean_sheet_def")
+  cleanSheetGk         Int      @default(0) @map("clean_sheet_gk")
+  cleanSheetsAny       Int      @default(0) @map("clean_sheets_any")
+  redCards             Int      @default(0) @map("red_cards")
+  yellowCards          Int      @default(0) @map("yellow_cards")
+  fouls                Int      @default(0)
+  dribbles             Int      @default(0)
+  secondsPlayed        Int      @default(0) @map("seconds_played")
+  goalsConceded        Int      @default(0) @map("goals_conceded")
+  matchEventAggregate0 String?  @map("match_event_aggregate_0")
+  matchEventAggregate1 String?  @map("match_event_aggregate_1")
+  matchEventAggregate2 String?  @map("match_event_aggregate_2")
+  matchEventAggregate3 String?  @map("match_event_aggregate_3")
+  timestamp            DateTime
+  createdAt            DateTime @default(now()) @map("created_at")
 
   @@unique([eaMatchId, playerProName, clubId])
   @@index([playerProName])
   @@index([clubId])
   @@map("ea_player_match_stats")
+}
+
+model TrackedClub {
+  id              String    @id @default(uuid())
+  guildId         String    @map("guild_id")
+  guild           Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  clubId          String    @map("club_id")
+  clubName        String    @map("club_name")
+  channelId       String?   @map("channel_id")
+  platform        String    @default("common-gen5")
+  enabled         Boolean   @default(true)
+  lastMatchId     String?   @map("last_match_id")
+  lastPolledAt    DateTime? @map("last_polled_at")
+  crestUrl        String?   @map("crest_url")
+  elo             Int       @default(1200)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@unique([guildId, clubId])
+  @@map("tracked_clubs")
 }
 
 model RegisteredDiscordPlayer {
@@ -361,7 +392,7 @@ model TotwConfig {
   channelId      String?   @map("channel_id")
   communitySlug  String    @default("VPGRoPS5") @map("community_slug")
   leagueSlug     String    @default("Superliga-Romania") @map("league_slug")
-  formation      String    @default("433")
+  formation      String    @default("3-5-2")
   cronSchedule   String?   @default("0 18 * * 1") @map("cron_schedule")
   enabled        Boolean   @default(true)
   createdAt      DateTime  @default(now()) @map("created_at")
@@ -395,12 +426,16 @@ model TournamentInstance {
   guildId           String   @map("guild_id")
   guild             Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
   name              String
+  type              String   @default("STANDARD") // STANDARD or DRAFT
   status            String   @default("PENDING") // PENDING, SIGNUPS_OPEN, DRAFTING, ACTIVE, COMPLETED
-  formation         String   @default("3-4-1-2")
+  formation         String   @default("3-1-4-2")
   teamsData         Json     @default("[]") @map("teams_data")
   signupsData       Json     @default("[]") @map("signups_data")
   matchesData       Json     @default("[]") @map("matches_data")
   currentDraftRound Int      @default(1) @map("current_draft_round")
+  draftState        Json?    @map("draft_state")
+  discordCategoryId String?  @map("discord_category_id")
+  discordChannels   Json?    @map("discord_channels")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 

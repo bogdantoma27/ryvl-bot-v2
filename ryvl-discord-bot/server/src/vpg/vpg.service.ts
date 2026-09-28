@@ -281,36 +281,68 @@ export class VpgService {
   }
 
   async searchLeagues(query?: string): Promise<Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }>> {
-    const communities = await this.listCommunities(query);
-    const topCommunities = communities.slice(0, 10);
-    const results: Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }> = [];
+    const knownLeagues: Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }> = [
+      { communitySlug: 'VPGRoPS5', communityName: 'VPG Romania', leagueSlug: 'Superliga-Romania', leagueName: 'Superliga România' },
+      { communitySlug: 'VPGRoPS5', communityName: 'VPG Romania', leagueSlug: 'Liga-2-Romania', leagueName: 'Liga 2 România' },
+      { communitySlug: 'VPGRoPS5', communityName: 'VPG Romania', leagueSlug: 'Cupa-Romaniei', leagueName: 'Cupa României' },
+      { communitySlug: 'VPG-Europe', communityName: 'VPG Europe', leagueSlug: 'Europe-Premier', leagueName: 'Europe Premier' },
+      { communitySlug: 'VPG-Europe', communityName: 'VPG Europe', leagueSlug: 'Europe-Championship', leagueName: 'Europe Championship' },
+      { communitySlug: 'VPG-Europe', communityName: 'VPG Europe', leagueSlug: 'Europe-League-1', leagueName: 'Europe League 1' },
+      { communitySlug: 'VPG-Europe', communityName: 'VPG Europe', leagueSlug: 'Europe-League-2', leagueName: 'Europe League 2' },
+      { communitySlug: 'VPG-Italy', communityName: 'VPG Italy', leagueSlug: 'Serie-A', leagueName: 'Serie A Italy' },
+      { communitySlug: 'VPG-Italy', communityName: 'VPG Italy', leagueSlug: 'Serie-B', leagueName: 'Serie B Italy' },
+      { communitySlug: 'VPG-espana-ps5', communityName: 'VPG España', leagueSlug: 'La-Liga', leagueName: 'La Liga Spain' },
+      { communitySlug: 'VPG-espana-ps5', communityName: 'VPG España', leagueSlug: 'Segunda-Division', leagueName: 'Segunda Division Spain' },
+      { communitySlug: 'VPGGERSummer', communityName: 'VPG Germany', leagueSlug: 'Bundesliga', leagueName: 'Bundesliga Germany' },
+      { communitySlug: 'VPGPortugal', communityName: 'VPG Portugal', leagueSlug: 'Liga-Portugal', leagueName: 'Primeira Liga Portugal' },
+      { communitySlug: 'VPG-England', communityName: 'VPG England', leagueSlug: 'Premiership', leagueName: 'Premiership England' },
+      { communitySlug: 'VPG-England', communityName: 'VPG England', leagueSlug: 'Championship', leagueName: 'Championship England' },
+    ];
+
+    // Fetch live communities without query filtering so we can search leagues within ALL communities
+    const communities = await this.listCommunities();
+    const topCommunities = communities.slice(0, 15);
+    const liveLeagues: Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }> = [];
 
     await Promise.all(
       topCommunities.map(async (c) => {
-        const leagues = await this.listCommunityLeagues(c.slug);
-        for (const l of leagues) {
-          if (!query || l.name.toLowerCase().includes(query.toLowerCase()) || l.slug.toLowerCase().includes(query.toLowerCase()) || c.name.toLowerCase().includes(query.toLowerCase())) {
-            results.push({
+        try {
+          const leagues = await this.listCommunityLeagues(c.slug);
+          for (const l of leagues) {
+            liveLeagues.push({
               communitySlug: c.slug,
               communityName: c.name,
               leagueSlug: l.slug,
               leagueName: l.name,
             });
           }
+        } catch {
+          // ignore error and proceed with known list
         }
       })
     );
 
-    if (!results.some((r) => r.leagueSlug === 'Superliga-Romania')) {
-      results.unshift({
-        communitySlug: 'VPGRoPS5',
-        communityName: 'VPG Romania',
-        leagueSlug: 'Superliga-Romania',
-        leagueName: 'Superliga Romania',
-      });
+    // Merge and deduplicate by leagueSlug
+    const map = new Map<string, { communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }>();
+    for (const item of [...knownLeagues, ...liveLeagues]) {
+      if (!map.has(item.leagueSlug)) {
+        map.set(item.leagueSlug, item);
+      }
     }
 
-    return results;
+    const all = Array.from(map.values());
+    if (!query) {
+      return all;
+    }
+
+    const q = query.toLowerCase().trim();
+    return all.filter(
+      (item) =>
+        item.leagueName.toLowerCase().includes(q) ||
+        item.leagueSlug.toLowerCase().includes(q) ||
+        item.communityName.toLowerCase().includes(q) ||
+        item.communitySlug.toLowerCase().includes(q)
+    );
   }
 
   // ---------------------------------------------------------------------------

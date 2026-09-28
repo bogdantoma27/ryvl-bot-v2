@@ -414,7 +414,17 @@ export class EaService {
         const mom = stat.mom === true || stat.mom === 1 || String(stat.mom) === '1' ? 1 : 0;
         const cleanSheetDef = parseInt(String(stat.cleansheetsdef || '0'), 10) || 0;
         const cleanSheetGk = parseInt(String(stat.cleansheetsgk || '0'), 10) || 0;
+        const cleanSheetsAny = parseInt(String(stat.cleansheetsany || '0'), 10) || 0;
         const redCards = parseInt(String(stat.redcards || '0'), 10) || 0;
+        const yellowCards = parseInt(String(stat.yellowcards || '0'), 10) || 0;
+        const fouls = parseInt(String(stat.fouls || '0'), 10) || 0;
+        const dribbles = parseInt(String(stat.dribbles || '0'), 10) || 0;
+        const secondsPlayed = parseInt(String(stat.secondsplayed || '0'), 10) || 0;
+        const goalsConceded = parseInt(String(stat.goalsconceded || '0'), 10) || 0;
+        const matchEventAggregate0 = stat.match_event_aggregate_0 ? String(stat.match_event_aggregate_0) : null;
+        const matchEventAggregate1 = stat.match_event_aggregate_1 ? String(stat.match_event_aggregate_1) : null;
+        const matchEventAggregate2 = stat.match_event_aggregate_2 ? String(stat.match_event_aggregate_2) : null;
+        const matchEventAggregate3 = stat.match_event_aggregate_3 ? String(stat.match_event_aggregate_3) : null;
 
         await this.prisma.eaPlayerMatchStat.upsert({
           where: {
@@ -437,7 +447,17 @@ export class EaService {
             mom,
             cleanSheetDef,
             cleanSheetGk,
+            cleanSheetsAny,
             redCards,
+            yellowCards,
+            fouls,
+            dribbles,
+            secondsPlayed,
+            goalsConceded,
+            matchEventAggregate0,
+            matchEventAggregate1,
+            matchEventAggregate2,
+            matchEventAggregate3,
             pos: stat.pos || null,
             timestamp,
           },
@@ -459,7 +479,17 @@ export class EaService {
             mom,
             cleanSheetDef,
             cleanSheetGk,
+            cleanSheetsAny,
             redCards,
+            yellowCards,
+            fouls,
+            dribbles,
+            secondsPlayed,
+            goalsConceded,
+            matchEventAggregate0,
+            matchEventAggregate1,
+            matchEventAggregate2,
+            matchEventAggregate3,
             timestamp,
           },
         });
@@ -524,6 +554,16 @@ export class EaService {
       ratingSum += s.rating;
     }
 
+    // Decode event aggregates from matchEventAggregate0..3 across all matches
+    const allBuckets: string[] = [];
+    for (const s of stats) {
+      if (s.matchEventAggregate0) allBuckets.push(s.matchEventAggregate0);
+      if (s.matchEventAggregate1) allBuckets.push(s.matchEventAggregate1);
+      if (s.matchEventAggregate2) allBuckets.push(s.matchEventAggregate2);
+      if (s.matchEventAggregate3) allBuckets.push(s.matchEventAggregate3);
+    }
+    const decodedEvents = decodeMatchEvents(...allBuckets);
+
     const avgRating = totalMatches > 0 ? (ratingSum / totalMatches).toFixed(2) : '0.0';
     const passAccuracy = totalPassAttempts > 0 ? Math.round((totalPassesMade / totalPassAttempts) * 100) : 0;
 
@@ -544,7 +584,152 @@ export class EaService {
       cleanSheets: totalCleanSheets,
       redCards: totalRedCards,
       momAwards: totalMom,
+      events: decodedEvents,
       recentMatches: stats.slice(0, 5),
+    };
+  }
+
+  // ----------------------------------------------------
+  // Multi-Club Tracking Methods
+  // ----------------------------------------------------
+
+  async getTrackedClubs(guildId: string) {
+    return this.prisma.trackedClub.findMany({
+      where: { guildId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async addTrackedClub(
+    guildId: string,
+    clubId: string,
+    clubName: string,
+    channelId?: string | null,
+    platform = 'common-gen5',
+    crestUrl?: string | null,
+  ) {
+    return this.prisma.trackedClub.upsert({
+      where: {
+        guildId_clubId: { guildId, clubId },
+      },
+      update: {
+        clubName,
+        channelId: channelId || null,
+        platform,
+        enabled: true,
+        crestUrl: crestUrl || null,
+      },
+      create: {
+        guildId,
+        clubId,
+        clubName,
+        channelId: channelId || null,
+        platform,
+        enabled: true,
+        crestUrl: crestUrl || null,
+        elo: 1200,
+      },
+    });
+  }
+
+  async removeTrackedClub(guildId: string, clubId: string) {
+    return this.prisma.trackedClub.deleteMany({
+      where: { guildId, clubId },
+    });
+  }
+
+  async getClubStats(guildId: string, clubNameOrId?: string) {
+    let clubId = clubNameOrId?.trim();
+    let trackedClub = null;
+
+    if (clubId) {
+      trackedClub = await this.prisma.trackedClub.findFirst({
+        where: {
+          guildId,
+          OR: [
+            { clubId },
+            { clubName: { contains: clubId, mode: 'insensitive' } },
+          ],
+        },
+      });
+    }
+
+    if (!trackedClub) {
+      trackedClub = await this.prisma.trackedClub.findFirst({
+        where: { guildId, enabled: true },
+        orderBy: { createdAt: 'asc' },
+      });
+    }
+
+    const defaultCfg = await this.getOrCreateTrackerConfig(guildId);
+    const targetClubId = trackedClub ? trackedClub.clubId : defaultCfg.clubId;
+    const targetClubName = trackedClub ? trackedClub.clubName : defaultCfg.clubName;
+    const elo = trackedClub ? trackedClub.elo : 1200;
+
+    // Fetch processed matches for this club
+    const matches = await this.prisma.processedEaMatch.findMany({
+      where: {
+        guildId,
+        clubId: targetClubId,
+      },
+      orderBy: { timestamp: 'desc' },
+      take: 50,
+    });
+
+    let wins = 0;
+    let losses = 0;
+    let draws = 0;
+    let goalsFor = 0;
+    let goalsAgainst = 0;
+    let cleanSheets = 0;
+
+    for (const m of matches) {
+      const isHome = m.homeClubName.toLowerCase().includes(targetClubName.toLowerCase());
+      const teamScore = isHome ? m.homeScore : m.awayScore;
+      const oppScore = isHome ? m.awayScore : m.homeScore;
+
+      goalsFor += teamScore;
+      goalsAgainst += oppScore;
+
+      if (oppScore === 0) cleanSheets += 1;
+      if (teamScore > oppScore) wins += 1;
+      else if (teamScore < oppScore) losses += 1;
+      else draws += 1;
+    }
+
+    // Top scorers from eaPlayerMatchStat for this club
+    const playerStats = await this.prisma.eaPlayerMatchStat.findMany({
+      where: { clubId: targetClubId },
+    });
+
+    const goalsByPlayer = new Map<string, { name: string; goals: number; assists: number; matches: number }>();
+    for (const ps of playerStats) {
+      const cur = goalsByPlayer.get(ps.playerProName) || { name: ps.playerProName, goals: 0, assists: 0, matches: 0 };
+      cur.goals += ps.goals;
+      cur.assists += ps.assists;
+      cur.matches += 1;
+      goalsByPlayer.set(ps.playerProName, cur);
+    }
+
+    const topScorers = Array.from(goalsByPlayer.values())
+      .sort((a, b) => b.goals - a.goals || b.assists - a.assists)
+      .slice(0, 5);
+
+    return {
+      clubId: targetClubId,
+      clubName: targetClubName,
+      elo,
+      totalMatches: matches.length,
+      wins,
+      draws,
+      losses,
+      winRate: matches.length > 0 ? Math.round((wins / matches.length) * 100) : 0,
+      goalsFor,
+      goalsAgainst,
+      goalDifference: goalsFor - goalsAgainst,
+      cleanSheets,
+      topScorers,
+      recentMatches: matches.slice(0, 5),
     };
   }
 
@@ -622,5 +807,74 @@ export class EaService {
       take: 50,
     });
   }
+}
+
+export function decodeMatchEvents(...buckets: (string | null | undefined)[]) {
+  const counts = new Map<number, number>();
+  for (const bucket of buckets) {
+    if (!bucket || typeof bucket !== 'string') continue;
+    for (const item of bucket.split(',')) {
+      const trimmed = item.trim();
+      if (!trimmed) continue;
+      const parts = trimmed.split(':');
+      if (parts.length === 2) {
+        const eventId = parseInt(parts[0], 10);
+        const count = parseInt(parts[1], 10);
+        if (!isNaN(eventId) && !isNaN(count)) {
+          counts.set(eventId, (counts.get(eventId) || 0) + count);
+        }
+      }
+    }
+  }
+
+  const e = (id: number) => counts.get(id) || 0;
+
+  return {
+    yellowCards: e(95) + e(213),
+    fouls: e(2) + e(3),
+    penaltiesConceded: e(94),
+    cornersConceded: e(10),
+    passesFailed: e(216),
+    passesForwardSuccess: e(30),
+    passesForwardFailed: e(31),
+    passesBackwardSuccess: e(32),
+    passesBackwardFailed: e(33),
+    passesSidewaysSuccess: e(34),
+    passesSidewaysFailed: e(35),
+    passesShortSuccess: e(24),
+    passesShortFailed: e(25),
+    passesMediumSuccess: e(26),
+    passesMediumFailed: e(27),
+    passesLongSuccess: e(28),
+    passesLongFailed: e(29),
+    crossesSuccess: e(36),
+    crossesFailed: e(37),
+    offsidePasses: e(153),
+    cornersAttempted: e(145),
+    crossesAttempted: e(157),
+    crossesBlocked: e(156),
+    throughBalls: e(152),
+    firstTouchPasses: e(143),
+    flairPasses: e(147),
+    eventGoals: e(214),
+    eventAssists: e(11),
+    eventSecondAssists: e(115),
+    shotsOnTarget: e(217),
+    shotsOffTarget: e(218),
+    shotsOnTargetInBox: e(13),
+    shotsOnTargetOutBox: e(18),
+    shotsOffTargetInBox: e(14),
+    shotsOffTargetOutBox: e(19),
+    shotsSaved: e(202),
+    standingTacklesWon: e(229),
+    slidingTacklesWon: e(230),
+    tacklesLost: e(1),
+    dangerousTackles: e(163),
+    cleanTackles: e(164),
+    dispossessedOpponent: e(158),
+    dribblesCompleted: e(174),
+    dribbleBeat: Math.max(0, e(112) - e(38)),
+    dribbleSkillBeat: e(38),
+  };
 }
 

@@ -77,7 +77,7 @@ export class PublicShellComponent {
     // CSS controls visibility. Clear the mobile state when returning to desktop,
     // so resizing back to mobile cannot reopen a stale drawer. Browser-only API.
     afterNextRender(() => {
-      const desktop = window.matchMedia('(min-width: 64rem)');
+      const desktop = window.matchMedia('(min-width: 1024px)');
       const closeOnDesktop = (e?: MediaQueryListEvent | UIEvent) => {
         const isDesktop = (e && 'matches' in e) ? e.matches : (desktop.matches || window.innerWidth >= 1024);
         if (isDesktop) {

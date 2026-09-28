@@ -87,9 +87,165 @@ export class EaPollerService implements OnModuleInit, OnModuleDestroy {
           );
         }
       }
+
+      // Also poll all tracked clubs across guilds
+      const activeTrackedClubs = await this.prisma.trackedClub.findMany({
+        where: {
+          enabled: true,
+          channelId: { not: null },
+        },
+      });
+
+      for (const club of activeTrackedClubs) {
+        try {
+          await this.pollTrackedClub(club);
+        } catch (clubErr: any) {
+          this.logger.error(
+            `Error polling tracked club ${club.clubName} (${club.clubId}): ${clubErr.message}`,
+          );
+        }
+      }
     } finally {
       this.isPolling = false;
     }
+  }
+
+  async pollTrackedClub(club: any): Promise<number> {
+    const rawMatchesMap = new Map<string, EaRawMatch>();
+    for (const mType of ['leagueMatch', 'friendlyMatch', 'playoffMatch']) {
+      try {
+        const matches = await this.eaService.fetchMatchesRaw(
+          club.clubId,
+          mType,
+          5,
+          club.platform || 'common-gen5',
+        );
+        if (Array.isArray(matches)) {
+          for (const m of matches) {
+            if (m && m.matchId) {
+              mergeEaRawMatch(rawMatchesMap, m);
+            }
+          }
+        }
+      } catch (err: any) {
+        this.logger.warn(`Failed to fetch ${mType} for tracked club ${club.clubId}: ${err.message}`);
+      }
+    }
+
+    const allMatches = Array.from(rawMatchesMap.values()).sort(
+      (a, b) => (b.timestamp || 0) - (a.timestamp || 0),
+    );
+
+    if (allMatches.length === 0) {
+      await this.prisma.trackedClub.update({
+        where: { id: club.id },
+        data: { lastPolledAt: new Date() },
+      });
+      return 0;
+    }
+
+    const latestRaw = allMatches[0];
+    const latestParsed = this.eaService.parseMatch(latestRaw, club.clubId);
+
+    if (!club.lastMatchId) {
+      await this.prisma.trackedClub.update({
+        where: { id: club.id },
+        data: {
+          lastMatchId: String(latestRaw.matchId),
+          lastPolledAt: new Date(),
+        },
+      });
+
+      await this.prisma.processedEaMatch.upsert({
+        where: {
+          guildId_eaMatchId: {
+            guildId: club.guildId,
+            eaMatchId: String(latestRaw.matchId),
+          },
+        },
+        update: {},
+        create: {
+          guildId: club.guildId,
+          eaMatchId: String(latestRaw.matchId),
+          clubId: club.clubId,
+          matchType: latestParsed.matchType,
+          homeClubName: latestParsed.trackedClub.name,
+          awayClubName: latestParsed.opponentClub.name,
+          homeScore: latestParsed.trackedClub.score,
+          awayScore: latestParsed.opponentClub.score,
+          timestamp: latestParsed.timestamp,
+          channelId: club.channelId,
+          rawPayload: latestRaw as any,
+        },
+      });
+
+      await this.eaService.recordMatchPlayerStats(String(latestRaw.matchId), club.clubId, latestRaw);
+      return 0;
+    }
+
+    let postedCount = 0;
+    const webUrl = buildClubWebUrl(this.configService.frontendUrl, club.guildId);
+    const matchesToProcess = allMatches.slice(0, 5).reverse();
+
+    let currentElo = club.elo || 1200;
+
+    for (const raw of matchesToProcess) {
+      const matchId = String(raw.matchId);
+      const alreadyProcessed = await this.prisma.processedEaMatch.findUnique({
+        where: {
+          guildId_eaMatchId: {
+            guildId: club.guildId,
+            eaMatchId: matchId,
+          },
+        },
+      });
+
+      if (!alreadyProcessed) {
+        const parsed = this.eaService.parseMatch(raw, club.clubId);
+        if (parsed.outcome === 'WIN') currentElo += 20;
+        else if (parsed.outcome === 'DRAW') currentElo += 5;
+        else if (parsed.outcome === 'LOSS') currentElo = Math.max(800, currentElo - 15);
+
+        const { embed, row } = buildEaMatchEmbed(parsed, webUrl);
+        if (club.channelId) {
+          try {
+            await this.discordService.sendMessageToChannel(club.channelId, embed, [row]);
+            postedCount++;
+          } catch (err: any) {
+            this.logger.error(`Failed to send match ${matchId} for club ${club.clubName}: ${err.message}`);
+          }
+        }
+
+        await this.prisma.processedEaMatch.create({
+          data: {
+            guildId: club.guildId,
+            eaMatchId: matchId,
+            clubId: club.clubId,
+            matchType: parsed.matchType,
+            homeClubName: parsed.trackedClub.name,
+            awayClubName: parsed.opponentClub.name,
+            homeScore: parsed.trackedClub.score,
+            awayScore: parsed.opponentClub.score,
+            timestamp: parsed.timestamp,
+            channelId: club.channelId,
+            rawPayload: raw as any,
+          },
+        });
+
+        await this.eaService.recordMatchPlayerStats(matchId, club.clubId, raw);
+      }
+    }
+
+    await this.prisma.trackedClub.update({
+      where: { id: club.id },
+      data: {
+        lastMatchId: String(latestRaw.matchId),
+        lastPolledAt: new Date(),
+        elo: currentElo,
+      },
+    });
+
+    return postedCount;
   }
 
   async pollGuild(config: any): Promise<{ postedCount: number; latestMatch?: ParsedEaMatch }> {
