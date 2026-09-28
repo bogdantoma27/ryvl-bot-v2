@@ -1,4 +1,5 @@
 'use strict';
+process.env.TZ = 'UTC';
 require('reflect-metadata');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, afterNextRender, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, afterNextRender, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter } from 'rxjs';
@@ -54,24 +54,36 @@ export class PublicShellComponent {
     { path: '/recruitment', label: 'Recruitment' }, { path: '/about', label: 'About' }, { path: '/contact', label: 'Contact' },
   ];
   private readonly destroyRef = inject(DestroyRef);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   constructor() {
     // Navigation closes the drawer; the subscription is disposed with this shell.
     inject(Router).events.pipe(
       filter(event => event instanceof NavigationEnd),
       takeUntilDestroyed(),
-    ).subscribe(() => this.mobileNavOpen.set(false));
+    ).subscribe(() => {
+      this.mobileNavOpen.set(false);
+      this.cdr.markForCheck();
+    });
 
     // CSS controls visibility. Clear the mobile state when returning to desktop,
     // so resizing back to mobile cannot reopen a stale drawer. Browser-only API.
     afterNextRender(() => {
       const desktop = window.matchMedia('(min-width: 64rem)');
       const closeOnDesktop = () => {
-        if (desktop.matches) this.mobileNavOpen.set(false);
+        if (desktop.matches || window.innerWidth >= 1024) {
+          this.mobileNavOpen.set(false);
+          this.cdr.markForCheck();
+        }
       };
       closeOnDesktop();
       desktop.addEventListener('change', closeOnDesktop);
-      this.destroyRef.onDestroy(() => desktop.removeEventListener('change', closeOnDesktop));
+      window.addEventListener('resize', closeOnDesktop);
+      this.destroyRef.onDestroy(() => {
+        desktop.removeEventListener('change', closeOnDesktop);
+        window.removeEventListener('resize', closeOnDesktop);
+      });
     });
   }
 }
+
