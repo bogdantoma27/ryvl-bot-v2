@@ -38,13 +38,13 @@ import { TournamentInstance } from '../../core/models';
           <div>
             <div class="flex items-center gap-3 flex-wrap">
               <span class="text-2xl">🏆</span>
-              <h1 class="text-2xl font-black text-white tracking-tight">FC Draft Tournaments</h1>
+              <h1 class="text-2xl font-black text-white tracking-tight">Tournaments & FC Draft</h1>
               <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/30">
-                Multi-Server Draft
+                MultiBots & Draft
               </span>
             </div>
             <p class="text-sm text-slate-400 mt-1">
-              Organize Romanian FC Draft tournaments with interactive signups, automated Discord channels, roster cards, and live standings graphics.
+              Organize both MultiBots-style Standard Tournaments (auto-channels #info-rules, #announcements, #registration, #fixtures-results, #table-standings, #tournament-chat) and FC Draft Tournaments with live Discord draft wheel, 3-5-2 / 3-1-4-2 formations, and jokers.
             </p>
           </div>
 
@@ -71,7 +71,7 @@ import { TournamentInstance } from '../../core/models';
               <option [ngValue]="null">No tournaments created yet</option>
             }
             @for (t of tournaments(); track t.id) {
-              <option [value]="t.id">{{ t.name }} ({{ t.status }})</option>
+              <option [value]="t.id">{{ t.name }} [{{ t.type || 'STANDARD' }} - {{ t.status }}]</option>
             }
           </select>
         </div>
@@ -438,26 +438,45 @@ import { TournamentInstance } from '../../core/models';
 
             <div class="space-y-3">
               <div>
+                <label class="block text-xs font-semibold text-slate-300 mb-1">Tournament Format</label>
+                <select
+                  [(ngModel)]="newTournamentType"
+                  class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                >
+                  <option value="STANDARD">Standard Tournament (MultiBots style)</option>
+                  <option value="DRAFT">FC Draft Tournament (Draft Wheel & Formations)</option>
+                </select>
+                <p class="text-[10px] text-slate-400 mt-1">
+                  @if (newTournamentType === 'STANDARD') {
+                    Creates automated Discord category with #info-rules, #announcements, #registration, #fixtures-results, #table-standings, and #tournament-chat.
+                  } @else {
+                    Creates automated Discord category with #draft-wheel for interactive Discord wheel spins, joker rules, and custom formations.
+                  }
+                </p>
+              </div>
+
+              <div>
                 <label class="block text-xs font-semibold text-slate-300 mb-1">Tournament Name</label>
                 <input
                   type="text"
                   [(ngModel)]="newTournamentName"
-                  placeholder="e.g. FC Draft RO - Cupa Romaniei Ed. 1"
+                  [placeholder]="newTournamentType === 'STANDARD' ? 'e.g. RYVL Champions League Ed. 1' : 'e.g. FC Draft RO - Cupa Romaniei Ed. 1'"
                   class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
-              <div>
-                <label class="block text-xs font-semibold text-slate-300 mb-1">Tactical Formation</label>
-                <select
-                  [(ngModel)]="newTournamentFormation"
-                  class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="4-3-3">4-3-3 (Attack)</option>
-                  <option value="4-4-2">4-4-2 (Classic)</option>
-                  <option value="3-5-2">3-5-2 (Wingers)</option>
-                </select>
-              </div>
+              @if (newTournamentType === 'DRAFT') {
+                <div>
+                  <label class="block text-xs font-semibold text-slate-300 mb-1">Tactical Formation</label>
+                  <select
+                    [(ngModel)]="newTournamentFormation"
+                    class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+                  >
+                    <option value="3-1-4-2">3-1-4-2 (Holding CDM & Twin Strikers)</option>
+                    <option value="3-5-2">3-5-2 (Twin Strikers, CAM & Midfield)</option>
+                  </select>
+                </div>
+              }
 
               <div>
                 <label class="block text-xs font-semibold text-slate-300 mb-1">Number of Teams</label>
@@ -514,8 +533,9 @@ export class AdminTournamentsComponent implements OnInit {
   readonly toast = signal<{ text: string; type: 'success' | 'error' } | null>(null);
 
   // Form states for new tournament
+  newTournamentType: 'STANDARD' | 'DRAFT' = 'STANDARD';
   newTournamentName = '';
-  newTournamentFormation = '4-3-3';
+  newTournamentFormation = '3-1-4-2';
   newTournamentTeams = 4;
 
   // Form states for match result
@@ -568,6 +588,7 @@ export class AdminTournamentsComponent implements OnInit {
     try {
       const created = await this.api.createTournament(guildId, {
         name: this.newTournamentName.trim(),
+        type: this.newTournamentType,
         formation: this.newTournamentFormation,
         numTeams: Number(this.newTournamentTeams) || 4,
       });

@@ -65,7 +65,7 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
                   </span>
                 }
               </div>
-              <p class="text-xs text-slate-400 mt-1 flex items-center gap-2">
+              <p class="text-xs text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
                 <span>Club ID: <code class="text-slate-300 bg-slate-800 px-1.5 py-0.5 rounded">{{ clubId() }}</code></span>
                 <span>•</span>
                 <span>Target Channel:
@@ -75,6 +75,21 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
                     <span class="text-amber-400 italic">Not configured</span>
                   }
                 </span>
+                @if (trackedClubs().length > 1) {
+                  <span>•</span>
+                  <span class="flex items-center gap-1.5">
+                    <span class="text-slate-400 font-semibold">Switch Club:</span>
+                    <select
+                      [ngModel]="clubId()"
+                      (ngModelChange)="switchActiveClubById($event)"
+                      class="bg-[#11192e] border border-slate-700 rounded-lg px-2 py-0.5 text-xs text-emerald-400 font-semibold focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    >
+                      @for (tc of trackedClubs(); track tc.clubId) {
+                        <option [value]="tc.clubId">{{ tc.clubName || tc.clubId }}</option>
+                      }
+                    </select>
+                  </span>
+                }
               </p>
             </div>
           </div>
@@ -176,7 +191,7 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
       </div>
 
       <!-- Navigation Tabs -->
-      <div class="flex items-center gap-2 border-b border-slate-800 pb-2">
+      <div class="flex items-center gap-2 border-b border-slate-800 pb-2 flex-wrap">
         <button
           type="button"
           (click)="activeTab.set('matches')"
@@ -203,6 +218,15 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
             [ngClass]="activeTab() === 'players' ? 'bg-[#00d26a] text-black shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'"
           >
             Registered Players ({{ registeredPlayers().length }})
+          </button>
+
+          <button
+            type="button"
+            (click)="activeTab.set('clubs')"
+            class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
+            [ngClass]="activeTab() === 'clubs' ? 'bg-[#00d26a] text-black shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'"
+          >
+            Tracked Clubs ({{ trackedClubs().length }})
           </button>
 
           <button
@@ -791,6 +815,177 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
         </div>
       }
 
+      <!-- Tab: Multi-Club EA Tracker -->
+      @if (isAdmin() && activeTab() === 'clubs') {
+        <div class="space-y-6">
+          <!-- Overview Card -->
+          <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div>
+                <h3 class="text-base font-bold text-white flex items-center gap-2">
+                  <span>🛡️</span>
+                  <span>Multi-Club EA FC Pro Clubs Tracker</span>
+                </h3>
+                <p class="text-xs text-slate-400 mt-1">
+                  Track multiple clubs concurrently. Each club can have its own target Discord announcement channel and tracking status.
+                </p>
+              </div>
+              <span class="text-xs bg-[#11192e] border border-slate-700 px-3 py-1.5 rounded-xl text-emerald-400 font-bold">
+                {{ trackedClubs().length }} Clubs Active
+              </span>
+            </div>
+
+            <!-- Tracked Clubs Table -->
+            @if (isLoadingTrackedClubs()) {
+              <div class="py-12 text-center text-slate-400 space-y-2">
+                <div class="w-7 h-7 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                <p class="text-xs">Loading tracked clubs...</p>
+              </div>
+            } @else if (trackedClubs().length === 0) {
+              <div class="p-8 text-center text-slate-400 space-y-2 bg-[#11192e] rounded-xl border border-slate-800">
+                <div class="text-3xl">⚽</div>
+                <h4 class="text-sm font-bold text-white">No Additional Tracked Clubs</h4>
+                <p class="text-xs text-slate-400">Add another EA FC 27 Pro Club below to track and auto-announce matches in dedicated Discord channels.</p>
+              </div>
+            } @else {
+              <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-[#11192e] text-slate-400 text-[10px] uppercase font-bold border-b border-slate-800">
+                    <tr>
+                      <th class="py-3 px-4">Club Name / ID</th>
+                      <th class="py-3 px-4 text-center">Platform</th>
+                      <th class="py-3 px-4">Target Channel</th>
+                      <th class="py-3 px-4 text-center">Status</th>
+                      <th class="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-800/80">
+                    @for (tc of trackedClubs(); track tc.clubId) {
+                      <tr class="hover:bg-slate-800/30 transition">
+                        <td class="py-3 px-4">
+                          <div class="font-bold text-white flex items-center gap-2">
+                            <span>{{ tc.clubName || 'Unknown Club' }}</span>
+                            @if (tc.clubId === clubId()) {
+                              <span class="px-1.5 py-0.5 text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded">Viewing</span>
+                            }
+                          </div>
+                          <div class="font-mono text-[10px] text-slate-400">ID: {{ tc.clubId }}</div>
+                        </td>
+                        <td class="py-3 px-4 text-center font-mono text-slate-300">
+                          <span class="px-2 py-0.5 rounded bg-slate-800 text-[10px] border border-slate-700">
+                            {{ tc.platform || 'common-gen5' }}
+                          </span>
+                        </td>
+                        <td class="py-3 px-4">
+                          <select
+                            [ngModel]="tc.channelId || null"
+                            (ngModelChange)="onUpdateClubChannel(tc, $event)"
+                            class="bg-[#11192e] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                          >
+                            <option [value]="null">-- No Channel --</option>
+                            @for (c of availableChannels(); track c.id) {
+                              <option [value]="c.id"># {{ c.name }}</option>
+                            }
+                          </select>
+                        </td>
+                        <td class="py-3 px-4 text-center">
+                          <button
+                            type="button"
+                            (click)="onToggleClubStatus(tc)"
+                            class="px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer border"
+                            [ngClass]="tc.enabled ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20' : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'"
+                          >
+                            {{ tc.enabled ? '● Active' : '○ Paused' }}
+                          </button>
+                        </td>
+                        <td class="py-3 px-4 text-right space-x-2">
+                          <button
+                            type="button"
+                            (click)="switchActiveClub(tc)"
+                            class="text-xs font-bold text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                          >
+                            View Stats
+                          </button>
+                          <button
+                            type="button"
+                            (click)="onDeleteTrackedClub(tc.clubId)"
+                            class="text-xs font-bold text-rose-400 hover:text-rose-300 cursor-pointer ml-2"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+
+          <!-- Add New Tracked Club Card -->
+          <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
+            <div class="border-b border-slate-800 pb-3">
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <span>➕</span>
+                <span>Add Club to Tracker</span>
+              </h3>
+              <p class="text-xs text-slate-400 mt-1">Enter club details or use the Club Switch tab to search global leaderboards.</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">Club ID</label>
+                <input
+                  type="text"
+                  [(ngModel)]="newClubId"
+                  placeholder="e.g. 128199"
+                  class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">Club Name</label>
+                <input
+                  type="text"
+                  [(ngModel)]="newClubName"
+                  placeholder="e.g. RYVL Esports"
+                  class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-300 mb-1">Target Discord Channel</label>
+                <select
+                  [(ngModel)]="newClubChannelId"
+                  class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                >
+                  <option [value]="null">-- Select a Text Channel --</option>
+                  @for (c of availableChannels(); track c.id) {
+                    <option [value]="c.id"># {{ c.name }}</option>
+                  }
+                </select>
+              </div>
+            </div>
+
+            <div class="flex justify-end pt-2">
+              <button
+                type="button"
+                (click)="onAddTrackedClub()"
+                [disabled]="isAddingClub() || !newClubId || !newClubName"
+                class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+              >
+                @if (isAddingClub()) {
+                  <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                  <span>Adding Club...</span>
+                } @else {
+                  <span>Add Tracked Club</span>
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
       <!-- Player Stats Modal -->
       @if (playerStatsData()) {
         <div class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -867,7 +1062,7 @@ export class EaTrackerComponent implements OnInit {
     'https://media.contentapi.ea.com/content/dam/ea/fc/common/global/tertiary-logo.svg';
 
   // State
-  readonly activeTab = signal<'matches' | 'roster' | 'players' | 'settings'>('matches');
+  readonly activeTab = signal<'matches' | 'roster' | 'players' | 'clubs' | 'settings'>('matches');
   readonly config = signal<any>(null);
   readonly clubInfo = signal<any>(null);
   readonly overallStats = signal<any>(null);
@@ -878,6 +1073,15 @@ export class EaTrackerComponent implements OnInit {
   readonly isLoadingPlayers = signal<boolean>(false);
   readonly isRegistering = signal<boolean>(false);
   readonly playerStatsData = signal<any>(null);
+
+  readonly trackedClubs = signal<any[]>([]);
+  readonly isLoadingTrackedClubs = signal<boolean>(false);
+  readonly isAddingClub = signal<boolean>(false);
+
+  newClubId = '';
+  newClubName = '';
+  newClubPlatform = 'common-gen5';
+  newClubChannelId: string | null = null;
 
   newRegUserId = '';
   newRegEaName = '';
@@ -1015,9 +1219,10 @@ export class EaTrackerComponent implements OnInit {
       // Load members
       this.loadMembers(guildId);
 
-      // Load registered players for admins
+      // Load registered players and tracked clubs for admins
       if (this.isAdmin() && guildId !== 'default') {
         this.loadRegisteredPlayers(guildId);
+        this.loadTrackedClubs(guildId);
       }
     } catch (err: any) {
       console.error('Error loading EA config:', err);
@@ -1258,6 +1463,108 @@ export class EaTrackerComponent implements OnInit {
       });
     } catch {
       return String(timestamp);
+    }
+  }
+
+  async loadTrackedClubs(guildId: string): Promise<void> {
+    this.isLoadingTrackedClubs.set(true);
+    try {
+      const clubs = await this.api.getTrackedClubs(guildId);
+      this.trackedClubs.set(clubs || []);
+    } catch (err: any) {
+      console.error('Failed to load tracked clubs:', err);
+    } finally {
+      this.isLoadingTrackedClubs.set(false);
+    }
+  }
+
+  async onAddTrackedClub(): Promise<void> {
+    const guildId = this.guildStore.activeGuildId();
+    if (!guildId || !this.newClubId.trim() || !this.newClubName.trim()) return;
+
+    this.isAddingClub.set(true);
+    try {
+      await this.api.addTrackedClub(guildId, {
+        clubId: this.newClubId.trim(),
+        clubName: this.newClubName.trim(),
+        platform: this.newClubPlatform,
+        channelId: this.newClubChannelId || undefined,
+        enabled: true,
+      });
+      this.showToast(`Club "${this.newClubName}" added to tracker!`, 'success');
+      this.newClubId = '';
+      this.newClubName = '';
+      this.newClubChannelId = null;
+      await this.loadTrackedClubs(guildId);
+    } catch (err: any) {
+      this.showToast(`Failed to add club: ${err.message}`, 'error');
+    } finally {
+      this.isAddingClub.set(false);
+    }
+  }
+
+  async onUpdateClubChannel(club: any, channelId: string | null): Promise<void> {
+    const guildId = this.guildStore.activeGuildId();
+    if (!guildId) return;
+
+    try {
+      await this.api.updateTrackedClub(guildId, club.clubId, {
+        channelId: channelId || undefined,
+      });
+      this.showToast('Club announcement channel updated.', 'success');
+      await this.loadTrackedClubs(guildId);
+    } catch (err: any) {
+      this.showToast(`Failed to update channel: ${err.message}`, 'error');
+    }
+  }
+
+  async onToggleClubStatus(club: any): Promise<void> {
+    const guildId = this.guildStore.activeGuildId();
+    if (!guildId) return;
+
+    try {
+      await this.api.updateTrackedClub(guildId, club.clubId, {
+        enabled: !club.enabled,
+      });
+      this.showToast(`Club tracking ${!club.enabled ? 'activated' : 'paused'}.`, 'success');
+      await this.loadTrackedClubs(guildId);
+    } catch (err: any) {
+      this.showToast(`Failed to toggle status: ${err.message}`, 'error');
+    }
+  }
+
+  async onDeleteTrackedClub(clubId: string): Promise<void> {
+    const guildId = this.guildStore.activeGuildId();
+    if (!guildId) return;
+
+    try {
+      await this.api.removeTrackedClub(guildId, clubId);
+      this.showToast('Tracked club removed.', 'success');
+      await this.loadTrackedClubs(guildId);
+    } catch (err: any) {
+      this.showToast(`Failed to remove club: ${err.message}`, 'error');
+    }
+  }
+
+  async switchActiveClub(club: any): Promise<void> {
+    const guildId = this.guildStore.activeGuildId();
+    if (!guildId) return;
+
+    try {
+      await this.selectClub({
+        clubId: club.clubId,
+        name: club.clubName || club.name,
+      });
+      this.activeTab.set('matches');
+    } catch (err: any) {
+      this.showToast(`Failed to switch active club: ${err.message}`, 'error');
+    }
+  }
+
+  async switchActiveClubById(clubId: string): Promise<void> {
+    const club = this.trackedClubs().find((c) => String(c.clubId) === String(clubId));
+    if (club) {
+      await this.switchActiveClub(club);
     }
   }
 

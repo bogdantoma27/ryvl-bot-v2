@@ -413,6 +413,7 @@ export interface TournamentInstance {
   id: string;
   guildId: string;
   name: string;
+  type?: 'STANDARD' | 'DRAFT';
   status: 'DRAFT' | 'SIGNUPS' | 'ACTIVE' | 'COMPLETED';
   formation: string;
   numTeams: number;

@@ -207,6 +207,46 @@ export class EaController {
     return this.eaPollerService.pollGuild(config);
   }
 
+  @Get('api/guilds/:guildId/ea/tracked-clubs')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async getTrackedClubs(@Param('guildId') guildId: string) {
+    return this.eaService.getTrackedClubs(guildId);
+  }
+
+  @Post('api/guilds/:guildId/ea/tracked-clubs')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async addTrackedClub(
+    @Param('guildId') guildId: string,
+    @Body() body: { clubId: string; clubName: string; channelId?: string; platform?: string },
+  ) {
+    return this.eaService.addTrackedClub(
+      guildId,
+      body.clubId,
+      body.clubName,
+      body.channelId,
+      body.platform,
+    );
+  }
+
+  @Patch('api/guilds/:guildId/ea/tracked-clubs/:clubId')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async updateTrackedClub(
+    @Param('guildId') guildId: string,
+    @Param('clubId') clubId: string,
+    @Body() body: { enabled?: boolean; channelId?: string; platform?: string; clubName?: string },
+  ) {
+    return this.eaService.updateTrackedClub(guildId, clubId, body);
+  }
+
+  @Delete('api/guilds/:guildId/ea/tracked-clubs/:clubId')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async removeTrackedClub(
+    @Param('guildId') guildId: string,
+    @Param('clubId') clubId: string,
+  ) {
+    return this.eaService.removeTrackedClub(guildId, clubId);
+  }
+
   // ----------------------------------------------------
   // Player Registration & Individual Stats Endpoints
   // ----------------------------------------------------

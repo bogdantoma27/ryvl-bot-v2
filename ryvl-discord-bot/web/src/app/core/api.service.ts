@@ -376,6 +376,61 @@ export class ApiService {
     );
   }
 
+  getTrackedClubs(guildId: string): Promise<any[]> {
+    return firstValueFrom(
+      this.http.get<any[]>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/tracked-clubs`,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  addTrackedClub(
+    guildId: string,
+    data: { clubId: string; clubName: string; platform?: string; channelId?: string; enabled?: boolean },
+  ): Promise<any> {
+    return firstValueFrom(
+      this.http.post<any>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/tracked-clubs`,
+        data,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  updateTrackedClub(
+    guildId: string,
+    clubId: string,
+    data: { clubName?: string; platform?: string; channelId?: string; enabled?: boolean },
+  ): Promise<any> {
+    return firstValueFrom(
+      this.http.patch<any>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/tracked-clubs/${clubId}`,
+        data,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  removeTrackedClub(guildId: string, clubId: string): Promise<any> {
+    return firstValueFrom(
+      this.http.delete<any>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/tracked-clubs/${clubId}`,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  getClubStats(guildId: string, clubId: string, platform?: string): Promise<any> {
+    const params = platform ? { platform } : undefined;
+    return firstValueFrom(
+      this.http.get<any>(
+        `${this.baseUrl}/api/guilds/${guildId}/ea/tracked-clubs/${clubId}/stats`,
+        { headers: this.headers(), params },
+      ),
+    );
+  }
+
   getVpgConfig(guildId?: string | null): Promise<any> {
     const url =
       guildId && guildId !== 'default'
@@ -806,7 +861,7 @@ export class ApiService {
 
   createTournament(
     guildId: string,
-    body: { name: string; formation?: string; numTeams?: number },
+    body: { name: string; type?: 'STANDARD' | 'DRAFT'; formation?: string; numTeams?: number },
   ): Promise<TournamentInstance> {
     return firstValueFrom(
       this.http.post<TournamentInstance>(`${this.baseUrl}/api/guilds/${guildId}/tournaments`, body, {

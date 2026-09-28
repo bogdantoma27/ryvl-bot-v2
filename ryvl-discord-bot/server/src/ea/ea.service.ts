@@ -638,6 +638,13 @@ export class EaService {
     });
   }
 
+  async updateTrackedClub(guildId: string, clubId: string, data: { enabled?: boolean; channelId?: string | null; platform?: string; clubName?: string }) {
+    return this.prisma.trackedClub.updateMany({
+      where: { guildId, clubId },
+      data,
+    });
+  }
+
   async getClubStats(guildId: string, clubNameOrId?: string) {
     let clubId = clubNameOrId?.trim();
     let trackedClub = null;

@@ -3,7 +3,19 @@ import { CanMatchFn, Router, Routes } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ApiService } from './core/api.service';
 
+export const subdomainAdminGuard: CanMatchFn = () => {
+  if (typeof window !== 'undefined' && (window.location.hostname === 'ryvl.top' || window.location.hostname === 'www.ryvl.top')) {
+    window.location.replace(`https://bot.ryvl.top${window.location.pathname}${window.location.search}${window.location.hash}`);
+    return false;
+  }
+  return true;
+};
+
 export const authGuard: CanMatchFn = async () => {
+  if (typeof window !== 'undefined' && (window.location.hostname === 'ryvl.top' || window.location.hostname === 'www.ryvl.top')) {
+    window.location.replace(`https://bot.ryvl.top${window.location.pathname}${window.location.search}${window.location.hash}`);
+    return false;
+  }
   const api = inject(ApiService);
   const router = inject(Router);
   const login = (error?: string) => router.createUrlTree(['/admin/login'], {
@@ -106,7 +118,18 @@ export const routes: Routes = [
   {
     path: 'admin/login',
     title: 'Staff sign-in | RYVL Esports',
+    canMatch: [subdomainAdminGuard],
     loadComponent: () => import('./features/auth/admin-login.component').then(m => m.AdminLoginComponent),
+  },
+  {
+    path: 'docs',
+    title: 'Bot Documentation | RYVL',
+    loadComponent: () => import('./features/docs/bot-docs.component').then((m) => m.BotDocsComponent),
+  },
+  {
+    path: 'admin/docs',
+    title: 'Bot Documentation | RYVL',
+    loadComponent: () => import('./features/docs/bot-docs.component').then((m) => m.BotDocsComponent),
   },
   {
     path: 'admin',

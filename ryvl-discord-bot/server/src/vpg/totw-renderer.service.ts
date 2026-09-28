@@ -70,20 +70,20 @@ export class TotwRendererService {
     return null;
   }
 
-  // Exact coordinates matching totw-template.jpg (819 x 1024)
+  // Exact coordinates calibrated to totw-template.jpg (819 x 1024)
   private readonly pitchSlots = [
-    { key: 'st', label: 'LS', cx: 349, cy: 288, idx: 0 },
-    { key: 'st', label: 'RS', cx: 469, cy: 290, idx: 1 },
-    { key: 'cam', label: 'CAM', cx: 385, cy: 407, idx: 0 },
-    { key: 'lm', label: 'LM', cx: 168, cy: 494, idx: 0 },
-    { key: 'cm', label: 'LCM', cx: 281, cy: 515, idx: 0 },
-    { key: 'cm', label: 'RCM', cx: 500, cy: 514, idx: 1 },
-    { key: 'rm', label: 'RM', cx: 650, cy: 494, idx: 0 },
-    { key: 'cdm', label: 'CDM', cx: 383, cy: 583, idx: 0 },
-    { key: 'cb', label: 'LCB', cx: 233, cy: 701, idx: 0 },
-    { key: 'cb', label: 'CCB', cx: 386, cy: 701, idx: 1 },
-    { key: 'cb', label: 'RCB', cx: 584, cy: 702, idx: 2 },
-    { key: 'gk', label: 'GK', cx: 385, cy: 827, idx: 0 },
+    { key: 'st', label: 'LS', cx: 326, cy: 247, py: 300, idx: 0 },
+    { key: 'st', label: 'RS', cx: 493, cy: 247, py: 300, idx: 1 },
+    { key: 'cam', label: 'CAM', cx: 410, cy: 363, py: 414, idx: 0 },
+    { key: 'lm', label: 'LM', cx: 152, cy: 457, py: 498, idx: 0 },
+    { key: 'cm', label: 'LCM', cx: 292, cy: 476, py: 518, idx: 0 },
+    { key: 'cm', label: 'RCM', cx: 528, cy: 476, py: 518, idx: 1 },
+    { key: 'rm', label: 'RM', cx: 667, cy: 457, py: 498, idx: 0 },
+    { key: 'cdm', label: 'CDM', cx: 410, cy: 538, py: 585, idx: 0 },
+    { key: 'cb', label: 'LCB', cx: 255, cy: 658, py: 704, idx: 0 },
+    { key: 'cb', label: 'CCB', cx: 410, cy: 658, py: 704, idx: 1 },
+    { key: 'cb', label: 'RCB', cx: 565, cy: 658, py: 704, idx: 2 },
+    { key: 'gk', label: 'GK', cx: 410, cy: 784, py: 828, idx: 0 },
   ];
 
   private async fetchCircleAvatarBuffer(url: string | null | undefined, diameter: number): Promise<Buffer | null> {
@@ -110,17 +110,29 @@ export class TotwRendererService {
     }
   }
 
+  private getDefaultAvatarBuffer(diameter: number): Buffer {
+    const r = diameter / 2;
+    const svg = `
+      <svg width="${diameter}" height="${diameter}" viewBox="0 0 ${diameter} ${diameter}" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="${r}" cy="${r}" r="${r}" fill="#0d111d"/>
+        <!-- Head -->
+        <circle cx="${r}" cy="${r * 0.72}" r="${r * 0.32}" fill="#2a354d"/>
+        <!-- Shoulders / Torso -->
+        <path d="M ${r * 0.28} ${diameter} C ${r * 0.28} ${r * 1.2}, ${r * 1.72} ${r * 1.2}, ${r * 1.72} ${diameter} Z" fill="#2a354d"/>
+      </svg>
+    `;
+    return Buffer.from(svg);
+  }
+
   renderSvg(options: RenderTotwOptions): string {
     const W = 819;
     const H = 1024;
-    const accent = options.accentColor || '#00E5FF';
-    const title = options.isTots ? 'TEAM OF THE SEASON' : 'TEAM OF THE WEEK';
     const subtitleParts = [options.leagueName];
     if (options.season) subtitleParts.push(`Season ${options.season}`);
     if (options.week) subtitleParts.push(`Week ${options.week}`);
     const subtitle = subtitleParts.join(' • ');
 
-    let playerBadgesSvg = '';
+    let playerNamesSvg = '';
 
     for (const slot of this.pitchSlots) {
       let player: TotwPlayer | undefined;
@@ -128,90 +140,39 @@ export class TotwRendererService {
       if (list && list.length > slot.idx) {
         player = list[slot.idx];
       } else if (slot.key === 'cm' && (!list || list.length <= slot.idx)) {
-        // Fallback to cdm or cam if cm list has fewer entries
         const alt = options.players.cdm || options.players.cam || [];
         player = alt[slot.idx];
       }
 
-      const playerName = player ? (player.display_name || player.username || 'PLAYER') : slot.label;
-      const rating = player?.rating ? `${player.rating}` : '';
-      const team = player?.team_name ? player.team_name.slice(0, 10) : '';
-      const statLabel = rating ? `${rating} RTG` : team || slot.label;
+      const displayName = player ? (player.display_name || player.username || 'PLAYER') : slot.label;
+      const cleanName = displayName.toUpperCase().trim();
+      const rating = player?.rating ? ` ${player.rating}` : '';
+      const labelText = cleanName + (rating ? ` (${rating})` : '');
+      const fontSize = labelText.length > 15 ? 9 : labelText.length > 11 ? 10.5 : 12;
 
-      const badgeW = 92;
-      const badgeH = 24;
-      const bx = slot.cx - badgeW / 2;
-      const by = slot.cy + 34;
-
-      // Dynamic font size for player names to fit perfectly
-      const fontSize = playerName.length > 14 ? 8 : playerName.length > 10 ? 9.5 : 11;
-
-      playerBadgesSvg += `
-        <!-- Slot ${slot.label} at (${slot.cx}, ${slot.cy}) -->
-        <g id="slot-${slot.label}">
-          <!-- Subtle position circle glow if no avatar -->
-          <circle cx="${slot.cx}" cy="${slot.cy}" r="34" fill="#0b1728" fill-opacity="0.5" stroke="${accent}" stroke-width="1.5" stroke-opacity="0.8" />
-          <text x="${slot.cx}" y="${slot.cy + 4}" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-weight="900" font-size="12" fill="${accent}">
-            ${slot.label}
-          </text>
-
-          <!-- Player Name Pill Badge -->
-          <rect x="${bx}" y="${by}" width="${badgeW}" height="${badgeH}" rx="5" fill="#08101c" fill-opacity="0.94" stroke="#1b3658" stroke-width="1.2" />
-          <rect x="${bx}" y="${by}" width="3" height="${badgeH}" rx="1.5" fill="${accent}" />
-
-          <!-- Player Name -->
-          <text x="${slot.cx + 2}" y="${by + 11}" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-weight="bold" font-size="${fontSize}" fill="#ffffff">
-            ${escapeXml(playerName.length > 17 ? playerName.slice(0, 16) + '…' : playerName)}
-          </text>
-
-          <!-- Rating / Team Detail -->
-          <text x="${slot.cx + 2}" y="${by + 20}" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="8" font-weight="700" fill="${accent}">
-            ${escapeXml(statLabel)}
-          </text>
-        </g>
+      // Position text exactly in the middle of the dark purple nameplate (py)
+      playerNamesSvg += `
+        <text x="${slot.cx}" y="${slot.py || (slot.cy + 64)}" text-anchor="middle" font-family="'Segoe UI', Roboto, 'Arial Black', sans-serif" font-weight="800" font-size="${fontSize}" fill="#ffffff" letter-spacing="0.5">
+          ${escapeXml(labelText.length > 18 ? labelText.slice(0, 17) + '…' : labelText)}
+        </text>
       `;
     }
 
     return `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
-        <defs>
-          <filter id="glow">
-            <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
-            <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>
-        </defs>
+        <!-- Subtitle below existing 3D "TEAM OF THE WEEK" title -->
+        <text x="${W / 2}" y="194" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="800" letter-spacing="2" fill="#FACC15">
+          ${escapeXml(subtitle.toUpperCase())}
+        </text>
 
-        <!-- Top Accent Bar -->
-        <rect x="0" y="0" width="${W}" height="4" fill="${accent}" />
+        <!-- Player Names on existing purple nameplates -->
+        ${playerNamesSvg}
 
-        <!-- Header Titles -->
-        <g id="header">
-          <text x="${W / 2}" y="75" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="800" letter-spacing="4" fill="${accent}">
-            OFFICIAL SELECTION • 3-5-2
-          </text>
-          <text x="${W / 2}" y="116" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="34" font-weight="900" letter-spacing="2" fill="#ffffff" filter="url(#glow)">
-            ${title}
-          </text>
-          <text x="${W / 2}" y="148" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" letter-spacing="1" fill="#88a0bf">
-            ${escapeXml(subtitle)}
-          </text>
-        </g>
-
-        <!-- Pitch Badges -->
-        ${playerBadgesSvg}
-
-        <!-- Footer -->
-        <g id="footer">
-          <text x="40" y="${H - 24}" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" letter-spacing="1" fill="#586f8f">
-            PRO CLUBS • VPG TELEMETRY
-          </text>
-          <text x="${W - 40}" y="${H - 24}" text-anchor="end" font-family="'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="800" fill="${accent}">
-            RYVL BOT
-          </text>
-        </g>
+        <!-- Footer League Name Override -->
+        <rect x="240" y="924" width="339" height="24" rx="4" fill="#0c071e" fill-opacity="0.95" />
+        <text x="${W / 2}" y="941" text-anchor="middle" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="800" letter-spacing="2" fill="#EAE905">
+          ${escapeXml(options.leagueName.toUpperCase())}
+        </text>
       </svg>
     `;
   }
@@ -219,28 +180,32 @@ export class TotwRendererService {
   async renderPng(options: RenderTotwOptions): Promise<Buffer> {
     const W = 819;
     const H = 1024;
+    const diameter = 76;
+    const radius = diameter / 2;
     const templatePath = this.getTotwTemplatePath();
 
     const avatarOverlays: OverlayOptions[] = [];
+    const defaultAvatarBuf = this.getDefaultAvatarBuffer(diameter);
 
-    // Parallel avatar fetching for slots with avatar_url
+    // Parallel avatar fetching for slots
     for (const slot of this.pitchSlots) {
       const list = options.players[slot.key as keyof TotwPositionsMap];
       const player = list && list.length > slot.idx ? list[slot.idx] : undefined;
+
+      let avatarBuf: Buffer | null = null;
       if (player?.avatar_url) {
         try {
-          const avatarBuf = await this.fetchCircleAvatarBuffer(player.avatar_url, 68);
-          if (avatarBuf) {
-            avatarOverlays.push({
-              input: avatarBuf,
-              top: slot.cy - 34,
-              left: slot.cx - 34,
-            });
-          }
+          avatarBuf = await this.fetchCircleAvatarBuffer(player.avatar_url, diameter);
         } catch {
-          // ignore error and let SVG circle render
+          // ignore error
         }
       }
+
+      avatarOverlays.push({
+        input: avatarBuf || defaultAvatarBuf,
+        top: Math.round(slot.cy - radius),
+        left: Math.round(slot.cx - radius),
+      });
     }
 
     const svg = this.renderSvg(options);
@@ -258,7 +223,7 @@ export class TotwRendererService {
           .png({ quality: 95, compressionLevel: 8 })
           .toBuffer();
       } catch (err: any) {
-        this.logger.warn(`Failed compositing on totw-template.jpg: ${err.message}. Rendering base SVG.`);
+        this.logger.warn(`Failed compositing on totw-template.jpg: ${err.message}. Rendering fallback.`);
       }
     }
 

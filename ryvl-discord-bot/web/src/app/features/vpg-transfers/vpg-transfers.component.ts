@@ -381,47 +381,6 @@ interface VpgTransfer {
                   }
                 </div>
               }
-
-              <!-- Popular Quick Presets -->
-              <div class="flex items-center gap-1.5 flex-wrap pt-1">
-                <span class="text-[10px] text-slate-500 font-bold uppercase">Popular:</span>
-                <button
-                  type="button"
-                  (click)="selectLeaguePreset('VPGRoPS5', 'VPG Romania', 'Superliga-Romania', 'Superliga România')"
-                  class="px-2 py-1 rounded-md text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                  [class.border-emerald-500]="selectedLeagueSlug === 'Superliga-Romania'"
-                  [class.border]="selectedLeagueSlug === 'Superliga-Romania'"
-                >
-                  Superliga România
-                </button>
-                <button
-                  type="button"
-                  (click)="selectLeaguePreset('VPGRoPS5', 'VPG Romania', 'Liga-2-Romania', 'Liga 2 România')"
-                  class="px-2 py-1 rounded-md text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                  [class.border-emerald-500]="selectedLeagueSlug === 'Liga-2-Romania'"
-                  [class.border]="selectedLeagueSlug === 'Liga-2-Romania'"
-                >
-                  Liga 2 România
-                </button>
-                <button
-                  type="button"
-                  (click)="selectLeaguePreset('VPG-Italy', 'VPG Italy', 'Serie-A', 'Serie A Italy')"
-                  class="px-2 py-1 rounded-md text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                  [class.border-emerald-500]="selectedLeagueSlug === 'Serie-A'"
-                  [class.border]="selectedLeagueSlug === 'Serie-A'"
-                >
-                  VPG Italy
-                </button>
-                <button
-                  type="button"
-                  (click)="selectLeaguePreset('VPG-Europe', 'VPG Europe', 'Europe-Premier', 'Europe Premier')"
-                  class="px-2 py-1 rounded-md text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                  [class.border-emerald-500]="selectedLeagueSlug === 'Europe-Premier'"
-                  [class.border]="selectedLeagueSlug === 'Europe-Premier'"
-                >
-                  VPG Europe
-                </button>
-              </div>
             </div>
 
             <!-- Channel Picker -->

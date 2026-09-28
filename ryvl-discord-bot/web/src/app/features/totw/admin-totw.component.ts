@@ -184,50 +184,6 @@ import { TotwConfig } from '../../core/models';
                   }
                 </div>
               }
-
-              <!-- Quick Presets -->
-              <div class="flex items-center gap-1.5 flex-wrap pt-1">
-                <button
-                  type="button"
-                  (click)="setLeagueSlug('Superliga-Romania', 'Superliga România')"
-                  class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                  [class.text-amber-400]="selectedLeague() === 'Superliga-Romania'"
-                  [class.border-amber-400]="selectedLeague() === 'Superliga-Romania'"
-                  [class.border]="selectedLeague() === 'Superliga-Romania'"
-                >
-                  Superliga
-                </button>
-                <button
-                  type="button"
-                  (click)="setLeagueSlug('Liga-2-Romania', 'Liga 2 România')"
-                  class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                  [class.text-amber-400]="selectedLeague() === 'Liga-2-Romania'"
-                  [class.border-amber-400]="selectedLeague() === 'Liga-2-Romania'"
-                  [class.border]="selectedLeague() === 'Liga-2-Romania'"
-                >
-                  Liga 2
-                </button>
-                <button
-                  type="button"
-                  (click)="setLeagueSlug('Serie-A', 'Serie A Italy')"
-                  class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                  [class.text-amber-400]="selectedLeague() === 'Serie-A'"
-                  [class.border-amber-400]="selectedLeague() === 'Serie-A'"
-                  [class.border]="selectedLeague() === 'Serie-A'"
-                >
-                  Serie A
-                </button>
-                <button
-                  type="button"
-                  (click)="setLeagueSlug('Europe-Premier', 'Europe Premier')"
-                  class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                  [class.text-amber-400]="selectedLeague() === 'Europe-Premier'"
-                  [class.border-amber-400]="selectedLeague() === 'Europe-Premier'"
-                  [class.border]="selectedLeague() === 'Europe-Premier'"
-                >
-                  VPG Europe
-                </button>
-              </div>
             </div>
 
             <!-- Tactical Formation -->

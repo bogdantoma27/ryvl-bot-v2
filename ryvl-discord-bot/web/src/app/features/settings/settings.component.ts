@@ -64,10 +64,13 @@ const TIMEZONES = [
 
       <!-- Settings Form -->
       <form (ngSubmit)="saveSettings()" class="space-y-6">
-        <!-- Card 1: Guild Info & Bot Status -->
+        <!-- Card 1: Regional & Event Defaults (with Bot Status Indicator) -->
         <div class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-5">
-          <div class="flex items-center justify-between border-b border-slate-700/50 pb-3">
-            <h2 class="text-base font-bold text-white">Discord Guild Profile</h2>
+          <div class="flex items-center justify-between border-b border-slate-700/50 pb-3 flex-wrap gap-2">
+            <div>
+              <h2 class="text-base font-bold text-white">Regional & Event Defaults</h2>
+              <p class="text-xs text-slate-400">Default timezone and fallback channel for general guild events.</p>
+            </div>
 
             <!-- Bot Status Indicator -->
             <div class="flex items-center gap-2 px-3 py-1 rounded-full bg-[#1a1a2e] border border-slate-700">
@@ -89,44 +92,6 @@ const TIMEZONES = [
                 Bot {{ botStatus() | uppercase }}
               </span>
             </div>
-          </div>
-
-          <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <!-- Guild Avatar / Icon -->
-            <div class="relative shrink-0">
-              @if (guildIconUrl()) {
-                <img
-                  [src]="guildIconUrl()!"
-                  alt="Guild Icon"
-                  class="w-16 h-16 rounded-2xl object-cover border-2 border-[#5865F2]"
-                />
-              } @else {
-                <div class="w-16 h-16 rounded-2xl bg-gradient-to-tr from-[#5865F2] to-[#4752C4] flex items-center justify-center text-white text-xl font-black shadow-lg">
-                  {{ guildInitials() }}
-                </div>
-              }
-            </div>
-
-            <!-- Server Name & ID -->
-            <div class="space-y-1 flex-1">
-              <label class="block text-xs font-semibold text-slate-300">Server Name</label>
-              <input
-                type="text"
-                name="guildName"
-                [ngModel]="guildName()"
-                (ngModelChange)="guildName.set($event)"
-                class="w-full bg-[#1a1a2e] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#5865F2] transition"
-              />
-              <div class="text-[11px] text-slate-500">Guild ID: {{ guildStore.activeGuildId() || 'Not set' }}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Card 2: General & Timezone Settings -->
-        <div class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-5">
-          <div class="border-b border-slate-700/50 pb-3">
-            <h2 class="text-base font-bold text-white">Regional & Event Defaults</h2>
-            <p class="text-xs text-slate-400">Default timezone and fallback channel for general guild events.</p>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -204,7 +169,7 @@ const TIMEZONES = [
                 <span class="text-[#EAE905]">🔄</span>
                 <span>Default Transfers Channel</span>
               </div>
-              <p class="text-[11px] text-slate-400">Channel where automated VPG Superliga transfers are published.</p>
+              <p class="text-[11px] text-slate-400">Channel where automated league transfers are published.</p>
               <select
                 [ngModel]="defaultTransfersChannelId()"
                 (ngModelChange)="defaultTransfersChannelId.set($event)"
@@ -224,7 +189,7 @@ const TIMEZONES = [
                 <span class="text-[#EAE905]">📅</span>
                 <span>Default Fixtures Channel</span>
               </div>
-              <p class="text-[11px] text-slate-400">Channel where upcoming Superliga match schedules are published.</p>
+              <p class="text-[11px] text-slate-400">Channel where upcoming league match schedules are published.</p>
               <select
                 [ngModel]="defaultFixturesChannelId()"
                 (ngModelChange)="defaultFixturesChannelId.set($event)"
@@ -244,7 +209,7 @@ const TIMEZONES = [
                 <span class="text-[#EAE905]">🏆</span>
                 <span>Default Standings Channel</span>
               </div>
-              <p class="text-[11px] text-slate-400">Channel where official Superliga table & standings updates are posted.</p>
+              <p class="text-[11px] text-slate-400">Channel where official league table & standings updates are posted.</p>
               <select
                 [ngModel]="defaultStandingsChannelId()"
                 (ngModelChange)="defaultStandingsChannelId.set($event)"
@@ -264,7 +229,7 @@ const TIMEZONES = [
                 <span class="text-emerald-400">⚽</span>
                 <span>Default Live Results Channel</span>
               </div>
-              <p class="text-[11px] text-slate-400">Channel where completed Superliga match cards are posted automatically.</p>
+              <p class="text-[11px] text-slate-400">Channel where completed match cards are posted automatically.</p>
               <select
                 [ngModel]="defaultLiveResultsChannelId()"
                 (ngModelChange)="defaultLiveResultsChannelId.set($event)"
@@ -429,7 +394,6 @@ const TIMEZONES = [
             </div>
           </div>
         </div>
-      }
 
         <!-- Card 5: Competition Slots Manager -->
         <div class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-5">
@@ -520,6 +484,7 @@ const TIMEZONES = [
             }
           </div>
         </div>
+      }
 
         <!-- Save Button -->
         <div class="flex items-center justify-end gap-3 pt-2">
@@ -565,7 +530,7 @@ export class SettingsComponent implements OnInit {
   readonly defaultRyvlLeaderboardChannelId = signal<string>('');
   readonly defaultContactChannelId = signal<string>('');
   readonly defaultRecruitmentChannelId = signal<string>('');
-  readonly ryvlTeamName = signal<string>('RYVL Esports');
+  readonly ryvlTeamName = signal<string>('');
   readonly isRyvlGuild = computed(() => {
     const g = this.guildStore.activeGuild();
     if (!g) return false;
@@ -701,7 +666,7 @@ export class SettingsComponent implements OnInit {
       this.defaultRyvlLeaderboardChannelId.set(s.defaultRyvlLeaderboardChannelId || '');
       this.defaultContactChannelId.set(s.defaultContactChannelId || '');
       this.defaultRecruitmentChannelId.set(s.defaultRecruitmentChannelId || '');
-      this.ryvlTeamName.set(s.ryvlTeamName || 'RYVL Esports');
+      this.ryvlTeamName.set(s.ryvlTeamName || '');
       if (s.botStatus) this.botStatus.set(s.botStatus);
     } catch {
       // Keep loaded bootstrap values as fallback
@@ -749,7 +714,6 @@ export class SettingsComponent implements OnInit {
     this.errorMessage.set(null);
 
     const payload: Partial<GuildSettings> = {
-      name: this.guildName(),
       timezone: this.timezone(),
       defaultChannelId: this.defaultChannelId() || null,
       defaultLineupChannelId: this.defaultLineupChannelId() || null,
@@ -762,13 +726,12 @@ export class SettingsComponent implements OnInit {
       defaultRyvlLeaderboardChannelId: this.defaultRyvlLeaderboardChannelId() || null,
       defaultContactChannelId: this.defaultContactChannelId() || null,
       defaultRecruitmentChannelId: this.defaultRecruitmentChannelId() || null,
-      ryvlTeamName: this.ryvlTeamName() || 'RYVL Esports',
+      ...(this.isRyvlGuild() && this.ryvlTeamName() ? { ryvlTeamName: this.ryvlTeamName() } : {}),
     };
 
     try {
       await this.api.updateSettings(guildId, payload);
       this.guildStore.updateActiveGuildSettings({
-        name: this.guildName(),
         timezone: this.timezone(),
         defaultChannelId: this.defaultChannelId() || null,
         defaultLineupChannelId: this.defaultLineupChannelId() || null,
