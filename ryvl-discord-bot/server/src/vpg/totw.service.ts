@@ -228,8 +228,7 @@ export class TotwService {
       week,
       isTots,
       players,
-      accentColor: slug === 'Superliga-Romania' ? '#00E5FF' : '#00E676',
-      showFlagBar: slug === 'Superliga-Romania',
+      accentColor: isTots ? '#FFB800' : '#00E5FF',
     });
 
     return {
@@ -267,7 +266,7 @@ export class TotwService {
       .setTitle(title)
       .setColor(isTots ? 0xffc107 : 0x00e5ff)
       .setDescription(
-        `${subtitle}\n\nHere is the official **Top 11** lineup selected based on verified performance metrics from the VPG Superliga platform.`,
+        `${subtitle}\n\nHere is the official **Top 11** lineup selected based on verified performance metrics from the VPG ${totwData.leagueName} platform.`,
       )
       .setImage('attachment://totw.png')
       .setFooter({ text: 'RYVL Esports • VPG Team of the Week' });

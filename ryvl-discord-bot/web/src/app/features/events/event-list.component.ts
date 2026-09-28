@@ -11,7 +11,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
-import { EventItem } from '../../core/models';
+import { EventItem, RsvpCounts } from '../../core/models';
 import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component';
 
 type FilterTab = 'all' | 'active' | 'draft' | 'archived';
@@ -215,14 +215,24 @@ type FilterTab = 'all' | 'active' | 'draft' | 'archived';
 
               <!-- Footer with RSVP badge & Action -->
               <div class="px-5 py-3 bg-[#11192e] border-t border-slate-700/50 flex items-center justify-between">
-                <app-rsvp-badge [counts]="event.rsvpsCount" />
+                <app-rsvp-badge [counts]="getEventCounts(event)" />
 
-                <span class="text-xs text-slate-300 group-hover:text-white flex items-center gap-1 font-semibold transition">
-                  Details
-                  <svg class="w-3.5 h-3.5 group-hover:translate-x-0.5 transition text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                  </svg>
-                </span>
+                <div class="flex items-center gap-3">
+                  <button
+                    type="button"
+                    (click)="deleteEvent($event, event.id)"
+                    class="text-xs text-slate-400 hover:text-rose-400 transition cursor-pointer p-1"
+                    title="Delete event"
+                  >
+                    🗑️
+                  </button>
+                  <span class="text-xs text-slate-300 group-hover:text-white flex items-center gap-1 font-semibold transition">
+                    Details
+                    <svg class="w-3.5 h-3.5 group-hover:translate-x-0.5 transition text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </span>
+                </div>
               </div>
             </div>
           }
@@ -247,11 +257,27 @@ export class EventListComponent implements OnInit {
   readonly draftCount = computed(() => this.events().filter((e) => e.status === 'draft').length);
   readonly archivedCount = computed(() => this.events().filter((e) => e.status === 'archived').length);
 
+  isEventFinished(event: EventItem): boolean {
+    const now = Date.now();
+    if (event.status === 'archived') return true;
+    if (!event.occurrences || event.occurrences.length === 0) {
+      const start = new Date(event.startsAt).getTime();
+      return !isNaN(start) && start + (event.durationMinutes || 60) * 60000 < now;
+    }
+    return event.occurrences.every((occ: any) => {
+      const end = occ.endsAt ? new Date(occ.endsAt).getTime() : new Date(occ.startsAt).getTime() + 3600000;
+      return occ.status === 'closed' || occ.status === 'CLOSED' || end < now;
+    });
+  }
+
   readonly filteredEvents = computed(() => {
     const tab = this.selectedTab();
     const query = this.searchQuery().toLowerCase().trim();
 
     return this.events().filter((event) => {
+      // Finished/closed events should not appear in the active or all lists
+      if (this.isEventFinished(event)) return false;
+
       const matchesTab = tab === 'all' || event.status === tab;
       const matchesQuery =
         !query ||
@@ -262,6 +288,37 @@ export class EventListComponent implements OnInit {
       return matchesTab && matchesQuery;
     });
   });
+
+  getEventCounts(event: EventItem): RsvpCounts {
+    if (event.rsvpsCount && (event.rsvpsCount.accepted || event.rsvpsCount.tentative || event.rsvpsCount.declined)) {
+      return event.rsvpsCount;
+    }
+    let accepted = 0;
+    let tentative = 0;
+    let declined = 0;
+    for (const occ of (event.occurrences || [])) {
+      const counts = (occ as any).rsvpCounts || (occ as any).counts;
+      if (counts) {
+        accepted += counts.accepted || 0;
+        tentative += counts.tentative || 0;
+        declined += counts.declined || 0;
+      }
+    }
+    return { accepted, tentative, declined, total: accepted + tentative + declined };
+  }
+
+  async deleteEvent(e: MouseEvent, eventId: string): Promise<void> {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this event?')) return;
+    const gid = this.guildStore.activeGuildId();
+    if (!gid) return;
+    try {
+      await this.api.deleteEvent(gid, eventId);
+      this.events.update((prev) => prev.filter((ev) => ev.id !== eventId));
+    } catch (err) {
+      console.error('Failed to delete event:', err);
+    }
+  }
 
   constructor() {
     effect(() => {

@@ -21,6 +21,7 @@ export interface ListEventsFilter {
 
 export type EventWithOccurrences = Event & {
   discordSync?: EventDiscordSync;
+  rsvpsCount?: { accepted: number; tentative: number; declined: number; total?: number };
   occurrences: (EventOccurrence & {
     rsvpCounts?: { accepted: number; tentative: number; declined: number };
   })[];
@@ -144,6 +145,23 @@ export class EventsService {
       };
     }
 
+    const now = new Date();
+    // Auto-clean finished one-off events where occurrences have ended/closed so they do not clutter the list
+    await this.prisma.event.deleteMany({
+      where: {
+        guildId,
+        rrule: null,
+        occurrences: {
+          every: {
+            OR: [
+              { status: OccurrenceStatus.CLOSED },
+              { endsAt: { lt: now } },
+            ],
+          },
+        },
+      },
+    }).catch(() => {});
+
     const events = await this.prisma.event.findMany({
       where,
       skip,
@@ -159,20 +177,33 @@ export class EventsService {
       },
     });
 
-    return events.map((event) => ({
-      ...event,
-      occurrences: event.occurrences.map((occ) => {
-        const { rsvps, ...rest } = occ;
-        return {
-          ...rest,
-          rsvpCounts: {
-            accepted: rsvps.filter((r) => r.status === 'ACCEPTED').length,
-            tentative: rsvps.filter((r) => r.status === 'TENTATIVE').length,
-            declined: rsvps.filter((r) => r.status === 'DECLINED').length,
-          },
-        };
-      }),
-    }));
+    return events.map((event) => {
+      let accepted = 0;
+      let tentative = 0;
+      let declined = 0;
+      for (const occ of event.occurrences) {
+        for (const r of occ.rsvps) {
+          if (r.status === 'ACCEPTED') accepted++;
+          else if (r.status === 'TENTATIVE') tentative++;
+          else if (r.status === 'DECLINED') declined++;
+        }
+      }
+      return {
+        ...event,
+        rsvpsCount: { accepted, tentative, declined, total: accepted + tentative + declined },
+        occurrences: event.occurrences.map((occ) => {
+          const { rsvps, ...rest } = occ;
+          return {
+            ...rest,
+            rsvpCounts: {
+              accepted: rsvps.filter((r) => r.status === 'ACCEPTED').length,
+              tentative: rsvps.filter((r) => r.status === 'TENTATIVE').length,
+              declined: rsvps.filter((r) => r.status === 'DECLINED').length,
+            },
+          };
+        }),
+      };
+    });
   }
 
   async getEvent(eventId: string): Promise<EventWithOccurrences> {
@@ -192,8 +223,20 @@ export class EventsService {
       throw new NotFoundException(`Event with ID "${eventId}" not found`);
     }
 
+    let accepted = 0;
+    let tentative = 0;
+    let declined = 0;
+    for (const occ of event.occurrences) {
+      for (const r of occ.rsvps) {
+        if (r.status === 'ACCEPTED') accepted++;
+        else if (r.status === 'TENTATIVE') tentative++;
+        else if (r.status === 'DECLINED') declined++;
+      }
+    }
+
     return {
       ...event,
+      rsvpsCount: { accepted, tentative, declined, total: accepted + tentative + declined },
       occurrences: event.occurrences.map((occ) => {
         const { rsvps, ...rest } = occ;
         return {

@@ -280,8 +280,9 @@ const TIMEZONES = [
           </div>
         </div>
 
-        <!-- Card 4: RYVL Dedicated Team Channels -->
-        <div class="p-6 rounded-xl bg-[#16213e] border border-[#EAE905]/30 shadow space-y-5">
+        <!-- Card 4 & 4b: RYVL Dedicated Channels (Only shown when managing official RYVL guild) -->
+        @if (isRyvlGuild()) {
+          <div class="p-6 rounded-xl bg-[#16213e] border border-[#EAE905]/30 shadow space-y-5">
           <div class="border-b border-slate-700/50 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 class="text-base font-bold text-white flex items-center gap-2">
@@ -428,6 +429,7 @@ const TIMEZONES = [
             </div>
           </div>
         </div>
+      }
 
         <!-- Card 5: Competition Slots Manager -->
         <div class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-5">
@@ -564,6 +566,13 @@ export class SettingsComponent implements OnInit {
   readonly defaultContactChannelId = signal<string>('');
   readonly defaultRecruitmentChannelId = signal<string>('');
   readonly ryvlTeamName = signal<string>('RYVL Esports');
+  readonly isRyvlGuild = computed(() => {
+    const g = this.guildStore.activeGuild();
+    if (!g) return false;
+    const name = (g.name || '').toLowerCase();
+    const teamName = (this.ryvlTeamName() || g.ryvlTeamName || '').toLowerCase().trim();
+    return name.includes('ryvl') || teamName === 'ryvl' || teamName === 'ryvl esports';
+  });
   readonly competitions = signal<RyvlCompetition[]>([]);
 
   readonly botStatus = signal<'online' | 'offline' | 'idle'>('online');

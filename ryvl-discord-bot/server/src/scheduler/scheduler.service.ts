@@ -136,6 +136,12 @@ export class SchedulerService {
           }
 
           this.logger.log(`Closed occurrence ${occ.id}`);
+
+          // If the event is one-off, delete the finished event from database
+          if (!occ.event.rrule) {
+            await this.prisma.event.delete({ where: { id: occ.eventId } }).catch(() => {});
+            this.logger.log(`Deleted finished event ${occ.eventId}`);
+          }
         } catch (error) {
           this.logger.error(`Failed to close occurrence ${occ.id}: ${error}`);
         }

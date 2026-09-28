@@ -3,13 +3,14 @@ import {
   Get,
   Post,
   Query,
+  Req,
   Res,
   UseGuards,
   HttpCode,
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthService, JwtPayload } from './auth.service';
 import { AuthGuard } from './auth.guard';
 import { CurrentUser } from './user.decorator';
@@ -27,8 +28,15 @@ export class AuthController {
   ) {}
 
   @Get('discord/start')
-  startDiscordAuth(@Res() res: Response): void {
-    const authUrl = this.authService.getDiscordAuthUrl();
+  startDiscordAuth(
+    @Query('origin') origin: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): void {
+    const ref = origin || req.headers.referer || '';
+    const isBot = origin === 'bot' || ref.includes('bot.') || (req.headers.host || '').startsWith('bot.');
+    const state = isBot ? 'bot' : undefined;
+    const authUrl = this.authService.getDiscordAuthUrl(state);
     res.redirect(authUrl);
   }
 
@@ -36,9 +44,15 @@ export class AuthController {
   async handleDiscordCallback(
     @Query('code') code: string | undefined,
     @Query('error') error: string | undefined,
-    @Res() res: Response,
+    @Res() resOrState: any,
+    @Query('state') maybeStateOrRes?: any,
   ): Promise<void> {
-    const frontendUrl = this.configService.frontendUrl;
+    const res: Response = resOrState?.redirect ? resOrState : maybeStateOrRes;
+    const state: string | undefined = resOrState?.redirect ? (typeof maybeStateOrRes === 'string' ? maybeStateOrRes : undefined) : resOrState;
+    let frontendUrl = this.configService.frontendUrl;
+    if (state === 'bot') {
+      frontendUrl = frontendUrl.replace('://', '://bot.');
+    }
     // OAuth belongs to the staff console, not the public homepage. These are
     // fixed local paths; no user-supplied return URL can become an open redirect.
     const loginUrl = new URL('/admin/login', frontendUrl).toString();

@@ -140,17 +140,94 @@ import { TotwConfig } from '../../core/models';
               </select>
             </div>
 
-            <!-- League Slug -->
-            <div>
-              <label class="block text-xs font-semibold text-slate-300 mb-1.5">VPG League</label>
-              <select
-                [(ngModel)]="selectedLeague"
-                (ngModelChange)="onLeagueChange()"
-                class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400"
-              >
-                <option value="Superliga-Romania">Superliga Romania</option>
-                <option value="Liga-2-Romania">Liga 2 Romania</option>
-              </select>
+            <!-- Searchable VPG League Picker -->
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <label class="block text-xs font-semibold text-slate-300">VPG League</label>
+                <span class="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                  {{ selectedLeagueTitle() }}
+                </span>
+              </div>
+
+              <!-- Search Input -->
+              <div class="relative">
+                <input
+                  type="text"
+                  [ngModel]="leagueSearchQuery()"
+                  (ngModelChange)="leagueSearchQuery.set($event); onSearchLeagues()"
+                  placeholder="Search league (e.g. Superliga, Serie A, Premier)..."
+                  class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 transition"
+                />
+                @if (isSearchingLeagues()) {
+                  <div class="absolute right-3 top-1/2 -translate-y-1/2">
+                    <span class="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin inline-block"></span>
+                  </div>
+                }
+              </div>
+
+              <!-- Dropdown Results -->
+              @if (leagueSearchResults().length > 0) {
+                <div class="max-h-40 overflow-y-auto space-y-1 border border-slate-700 rounded-xl p-2 bg-[#0c1322]">
+                  @for (item of leagueSearchResults(); track item.leagueSlug) {
+                    <button
+                      type="button"
+                      (click)="selectLeague(item)"
+                      class="w-full text-left px-2.5 py-1.5 rounded-lg text-xs hover:bg-slate-800 transition flex items-center justify-between cursor-pointer"
+                      [ngClass]="selectedLeague() === item.leagueSlug ? 'bg-amber-950/60 border border-amber-600/40 text-amber-200' : 'text-slate-300'"
+                    >
+                      <div>
+                        <div class="font-bold text-white">{{ item.leagueName }}</div>
+                        <div class="text-[10px] text-slate-400">{{ item.communityName }}</div>
+                      </div>
+                      <span class="text-[10px] text-amber-400">Select →</span>
+                    </button>
+                  }
+                </div>
+              }
+
+              <!-- Quick Presets -->
+              <div class="flex items-center gap-1.5 flex-wrap pt-1">
+                <button
+                  type="button"
+                  (click)="setLeagueSlug('Superliga-Romania', 'Superliga România')"
+                  class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                  [class.text-amber-400]="selectedLeague() === 'Superliga-Romania'"
+                  [class.border-amber-400]="selectedLeague() === 'Superliga-Romania'"
+                  [class.border]="selectedLeague() === 'Superliga-Romania'"
+                >
+                  Superliga
+                </button>
+                <button
+                  type="button"
+                  (click)="setLeagueSlug('Liga-2-Romania', 'Liga 2 România')"
+                  class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                  [class.text-amber-400]="selectedLeague() === 'Liga-2-Romania'"
+                  [class.border-amber-400]="selectedLeague() === 'Liga-2-Romania'"
+                  [class.border]="selectedLeague() === 'Liga-2-Romania'"
+                >
+                  Liga 2
+                </button>
+                <button
+                  type="button"
+                  (click)="setLeagueSlug('Serie-A', 'Serie A Italy')"
+                  class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                  [class.text-amber-400]="selectedLeague() === 'Serie-A'"
+                  [class.border-amber-400]="selectedLeague() === 'Serie-A'"
+                  [class.border]="selectedLeague() === 'Serie-A'"
+                >
+                  Serie A
+                </button>
+                <button
+                  type="button"
+                  (click)="setLeagueSlug('Europe-Premier', 'Europe Premier')"
+                  class="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                  [class.text-amber-400]="selectedLeague() === 'Europe-Premier'"
+                  [class.border-amber-400]="selectedLeague() === 'Europe-Premier'"
+                  [class.border]="selectedLeague() === 'Europe-Premier'"
+                >
+                  VPG Europe
+                </button>
+              </div>
             </div>
 
             <!-- Tactical Formation -->
@@ -319,11 +396,45 @@ export class AdminTotwComponent implements OnInit {
   readonly previewImageUrl = signal<string | null>(null);
 
   readonly selectedLeague = signal<string>('Superliga-Romania');
+  readonly selectedLeagueTitle = signal<string>('Superliga România');
   readonly isTots = signal<boolean>(false);
+
+  readonly leagueSearchQuery = signal<string>('');
+  readonly leagueSearchResults = signal<Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }>>([]);
+  readonly isSearchingLeagues = signal<boolean>(false);
 
   readonly editChannelId = signal<string | null>(null);
   readonly editFormation = signal<string>('4-3-3');
   readonly editEnabled = signal<boolean>(false);
+
+  async onSearchLeagues(): Promise<void> {
+    const q = this.leagueSearchQuery().trim();
+    if (!q) {
+      this.leagueSearchResults.set([]);
+      return;
+    }
+    this.isSearchingLeagues.set(true);
+    try {
+      const res = await this.api.searchVpgLeagues(q);
+      this.leagueSearchResults.set(res.leagues || []);
+    } catch {
+      this.leagueSearchResults.set([]);
+    } finally {
+      this.isSearchingLeagues.set(false);
+    }
+  }
+
+  selectLeague(item: { communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }): void {
+    this.setLeagueSlug(item.leagueSlug, item.leagueName);
+    this.leagueSearchQuery.set('');
+    this.leagueSearchResults.set([]);
+  }
+
+  setLeagueSlug(slug: string, name?: string): void {
+    this.selectedLeague.set(slug);
+    this.selectedLeagueTitle.set(name || slug.replace(/-/g, ' '));
+    this.onLeagueChange();
+  }
 
   readonly isLoadingPreview = signal<boolean>(false);
   readonly isSaving = signal<boolean>(false);

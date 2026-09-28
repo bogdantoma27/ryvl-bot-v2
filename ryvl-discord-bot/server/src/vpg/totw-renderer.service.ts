@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import sharp from 'sharp';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface TotwPlayer {
   username: string;
@@ -33,6 +35,7 @@ export interface RenderTotwOptions {
   players: TotwPositionsMap;
   accentColor?: string;
   showFlagBar?: boolean;
+  transparentBg?: boolean;
 }
 
 function escapeXml(unsafe: any): string {
@@ -48,6 +51,21 @@ function escapeXml(unsafe: any): string {
 @Injectable()
 export class TotwRendererService {
   private readonly logger = new Logger(TotwRendererService.name);
+
+  private getTotwBgPath(): string | null {
+    const candidates = [
+      path.join(__dirname, 'assets', 'totw-bg.jpg'),
+      path.join(__dirname, '..', 'assets', 'totw-bg.jpg'),
+      path.join(process.cwd(), 'src', 'assets', 'totw-bg.jpg'),
+      path.join(process.cwd(), 'assets', 'totw-bg.jpg'),
+      path.join(process.cwd(), 'dist', 'src', 'assets', 'totw-bg.jpg'),
+      path.join(process.cwd(), 'dist', 'assets', 'totw-bg.jpg'),
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) return p;
+    }
+    return null;
+  }
 
   // Formation coordinate definitions: relX (0..1), relY (0..1)
   // Attack is at top (relY ~0.14), defense at bottom (relY ~0.84)
@@ -127,14 +145,9 @@ export class TotwRendererService {
       `;
     }
 
-    const flagBarSvg = options.showFlagBar !== false
-      ? `
-        <!-- Romanian Tricolour Top Accent Bar -->
-        <rect x="0" y="0" width="${W * 0.333}" height="6" fill="#002B7F" />
-        <rect x="${W * 0.333}" y="0" width="${W * 0.334}" height="6" fill="#FCD116" />
-        <rect x="${W * 0.667}" y="0" width="${W * 0.333}" height="6" fill="#CE1126" />
-      `
-      : '';
+    const baseRect = options.transparentBg
+      ? `<rect width="${W}" height="${H}" fill="#080e18" fill-opacity="0.82" />`
+      : `<rect width="${W}" height="${H}" fill="url(#bgGrad)" />`;
 
     return `
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
@@ -144,8 +157,8 @@ export class TotwRendererService {
             <stop offset="100%" stop-color="#040810" />
           </linearGradient>
           <linearGradient id="pitchGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stop-color="#0a1526" stop-opacity="0.9" />
-            <stop offset="100%" stop-color="#070f1c" stop-opacity="0.9" />
+            <stop offset="0%" stop-color="#0a1526" stop-opacity="0.88" />
+            <stop offset="100%" stop-color="#070f1c" stop-opacity="0.92" />
           </linearGradient>
           <filter id="glow">
             <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
@@ -157,8 +170,9 @@ export class TotwRendererService {
         </defs>
 
         <!-- Base Background -->
-        <rect width="${W}" height="${H}" fill="url(#bgGrad)" />
-        ${flagBarSvg}
+        ${baseRect}
+        <!-- Modern Esports Accent Header Bar -->
+        <rect x="0" y="0" width="${W}" height="4" fill="${accent}" />
 
         <!-- Header Banner -->
         <g id="header">
@@ -211,6 +225,21 @@ export class TotwRendererService {
   }
 
   async renderPng(options: RenderTotwOptions): Promise<Buffer> {
+    const W = 1300;
+    const H = 1600;
+    const bgPath = this.getTotwBgPath();
+    if (bgPath) {
+      try {
+        const bgBuffer = await sharp(bgPath).resize(W, H, { fit: 'cover' }).toBuffer();
+        const svg = this.renderSvg({ ...options, transparentBg: true });
+        return sharp(bgBuffer)
+          .composite([{ input: Buffer.from(svg), top: 0, left: 0 }])
+          .png({ quality: 95, compressionLevel: 8 })
+          .toBuffer();
+      } catch (err: any) {
+        this.logger.warn(`Failed to composite TOTW background image: ${err.message}. Falling back to SVG.`);
+      }
+    }
     const svg = this.renderSvg(options);
     return sharp(Buffer.from(svg))
       .png({ quality: 95, compressionLevel: 8 })

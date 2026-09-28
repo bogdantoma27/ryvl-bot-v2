@@ -93,7 +93,7 @@ export class VpgPollerService implements OnModuleInit, OnModuleDestroy {
       return { postedCount: 0 };
     }
 
-    const transfers = await this.vpgService.fetchTransfers(15, 0);
+    const transfers = await this.vpgService.fetchTransfers(15, 0, config.communitySlug);
     if (!transfers || transfers.length === 0) {
       await this.prisma.vpgTransferConfig.update({
         where: { guildId: config.guildId },
@@ -204,7 +204,7 @@ export class VpgPollerService implements OnModuleInit, OnModuleDestroy {
       throw new Error('No Discord channel configured for VPG transfers.');
     }
 
-    const transfers = await this.vpgService.fetchTransfers(1, 0);
+    const transfers = await this.vpgService.fetchTransfers(1, 0, config.communitySlug);
     if (!transfers || transfers.length === 0) {
       throw new Error('No transfers available from VPG API.');
     }

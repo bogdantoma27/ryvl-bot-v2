@@ -60,10 +60,10 @@ interface VpgTransfer {
             <div>
               <div class="flex items-center gap-3 flex-wrap">
                 <h1 class="text-2xl font-black text-white tracking-tight">
-                  VPG Superliga România
+                  {{ config()?.leagueName || 'VPG Superliga România' }}
                 </h1>
                 <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  VPGRoPS5
+                  {{ config()?.communitySlug || 'VPGRoPS5' }}
                 </span>
                 @if (config()?.enabled) {
                   <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-900/60 text-emerald-300 border border-emerald-600 flex items-center gap-1.5">
@@ -78,7 +78,7 @@ interface VpgTransfer {
               </div>
 
               <p class="text-xs text-slate-400 mt-1.5 flex items-center gap-2 flex-wrap">
-                <span>Real-time transfer updates, contracts, and player movements in VPG Romania Superliga.</span>
+                <span>Real-time transfer updates, contracts, and player movements in {{ config()?.leagueName || 'VPG' }}.</span>
                 @if (channelName()) {
                   <span class="text-slate-500">•</span>
                   <span class="text-emerald-400 font-medium">Auto-posting to #{{ channelName() }}</span>
@@ -334,6 +334,96 @@ interface VpgTransfer {
           </div>
 
           <div class="space-y-5">
+            <!-- VPG League & Community Picker -->
+            <div class="space-y-2.5 p-4 bg-[#11192e] rounded-xl border border-slate-800">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-xs font-bold text-white uppercase tracking-wider">VPG League & Community</div>
+                  <div class="text-[11px] text-slate-400">Search or select any VPG league across the network.</div>
+                </div>
+                <span class="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  {{ selectedLeagueName }}
+                </span>
+              </div>
+
+              <!-- Search Bar -->
+              <div class="relative">
+                <input
+                  type="text"
+                  [ngModel]="leagueSearchQuery()"
+                  (ngModelChange)="leagueSearchQuery.set($event); onSearchLeagues()"
+                  placeholder="Search league (e.g. Superliga, Serie A, Premier, Italy, Europe)..."
+                  class="w-full bg-[#0d1424] border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                />
+                @if (isSearchingLeagues()) {
+                  <div class="absolute right-3 top-1/2 -translate-y-1/2">
+                    <span class="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin inline-block"></span>
+                  </div>
+                }
+              </div>
+
+              <!-- Search Dropdown Results -->
+              @if (leagueSearchResults().length > 0) {
+                <div class="max-h-48 overflow-y-auto space-y-1 border border-slate-800 rounded-xl p-2 bg-[#0c1322]">
+                  @for (item of leagueSearchResults(); track item.leagueSlug) {
+                    <button
+                      type="button"
+                      (click)="selectLeague(item)"
+                      class="w-full text-left px-3 py-2 rounded-lg text-xs hover:bg-slate-800/80 transition flex items-center justify-between cursor-pointer"
+                      [ngClass]="selectedLeagueSlug === item.leagueSlug ? 'bg-emerald-950/60 border border-emerald-600/40 text-emerald-200' : 'text-slate-300'"
+                    >
+                      <div>
+                        <div class="font-bold text-white">{{ item.leagueName }}</div>
+                        <div class="text-[10px] text-slate-400">{{ item.communityName }} ({{ item.communitySlug }})</div>
+                      </div>
+                      <span class="text-[10px] font-mono text-emerald-400">Select →</span>
+                    </button>
+                  }
+                </div>
+              }
+
+              <!-- Popular Quick Presets -->
+              <div class="flex items-center gap-1.5 flex-wrap pt-1">
+                <span class="text-[10px] text-slate-500 font-bold uppercase">Popular:</span>
+                <button
+                  type="button"
+                  (click)="selectLeaguePreset('VPGRoPS5', 'VPG Romania', 'Superliga-Romania', 'Superliga România')"
+                  class="px-2 py-1 rounded-md text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                  [class.border-emerald-500]="selectedLeagueSlug === 'Superliga-Romania'"
+                  [class.border]="selectedLeagueSlug === 'Superliga-Romania'"
+                >
+                  Superliga România
+                </button>
+                <button
+                  type="button"
+                  (click)="selectLeaguePreset('VPGRoPS5', 'VPG Romania', 'Liga-2-Romania', 'Liga 2 România')"
+                  class="px-2 py-1 rounded-md text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                  [class.border-emerald-500]="selectedLeagueSlug === 'Liga-2-Romania'"
+                  [class.border]="selectedLeagueSlug === 'Liga-2-Romania'"
+                >
+                  Liga 2 România
+                </button>
+                <button
+                  type="button"
+                  (click)="selectLeaguePreset('VPG-Italy', 'VPG Italy', 'Serie-A', 'Serie A Italy')"
+                  class="px-2 py-1 rounded-md text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                  [class.border-emerald-500]="selectedLeagueSlug === 'Serie-A'"
+                  [class.border]="selectedLeagueSlug === 'Serie-A'"
+                >
+                  VPG Italy
+                </button>
+                <button
+                  type="button"
+                  (click)="selectLeaguePreset('VPG-Europe', 'VPG Europe', 'Europe-Premier', 'Europe Premier')"
+                  class="px-2 py-1 rounded-md text-[11px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                  [class.border-emerald-500]="selectedLeagueSlug === 'Europe-Premier'"
+                  [class.border]="selectedLeagueSlug === 'Europe-Premier'"
+                >
+                  VPG Europe
+                </button>
+              </div>
+            </div>
+
             <!-- Channel Picker -->
             <div class="space-y-1.5">
               <label class="block text-xs font-bold uppercase tracking-wider text-slate-300">
@@ -407,10 +497,14 @@ interface VpgTransfer {
             </div>
 
             <!-- Telemetry & Status Card -->
-            <div class="bg-slate-900/60 rounded-xl p-4 border border-slate-800/80 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+            <div class="bg-slate-900/60 rounded-xl p-4 border border-slate-800/80 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-500 block">League</span>
+                <span class="font-mono text-slate-200 truncate block">{{ config()?.leagueName || 'Superliga România' }}</span>
+              </div>
               <div>
                 <span class="text-[10px] uppercase font-bold text-slate-500 block">Community</span>
-                <span class="font-mono text-slate-300">VPGRoPS5</span>
+                <span class="font-mono text-slate-300">{{ config()?.communitySlug || 'VPGRoPS5' }}</span>
               </div>
               <div>
                 <span class="text-[10px] uppercase font-bold text-slate-500 block">Last Polled</span>
@@ -448,6 +542,13 @@ export class VpgTransfersComponent implements OnInit {
   selectedChannelId = '';
   isAutoPostingEnabled = true;
   pollIntervalSec = 120;
+  selectedCommunitySlug = 'VPGRoPS5';
+  selectedLeagueSlug = 'Superliga-Romania';
+  selectedLeagueName = 'Superliga România';
+
+  readonly leagueSearchQuery = signal<string>('');
+  readonly leagueSearchResults = signal<Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }>>([]);
+  readonly isSearchingLeagues = signal<boolean>(false);
 
   readonly isAdmin = computed(() => Boolean(this.api.getSessionToken()));
 
@@ -461,6 +562,39 @@ export class VpgTransfersComponent implements OnInit {
     const found = this.availableChannels().find((c: any) => c.id === chId);
     return found ? found.name : chId;
   });
+
+  async onSearchLeagues(): Promise<void> {
+    const q = this.leagueSearchQuery().trim();
+    if (!q) {
+      this.leagueSearchResults.set([]);
+      return;
+    }
+    this.isSearchingLeagues.set(true);
+    try {
+      const res = await this.api.searchVpgLeagues(q);
+      this.leagueSearchResults.set(res.leagues || []);
+    } catch {
+      this.leagueSearchResults.set([]);
+    } finally {
+      this.isSearchingLeagues.set(false);
+    }
+  }
+
+  selectLeague(item: { communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }): void {
+    this.selectedCommunitySlug = item.communitySlug;
+    this.selectedLeagueSlug = item.leagueSlug;
+    this.selectedLeagueName = item.leagueName;
+    this.leagueSearchQuery.set('');
+    this.leagueSearchResults.set([]);
+  }
+
+  selectLeaguePreset(commSlug: string, commName: string, lSlug: string, lName: string): void {
+    this.selectedCommunitySlug = commSlug;
+    this.selectedLeagueSlug = lSlug;
+    this.selectedLeagueName = lName;
+    this.leagueSearchQuery.set('');
+    this.leagueSearchResults.set([]);
+  }
 
   readonly filteredTransfers = computed(() => {
     const q = this.searchQuery().toLowerCase().trim();
@@ -515,6 +649,9 @@ export class VpgTransfersComponent implements OnInit {
         this.selectedChannelId = configRes.config.channelId || '';
         this.isAutoPostingEnabled = configRes.config.enabled ?? true;
         this.pollIntervalSec = configRes.config.pollIntervalSec || 120;
+        this.selectedCommunitySlug = configRes.config.communitySlug || 'VPGRoPS5';
+        this.selectedLeagueSlug = configRes.config.leagueSlug || 'Superliga-Romania';
+        this.selectedLeagueName = configRes.config.leagueName || 'Superliga România';
       }
 
       if (transfersRes && Array.isArray(transfersRes.transfers)) {
@@ -540,12 +677,16 @@ export class VpgTransfersComponent implements OnInit {
         channelId: this.selectedChannelId || null,
         enabled: this.isAutoPostingEnabled,
         pollIntervalSec: Number(this.pollIntervalSec),
+        communitySlug: this.selectedCommunitySlug,
+        leagueSlug: this.selectedLeagueSlug,
+        leagueName: this.selectedLeagueName,
       });
 
       if (res && res.config) {
         this.config.set(res.config);
       }
-      this.showToast('VPG Superliga tracker settings saved successfully!', 'success');
+      this.showToast('VPG tracker settings saved successfully!', 'success');
+      await this.loadData();
     } catch (err: any) {
       this.showToast(`Error saving settings: ${err.message}`, 'error');
     } finally {

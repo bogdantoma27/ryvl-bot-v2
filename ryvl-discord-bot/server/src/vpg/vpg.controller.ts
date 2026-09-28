@@ -32,23 +32,42 @@ export class VpgController {
   // Public Endpoints (Accessible by all users on web)
   // ----------------------------------------------------
 
+  @Get('api/vpg/communities')
+  async getCommunities(@Query('q') q?: string) {
+    const data = await this.vpgService.listCommunities(q);
+    return { data };
+  }
+
+  @Get('api/vpg/communities/:communitySlug/leagues')
+  async getCommunityLeagues(@Param('communitySlug') communitySlug: string) {
+    const data = await this.vpgService.listCommunityLeagues(communitySlug);
+    return { data };
+  }
+
+  @Get('api/vpg/leagues/search')
+  async searchLeagues(@Query('q') q?: string) {
+    const leagues = await this.vpgService.searchLeagues(q);
+    return { leagues };
+  }
+
   @Get('api/vpg/default')
   async getDefaultConfig() {
     const config = await this.vpgService.getDefaultConfig();
     return {
       config,
       community: {
-        slug: 'VPGRoPS5',
-        name: 'VPG Romania',
-        league: 'Superliga România',
+        slug: config.communitySlug || 'VPGRoPS5',
+        name: config.leagueName || 'VPG Romania',
+        league: config.leagueName || 'Superliga România',
       },
     };
   }
 
   @Get('api/vpg/default/transfers')
   async getDefaultTransfers(@Query('limit') limit = '20') {
+    const config = await this.vpgService.getDefaultConfig();
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
-    const transfers = await this.vpgService.fetchTransfers(parsedLimit, 0);
+    const transfers = await this.vpgService.fetchTransfers(parsedLimit, 0, config.communitySlug);
     return {
       transfers,
       total: transfers.length,
@@ -65,9 +84,9 @@ export class VpgController {
     return {
       config,
       community: {
-        slug: 'VPGRoPS5',
-        name: 'VPG Romania',
-        league: 'Superliga România',
+        slug: config.communitySlug || 'VPGRoPS5',
+        name: config.leagueName || 'VPG Romania',
+        league: config.leagueName || 'Superliga România',
       },
     };
   }
@@ -77,8 +96,12 @@ export class VpgController {
     @Param('guildId') guildId: string,
     @Query('limit') limit = '20',
   ) {
+    const config =
+      guildId === 'default'
+        ? await this.vpgService.getDefaultConfig()
+        : await this.vpgService.getOrCreateConfig(guildId);
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
-    const transfers = await this.vpgService.fetchTransfers(parsedLimit, 0);
+    const transfers = await this.vpgService.fetchTransfers(parsedLimit, 0, config.communitySlug);
     const processed =
       guildId !== 'default'
         ? await this.vpgService.getRecentProcessedTransfers(guildId, 25)

@@ -25,8 +25,10 @@ export class VpgService {
   private readonly COMMUNITY_SLUG = 'VPGRoPS5';
   private readonly VPG_CDN = 'https://virtualprogaming.com/cdn-cgi/imagedelivery/cl8ocWLdmZDs72LEaQYaYw';
 
-  private cachedCommunityId: number | null = null;
+  private readonly communityIdCache = new Map<string, number>();
   private readonly historyCache = new Map<string, string[]>();
+  private cachedCommunities: { list: Array<{ id: string | number; name: string; slug: string; logo?: string }>; timestamp: number } | null = null;
+  private readonly communityLeaguesCache = new Map<string, { list: any[]; timestamp: number }>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -87,26 +89,28 @@ export class VpgService {
     }
   }
 
-  async ensureCommunityId(): Promise<number> {
-    if (this.cachedCommunityId) return this.cachedCommunityId;
+  async ensureCommunityId(communitySlug = this.COMMUNITY_SLUG): Promise<number> {
+    const slug = communitySlug || this.COMMUNITY_SLUG;
+    if (this.communityIdCache.has(slug)) return this.communityIdCache.get(slug)!;
     try {
-      const res = await fetch(`${this.API_BASE}/communities/${this.COMMUNITY_SLUG}/`, {
+      const res = await fetch(`${this.API_BASE}/communities/${encodeURIComponent(slug)}/`, {
         signal: AbortSignal.timeout(15000),
         headers: { 'User-Agent': 'RYVLBot/2.0' },
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as VpgCommunityInfo;
-      this.cachedCommunityId = data.id;
-      this.logger.log(`Resolved VPG community ${this.COMMUNITY_SLUG} id: ${data.id}`);
+      this.communityIdCache.set(slug, data.id);
+      this.logger.log(`Resolved VPG community ${slug} id: ${data.id}`);
       return data.id;
     } catch (err: any) {
-      this.logger.warn(`Failed to fetch community ID for ${this.COMMUNITY_SLUG}: ${err.message}`);
+      this.logger.warn(`Failed to fetch community ID for ${slug}: ${err.message}`);
       return 0;
     }
   }
 
-  async fetchRawMovements(limit = 15, offset = 0): Promise<VpgMovementRaw[]> {
-    const url = `${this.API_BASE}/communities/${this.COMMUNITY_SLUG}/movement/?limit=${limit}&offset=${offset}`;
+  async fetchRawMovements(limit = 15, offset = 0, communitySlug = this.COMMUNITY_SLUG): Promise<VpgMovementRaw[]> {
+    const slug = communitySlug || this.COMMUNITY_SLUG;
+    const url = `${this.API_BASE}/communities/${encodeURIComponent(slug)}/movement/?limit=${limit}&offset=${offset}`;
     const res = await fetch(url, {
       signal: AbortSignal.timeout(15000),
       headers: { 'User-Agent': 'RYVLBot/2.0' },
@@ -118,15 +122,16 @@ export class VpgService {
     return Array.isArray(json.data) ? json.data : [];
   }
 
-  async fetchPlayerSuperligaHistory(username: string): Promise<string[]> {
+  async fetchPlayerSuperligaHistory(username: string, communitySlug = this.COMMUNITY_SLUG): Promise<string[]> {
     const trimmed = (username || '').trim();
     if (!trimmed) return [];
 
-    if (this.historyCache.has(trimmed)) {
-      return this.historyCache.get(trimmed)!;
+    const cacheKey = `${communitySlug || this.COMMUNITY_SLUG}:${trimmed}`;
+    if (this.historyCache.has(cacheKey)) {
+      return this.historyCache.get(cacheKey)!;
     }
 
-    const communityId = await this.ensureCommunityId();
+    const communityId = await this.ensureCommunityId(communitySlug);
     try {
       const url = `${this.API_BASE}/users/${encodeURIComponent(trimmed)}/contracts/`;
       const res = await fetch(url, {
@@ -134,7 +139,7 @@ export class VpgService {
         headers: { 'User-Agent': 'RYVLBot/2.0' },
       });
       if (!res.ok) {
-        this.historyCache.set(trimmed, []);
+        this.historyCache.set(cacheKey, []);
         return [];
       }
       const data = await res.json();
@@ -159,18 +164,18 @@ export class VpgService {
         }
       }
 
-      this.historyCache.set(trimmed, names);
+      this.historyCache.set(cacheKey, names);
       return names;
     } catch (err: any) {
       this.logger.warn(`Could not fetch contract history for ${trimmed}: ${err.message}`);
-      this.historyCache.set(trimmed, []);
+      this.historyCache.set(cacheKey, []);
       return [];
     }
   }
 
-  async enrichTransfer(raw: VpgMovementRaw): Promise<VpgTransferItem> {
+  async enrichTransfer(raw: VpgMovementRaw, communitySlug = this.COMMUNITY_SLUG): Promise<VpgTransferItem> {
     const username = (raw.username || '').trim();
-    const superligaClubs = await this.fetchPlayerSuperligaHistory(username);
+    const superligaClubs = await this.fetchPlayerSuperligaHistory(username, communitySlug);
 
     return {
       id: raw.id,
@@ -189,12 +194,123 @@ export class VpgService {
     };
   }
 
-  async fetchTransfers(limit = 15, offset = 0): Promise<VpgTransferItem[]> {
-    const rawList = await this.fetchRawMovements(limit, offset);
+  async fetchTransfers(limit = 15, offset = 0, communitySlug = this.COMMUNITY_SLUG): Promise<VpgTransferItem[]> {
+    const rawList = await this.fetchRawMovements(limit, offset, communitySlug);
     rawList.sort((a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime());
 
-    const enriched = await Promise.all(rawList.map((item) => this.enrichTransfer(item)));
+    const enriched = await Promise.all(rawList.map((item) => this.enrichTransfer(item, communitySlug)));
     return enriched;
+  }
+
+  async listCommunities(query?: string): Promise<Array<{ id: string | number; name: string; slug: string; logo?: string }>> {
+    const now = Date.now();
+    if (!this.cachedCommunities || now - this.cachedCommunities.timestamp > 3600000) {
+      try {
+        let all: Array<{ id: string | number; name: string; slug: string; logo?: string }> = [];
+        let offset = 0;
+        while (true) {
+          const res = await fetch(`${this.API_BASE}/communities/?limit=50&offset=${offset}`, {
+            headers: { 'User-Agent': 'RYVLBot/2.0' },
+            signal: AbortSignal.timeout(10000),
+          });
+          if (!res.ok) break;
+          const data = await res.json();
+          const list = Array.isArray(data) ? data : data?.data || [];
+          if (!list.length) break;
+          all = all.concat(
+            list.map((c: any) => ({
+              id: c.id,
+              name: c.name,
+              slug: c.slug,
+              logo: c.logo || c.logo_id,
+            }))
+          );
+          offset += list.length;
+          if (list.length < 50 || all.length >= 250) break;
+        }
+        if (all.length > 0) {
+          this.cachedCommunities = { list: all, timestamp: now };
+        }
+      } catch (err: any) {
+        this.logger.warn(`Failed to fetch VPG communities: ${err.message}`);
+      }
+    }
+
+    const communities = this.cachedCommunities?.list || [
+      { id: '1', name: 'VPG Romania', slug: 'VPGRoPS5' },
+      { id: '2', name: 'VPG Europe Cross-Play', slug: 'VPG-Europe' },
+      { id: '3', name: 'VPG Italy', slug: 'VPG-Italy' },
+      { id: '4', name: 'VPG España', slug: 'VPG-espana-ps5' },
+      { id: '5', name: 'VPG Germany', slug: 'VPGGERSummer' },
+      { id: '6', name: 'VPG Portugal', slug: 'VPGPortugal' },
+    ];
+
+    if (!query) return communities;
+    const q = query.toLowerCase().trim();
+    return communities.filter((c) => c.name.toLowerCase().includes(q) || c.slug.toLowerCase().includes(q));
+  }
+
+  async listCommunityLeagues(communitySlug: string): Promise<Array<{ id: number | string; name: string; slug: string; logo?: string }>> {
+    const slug = communitySlug || this.COMMUNITY_SLUG;
+    const now = Date.now();
+    const cached = this.communityLeaguesCache.get(slug);
+    if (cached && now - cached.timestamp < 1800000) {
+      return cached.list;
+    }
+
+    try {
+      const res = await fetch(`${this.API_BASE}/communities/${encodeURIComponent(slug)}/leagues/`, {
+        headers: { 'User-Agent': 'RYVLBot/2.0' },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : data?.data || [];
+      const formatted = list.map((l: any) => ({
+        id: l.id,
+        name: l.name,
+        slug: l.slug,
+        logo: l.logo,
+      }));
+      this.communityLeaguesCache.set(slug, { list: formatted, timestamp: now });
+      return formatted;
+    } catch (err: any) {
+      this.logger.warn(`Failed to fetch leagues for community ${slug}: ${err.message}`);
+      return [];
+    }
+  }
+
+  async searchLeagues(query?: string): Promise<Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }>> {
+    const communities = await this.listCommunities(query);
+    const topCommunities = communities.slice(0, 10);
+    const results: Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }> = [];
+
+    await Promise.all(
+      topCommunities.map(async (c) => {
+        const leagues = await this.listCommunityLeagues(c.slug);
+        for (const l of leagues) {
+          if (!query || l.name.toLowerCase().includes(query.toLowerCase()) || l.slug.toLowerCase().includes(query.toLowerCase()) || c.name.toLowerCase().includes(query.toLowerCase())) {
+            results.push({
+              communitySlug: c.slug,
+              communityName: c.name,
+              leagueSlug: l.slug,
+              leagueName: l.name,
+            });
+          }
+        }
+      })
+    );
+
+    if (!results.some((r) => r.leagueSlug === 'Superliga-Romania')) {
+      results.unshift({
+        communitySlug: 'VPGRoPS5',
+        communityName: 'VPG Romania',
+        leagueSlug: 'Superliga-Romania',
+        leagueName: 'Superliga Romania',
+      });
+    }
+
+    return results;
   }
 
   // ---------------------------------------------------------------------------
@@ -259,6 +375,7 @@ export class VpgService {
         ...(dto.channelId !== undefined ? { channelId: dto.channelId } : {}),
         ...(dto.enabled !== undefined ? { enabled: dto.enabled } : {}),
         ...(dto.pollIntervalSec !== undefined ? { pollIntervalSec: dto.pollIntervalSec } : {}),
+        ...(dto.communitySlug !== undefined ? { communitySlug: dto.communitySlug } : {}),
         ...(dto.leagueSlug !== undefined ? { leagueSlug: dto.leagueSlug } : {}),
         ...(dto.leagueName !== undefined ? { leagueName: dto.leagueName } : {}),
       },

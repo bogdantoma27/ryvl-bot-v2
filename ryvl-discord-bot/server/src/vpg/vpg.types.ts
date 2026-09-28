@@ -55,6 +55,7 @@ export interface UpdateVpgConfigDto {
   channelId?: string | null;
   enabled?: boolean;
   pollIntervalSec?: number;
+  communitySlug?: string;
   leagueSlug?: string;
   leagueName?: string;
 }

@@ -208,7 +208,8 @@ export class ApiService {
   }
 
   getDiscordLoginUrl(): string {
-    return `${this.baseUrl}/api/auth/discord/start`;
+    const isBot = typeof window !== 'undefined' && window.location.hostname.startsWith('bot.');
+    return `${this.baseUrl}/api/auth/discord/start${isBot ? '?origin=bot' : ''}`;
   }
 
   getLineupFormations(guildId: string): Promise<LineupFormationsResponse> {
@@ -428,6 +429,28 @@ export class ApiService {
         {},
         { headers: this.headers() },
       ),
+    );
+  }
+
+  getVpgCommunities(q?: string): Promise<{ data: Array<{ id: string | number; name: string; slug: string; logo?: string }> }> {
+    const params: Record<string, string> = {};
+    if (q) params['q'] = q;
+    return firstValueFrom(
+      this.http.get<any>(`${this.baseUrl}/api/vpg/communities`, { params }),
+    );
+  }
+
+  getCommunityLeagues(communitySlug: string): Promise<{ data: Array<{ id: number; name: string; slug: string; logo?: string }> }> {
+    return firstValueFrom(
+      this.http.get<any>(`${this.baseUrl}/api/vpg/communities/${encodeURIComponent(communitySlug)}/leagues`),
+    );
+  }
+
+  searchVpgLeagues(q?: string): Promise<{ leagues: Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }> }> {
+    const params: Record<string, string> = {};
+    if (q) params['q'] = q;
+    return firstValueFrom(
+      this.http.get<any>(`${this.baseUrl}/api/vpg/leagues/search`, { params }),
     );
   }
 

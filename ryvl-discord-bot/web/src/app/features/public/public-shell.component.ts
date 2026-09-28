@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, afterNextRender, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, DestroyRef, HostListener, afterNextRender, inject, signal } from '@angular/core';
 import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter } from 'rxjs';
@@ -56,6 +56,14 @@ export class PublicShellComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly cdr = inject(ChangeDetectorRef);
 
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    if (typeof window !== 'undefined' && window.innerWidth >= 1024) {
+      this.mobileNavOpen.set(false);
+      this.cdr.detectChanges();
+    }
+  }
+
   constructor() {
     // Navigation closes the drawer; the subscription is disposed with this shell.
     inject(Router).events.pipe(
@@ -70,10 +78,11 @@ export class PublicShellComponent {
     // so resizing back to mobile cannot reopen a stale drawer. Browser-only API.
     afterNextRender(() => {
       const desktop = window.matchMedia('(min-width: 64rem)');
-      const closeOnDesktop = () => {
-        if (desktop.matches || window.innerWidth >= 1024) {
+      const closeOnDesktop = (e?: MediaQueryListEvent | UIEvent) => {
+        const isDesktop = (e && 'matches' in e) ? e.matches : (desktop.matches || window.innerWidth >= 1024);
+        if (isDesktop) {
           this.mobileNavOpen.set(false);
-          this.cdr.markForCheck();
+          this.cdr.detectChanges();
         }
       };
       closeOnDesktop();
