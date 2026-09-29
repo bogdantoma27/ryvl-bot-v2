@@ -401,6 +401,13 @@ export class VpgService {
   async updateConfig(guildId: string, dto: UpdateVpgConfigDto) {
     await this.getOrCreateConfig(guildId);
 
+    if (dto.channelId !== undefined) {
+      await this.prisma.guild.update({
+        where: { id: guildId },
+        data: { defaultTransfersChannelId: dto.channelId },
+      }).catch(() => {});
+    }
+
     return this.prisma.vpgTransferConfig.update({
       where: { guildId },
       data: {

@@ -605,7 +605,10 @@ export class VpgTransfersComponent implements OnInit {
 
       if (configRes && configRes.config) {
         this.config.set(configRes.config);
-        this.selectedChannelId = configRes.config.channelId || '';
+        this.selectedChannelId =
+          configRes.config.channelId ||
+          this.guildStore.activeGuild()?.defaultTransfersChannelId ||
+          '';
         this.isAutoPostingEnabled = configRes.config.enabled ?? true;
         this.pollIntervalSec = configRes.config.pollIntervalSec || 120;
         this.selectedCommunitySlug = configRes.config.communitySlug || 'VPGRoPS5';

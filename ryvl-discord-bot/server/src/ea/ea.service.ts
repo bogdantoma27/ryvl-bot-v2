@@ -608,13 +608,22 @@ export class EaService {
     platform = 'common-gen5',
     crestUrl?: string | null,
   ) {
+    let targetChannel = channelId || null;
+    if (!targetChannel) {
+      const guild = await this.prisma.guild.findUnique({
+        where: { id: guildId },
+        select: { defaultLiveResultsChannelId: true, defaultChannelId: true },
+      });
+      targetChannel = guild?.defaultLiveResultsChannelId || guild?.defaultChannelId || null;
+    }
+
     return this.prisma.trackedClub.upsert({
       where: {
         guildId_clubId: { guildId, clubId },
       },
       update: {
         clubName,
-        channelId: channelId || null,
+        channelId: targetChannel,
         platform,
         enabled: true,
         crestUrl: crestUrl || null,
@@ -623,7 +632,7 @@ export class EaService {
         guildId,
         clubId,
         clubName,
-        channelId: channelId || null,
+        channelId: targetChannel,
         platform,
         enabled: true,
         crestUrl: crestUrl || null,

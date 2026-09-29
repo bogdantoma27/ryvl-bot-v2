@@ -157,7 +157,7 @@ import { User } from './core/models';
                 </div>
                 <a
                   routerLink="/admin/club"
-                  routerLinkActive="!bg-[#00d26a] !text-black font-bold shadow-md shadow-emerald-500/20"
+                  routerLinkActive="!bg-[#00d26a] !text-black font-bold shadow-md shadow-emerald-500/20 [&>svg]:!text-black"
                   (click)="closeMobileSidebar()"
                   class="flex items-center gap-3 px-3 py-2 rounded-xl font-semibold text-slate-200 hover:text-white hover:bg-[#1f2e54] transition cursor-pointer"
                 >
@@ -176,7 +176,7 @@ import { User } from './core/models';
                 </div>
                 <a
                   routerLink="/admin/transfers"
-                  routerLinkActive="!bg-[#1f8b4c] !text-white font-bold shadow-md shadow-emerald-500/20"
+                  routerLinkActive="!bg-[#1f8b4c] !text-white font-bold shadow-md shadow-emerald-500/20 [&>svg]:!text-white"
                   (click)="closeMobileSidebar()"
                   class="flex items-center gap-3 px-3 py-2 rounded-xl font-semibold text-slate-200 hover:text-white hover:bg-[#1f2e54] transition cursor-pointer"
                 >

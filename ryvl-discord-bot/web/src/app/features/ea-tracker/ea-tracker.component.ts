@@ -125,14 +125,13 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
             @if (isAdmin()) {
               <button
                 type="button"
-                (click)="activeTab.set('settings')"
+                (click)="activeTab.set('clubs')"
                 class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition cursor-pointer"
               >
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
                 </svg>
-                <span>Setup</span>
+                <span>Tracked Clubs</span>
               </button>
             }
           </div>
@@ -227,15 +226,6 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
             [ngClass]="activeTab() === 'clubs' ? 'bg-[#00d26a] text-black shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'"
           >
             Tracked Clubs ({{ trackedClubs().length }})
-          </button>
-
-          <button
-            type="button"
-            (click)="activeTab.set('settings')"
-            class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
-            [ngClass]="activeTab() === 'settings' ? 'bg-[#00d26a] text-black shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'"
-          >
-            Tracker Settings & Club Switch
           </button>
         }
       </div>
@@ -680,140 +670,6 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
         </div>
       }
 
-      <!-- Tab 4: Tracker Settings & Club Search -->
-      @if (isAdmin() && activeTab() === 'settings') {
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <!-- Discord Notification Channel & Controls Card -->
-          <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-            <div class="border-b border-slate-800 pb-4">
-              <h3 class="text-base font-bold text-white flex items-center gap-2">
-                <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                <span>Automated Match Notifications</span>
-              </h3>
-              <p class="text-xs text-slate-400 mt-1">
-                Configure which channel receives match statistics embeds whenever the club finishes a match.
-              </p>
-            </div>
-
-            <!-- Auto-Tracking Enabled Switch -->
-            <div class="flex items-center justify-between p-3.5 bg-[#11192e] rounded-xl border border-slate-800">
-              <div>
-                <div class="text-xs font-bold text-white">Enable Background Poller</div>
-                <div class="text-[11px] text-slate-400">Polls EA servers every 90 seconds for newly finished matches</div>
-              </div>
-              <label class="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  [checked]="editEnabled()"
-                  (change)="editEnabled.set(!editEnabled())"
-                  class="sr-only peer"
-                />
-                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
-              </label>
-            </div>
-
-            <!-- Target Discord Channel Dropdown -->
-            <div class="space-y-1.5">
-              <label class="block text-xs font-bold text-slate-300">Target Discord Text Channel</label>
-              <select
-                [ngModel]="editChannelId()"
-                (ngModelChange)="editChannelId.set($event)"
-                class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 transition cursor-pointer"
-              >
-                <option [value]="null">-- Select a Text Channel --</option>
-                @for (c of availableChannels(); track c.id) {
-                  <option [value]="c.id"># {{ c.name }}</option>
-                }
-              </select>
-              <p class="text-[11px] text-slate-500">The bot will post victory, defeat, and player ratings here.</p>
-            </div>
-
-            <!-- Save Settings Button -->
-            <div class="pt-2">
-              <button
-                type="button"
-                (click)="saveSettings()"
-                [disabled]="isActionRunning()"
-                class="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition cursor-pointer disabled:opacity-50"
-              >
-                {{ isActionRunning() ? 'Saving...' : 'Save Configuration' }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Change Club / Search EA Leaderboards Card -->
-          <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-            <div class="border-b border-slate-800 pb-4">
-              <h3 class="text-base font-bold text-white flex items-center gap-2">
-                <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <span>Track a Different Club</span>
-              </h3>
-              <p class="text-xs text-slate-400 mt-1">
-                Search for any EA SPORTS FC 27 Pro Clubs team name across global leaderboards.
-              </p>
-            </div>
-
-            <!-- Search Input Box -->
-            <div class="flex items-center gap-2">
-              <input
-                type="text"
-                [ngModel]="searchQuery()"
-                (ngModelChange)="searchQuery.set($event)"
-                (keyup.enter)="searchClubs()"
-                placeholder="e.g. RYVL Esports, Primetime..."
-                class="flex-1 bg-[#11192e] border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
-              />
-              <button
-                type="button"
-                (click)="searchClubs()"
-                [disabled]="isSearching() || !searchQuery().trim()"
-                class="px-4 py-2 rounded-xl bg-[#1f2e54] hover:bg-[#283b6b] text-white text-xs font-bold border border-slate-700 transition cursor-pointer disabled:opacity-50"
-              >
-                {{ isSearching() ? 'Searching...' : 'Search' }}
-              </button>
-            </div>
-
-            <!-- Search Results List -->
-            @if (searchResults().length > 0) {
-              <div class="space-y-2 max-h-60 overflow-y-auto pr-1">
-                <div class="text-[11px] font-bold uppercase text-slate-400 tracking-wider">Search Results</div>
-                @for (res of searchResults(); track res.clubId) {
-                  <div class="p-3 bg-[#11192e] border border-slate-800 rounded-xl flex items-center justify-between gap-3 hover:border-slate-700 transition">
-                    <div class="flex items-center gap-3">
-                      <img
-                        [src]="res.crestUrl || defaultCrest"
-                        alt="Crest"
-                        class="w-8 h-8 object-contain rounded-lg bg-slate-900 p-0.5"
-                      />
-                      <div>
-                        <div class="text-xs font-bold text-white">{{ res.name }}</div>
-                        <div class="text-[10px] text-slate-400">
-                          ID: {{ res.clubId }} • Div {{ res.currentDivision }} • {{ res.wins }}W / {{ res.losses }}L
-                        </div>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      (click)="selectClub(res)"
-                      class="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-extrabold transition cursor-pointer"
-                    >
-                      Select
-                    </button>
-                  </div>
-                }
-              </div>
-            } @else if (hasSearched() && searchResults().length === 0) {
-              <div class="text-xs text-slate-400 text-center py-4 bg-[#11192e] rounded-xl border border-slate-800">
-                No clubs found matching "{{ searchQuery() }}".
-              </div>
-            }
-          </div>
-        </div>
-      }
 
       <!-- Tab: Multi-Club EA Tracker -->
       @if (isAdmin() && activeTab() === 'clubs') {
@@ -922,66 +778,208 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
             }
           </div>
 
-          <!-- Add New Tracked Club Card -->
-          <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-            <div class="border-b border-slate-800 pb-3">
-              <h3 class="text-sm font-bold text-white flex items-center gap-2">
-                <span>➕</span>
-                <span>Add Club to Tracker</span>
-              </h3>
-              <p class="text-xs text-slate-400 mt-1">Enter club details or use the Club Switch tab to search global leaderboards.</p>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Add Club to Tracker Card -->
+          <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+            <div class="border-b border-slate-800 pb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <label class="block text-xs font-bold text-slate-300 mb-1">Club ID</label>
-                <input
-                  type="text"
-                  [(ngModel)]="newClubId"
-                  placeholder="e.g. 128199"
-                  class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-                />
+                <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                  <span>🔍</span>
+                  <span>Search & Add Club to Tracker</span>
+                </h3>
+                <p class="text-xs text-slate-400 mt-1">Search the official EA Clubs directory by name to add and track live stats, match results, and automated announcements.</p>
               </div>
-
-              <div>
-                <label class="block text-xs font-bold text-slate-300 mb-1">Club Name</label>
-                <input
-                  type="text"
-                  [(ngModel)]="newClubName"
-                  placeholder="e.g. RYVL Esports"
-                  class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <label class="block text-xs font-bold text-slate-300 mb-1">Target Discord Channel</label>
-                <select
-                  [(ngModel)]="newClubChannelId"
-                  class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
-                >
-                  <option [value]="null">-- Select a Text Channel --</option>
-                  @for (c of availableChannels(); track c.id) {
-                    <option [value]="c.id"># {{ c.name }}</option>
-                  }
-                </select>
-              </div>
-            </div>
-
-            <div class="flex justify-end pt-2">
               <button
                 type="button"
-                (click)="onAddTrackedClub()"
-                [disabled]="isAddingClub() || !newClubId || !newClubName"
-                class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                (click)="showManualAdd.set(!showManualAdd())"
+                class="text-xs font-semibold text-slate-400 hover:text-white transition flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/50 cursor-pointer"
               >
-                @if (isAddingClub()) {
-                  <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
-                  <span>Adding Club...</span>
-                } @else {
-                  <span>Add Tracked Club</span>
-                }
+                <span>{{ showManualAdd() ? '✕ Close Manual Input' : '✏️ Or Enter Club ID' }}</span>
               </button>
             </div>
+
+            <!-- EA Live Search Form -->
+            <div class="space-y-4">
+              <div class="flex flex-col sm:flex-row gap-3">
+                <div class="relative flex-1">
+                  <input
+                    type="text"
+                    [ngModel]="searchQuery()"
+                    (ngModelChange)="searchQuery.set($event)"
+                    (keydown.enter)="searchClubs()"
+                    placeholder="Enter club name (e.g. RYVL, FC Barcelona, Milano...)"
+                    class="w-full bg-[#11192e] border border-slate-700 rounded-xl pl-4 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                  />
+                  @if (searchQuery()) {
+                    <button
+                      type="button"
+                      (click)="searchQuery.set(''); searchResults.set([]); hasSearched.set(false)"
+                      class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  }
+                </div>
+
+                <button
+                  type="button"
+                  (click)="searchClubs()"
+                  [disabled]="isSearching() || !searchQuery().trim()"
+                  class="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                >
+                  @if (isSearching()) {
+                    <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                    <span>Searching EA...</span>
+                  } @else {
+                    <span>Search EA API</span>
+                  }
+                </button>
+              </div>
+
+              <!-- Search Results -->
+              @if (isSearching()) {
+                <div class="py-8 text-center text-slate-400 text-xs flex items-center justify-center gap-2 bg-[#11192e]/60 rounded-xl border border-slate-800">
+                  <span class="w-4 h-4 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></span>
+                  <span>Querying EA Sports Clubs database...</span>
+                </div>
+              } @else if (hasSearched()) {
+                @if (searchResults().length === 0) {
+                  <div class="py-8 text-center text-slate-400 text-xs bg-[#11192e]/60 rounded-xl border border-slate-800">
+                    No clubs found for "<span class="text-white font-medium">{{ searchQuery() }}</span>". Check the spelling or enter the Club ID manually below.
+                  </div>
+                } @else {
+                  <div class="space-y-2.5 max-h-[420px] overflow-y-auto pr-1">
+                    <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                      Found {{ searchResults().length }} club(s)
+                    </div>
+
+                    @for (club of searchResults(); track club.clubId) {
+                      <div class="bg-[#11192e] border border-slate-800 hover:border-slate-700 rounded-xl p-4 transition flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div class="flex items-center gap-3.5 min-w-0">
+                          <img
+                            [src]="club.crestUrl || defaultCrest"
+                            [alt]="club.name"
+                            (error)="onCrestError($event)"
+                            class="w-12 h-12 object-contain rounded-lg bg-black/30 p-1 border border-slate-800 shrink-0"
+                          />
+                          <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                              <span class="font-extrabold text-sm text-white truncate">{{ club.name }}</span>
+                              @if (isTracked(club.clubId)) {
+                                <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+                                  Already Tracked
+                                </span>
+                              }
+                            </div>
+                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-400 mt-1">
+                              <span class="font-mono text-slate-500">ID: {{ club.clubId }}</span>
+                              @if (club.currentDivision) {
+                                <span class="text-amber-400 font-semibold">{{ club.currentDivision }}</span>
+                              }
+                              <span>Record: <strong class="text-emerald-400">{{ club.wins || 0 }}W</strong> - <strong class="text-slate-300">{{ club.ties || 0 }}D</strong> - <strong class="text-rose-400">{{ club.losses || 0 }}L</strong></span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="flex flex-wrap sm:flex-nowrap items-center gap-2.5 shrink-0">
+                          <div class="min-w-[190px]">
+                            <label class="block text-[10px] font-semibold text-slate-400 mb-1">Target Channel</label>
+                            <select
+                              [ngModel]="selectedChannelForClub(club.clubId)"
+                              (ngModelChange)="setSelectedChannelForClub(club.clubId, $event)"
+                              class="w-full bg-[#0d1424] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                            >
+                              <option [value]="null">Default / No Channel</option>
+                              @for (c of availableChannels(); track c.id) {
+                                <option [value]="c.id"># {{ c.name }}</option>
+                              }
+                            </select>
+                          </div>
+
+                          <div class="pt-3.5">
+                            @if (isTracked(club.clubId)) {
+                              <button
+                                type="button"
+                                (click)="switchActiveClubById(club.clubId)"
+                                class="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold text-xs border border-emerald-500/30 transition cursor-pointer"
+                              >
+                                View Club
+                              </button>
+                            } @else {
+                              <button
+                                type="button"
+                                (click)="addClubFromSearch(club)"
+                                [disabled]="isAddingClub()"
+                                class="px-4 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-md transition disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                              >
+                                + Track Club
+                              </button>
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    }
+                  </div>
+                }
+              }
+            </div>
+
+            <!-- Manual Input Section (Collapsible) -->
+            @if (showManualAdd()) {
+              <div class="border-t border-slate-800/80 pt-4 mt-2 space-y-3 bg-[#11192e]/40 p-4 rounded-xl border border-slate-800">
+                <div class="text-xs font-bold text-slate-300 flex items-center gap-2">
+                  <span>Manual Club Registration</span>
+                  <span class="text-[10px] font-normal text-slate-500">(Use if club is not appearing in EA search)</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1">Club ID</label>
+                    <input
+                      type="text"
+                      [(ngModel)]="newClubId"
+                      placeholder="e.g. 128199"
+                      class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1">Club Name</label>
+                    <input
+                      type="text"
+                      [(ngModel)]="newClubName"
+                      placeholder="e.g. RYVL Esports"
+                      class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-bold text-slate-300 mb-1">Target Discord Channel</label>
+                    <select
+                      [(ngModel)]="newClubChannelId"
+                      class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    >
+                      <option [value]="null">Default / No Channel</option>
+                      @for (c of availableChannels(); track c.id) {
+                        <option [value]="c.id"># {{ c.name }}</option>
+                      }
+                    </select>
+                  </div>
+                </div>
+
+                <div class="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    (click)="onAddTrackedClub()"
+                    [disabled]="isAddingClub() || !newClubId || !newClubName"
+                    class="px-5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                  >
+                    @if (isAddingClub()) {
+                      <span class="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                      <span>Adding Club...</span>
+                    } @else {
+                      <span>Add Tracked Club</span>
+                    }
+                  </button>
+                </div>
+              </div>
+            }
           </div>
         </div>
       }
@@ -1062,7 +1060,7 @@ export class EaTrackerComponent implements OnInit {
     'https://media.contentapi.ea.com/content/dam/ea/fc/common/global/tertiary-logo.svg';
 
   // State
-  readonly activeTab = signal<'matches' | 'roster' | 'players' | 'clubs' | 'settings'>('matches');
+  readonly activeTab = signal<'matches' | 'roster' | 'players' | 'clubs'>('matches');
   readonly config = signal<any>(null);
   readonly clubInfo = signal<any>(null);
   readonly overallStats = signal<any>(null);
@@ -1096,9 +1094,9 @@ export class EaTrackerComponent implements OnInit {
 
   readonly expandedMatchId = signal<string | null>(null);
 
-  // Form states for settings
-  readonly editEnabled = signal<boolean>(true);
-  readonly editChannelId = signal<string | null>(null);
+  // Search & Track states
+  readonly showManualAdd = signal<boolean>(false);
+  readonly searchClubChannels = signal<Record<string, string | null>>({});
   readonly searchQuery = signal<string>('');
   readonly searchResults = signal<any[]>([]);
 
@@ -1200,7 +1198,7 @@ export class EaTrackerComponent implements OnInit {
   }
 
   async loadAllData(guildId: string): Promise<void> {
-    if (!this.isAdmin() && (this.activeTab() === 'settings' || this.activeTab() === 'players')) {
+    if (!this.isAdmin() && (this.activeTab() === 'clubs' || this.activeTab() === 'players')) {
       this.activeTab.set('matches');
     }
 
@@ -1209,9 +1207,6 @@ export class EaTrackerComponent implements OnInit {
       this.config.set(configRes.config);
       this.clubInfo.set(configRes.clubInfo);
       this.overallStats.set(configRes.overallStats);
-
-      this.editEnabled.set(configRes.config?.enabled ?? true);
-      this.editChannelId.set(configRes.config?.channelId || null);
 
       // Load matches
       this.loadMatches(guildId);
@@ -1262,22 +1257,62 @@ export class EaTrackerComponent implements OnInit {
     }
   }
 
-  async saveSettings(): Promise<void> {
+  onCrestError(event: Event): void {
+    const target = event.target as HTMLImageElement;
+    if (target) {
+      target.src = this.defaultCrest;
+    }
+  }
+
+  selectedChannelForClub(clubId: string | number): string | null {
+    const id = String(clubId);
+    if (this.searchClubChannels()[id] !== undefined) {
+      return this.searchClubChannels()[id];
+    }
+    const guild = this.guildStore.activeGuild();
+    return guild?.defaultLiveResultsChannelId || guild?.settings?.defaultChannelId || null;
+  }
+
+  setSelectedChannelForClub(clubId: string | number, channelId: string | null): void {
+    const id = String(clubId);
+    this.searchClubChannels.update((prev) => ({ ...prev, [id]: channelId }));
+  }
+
+  isTracked(clubId: string | number): boolean {
+    return this.trackedClubs().some((c) => String(c.clubId) === String(clubId));
+  }
+
+  async addClubFromSearch(club: any): Promise<void> {
     const guildId = this.guildStore.activeGuildId();
     if (!guildId) return;
 
-    this.isActionRunning.set(true);
+    const channelId = this.selectedChannelForClub(club.clubId);
+    this.isAddingClub.set(true);
     try {
-      const updated = await this.api.updateEaConfig(guildId, {
-        enabled: this.editEnabled(),
-        channelId: this.editChannelId(),
+      await this.api.addTrackedClub(guildId, {
+        clubId: String(club.clubId),
+        clubName: club.name,
+        platform: 'common-gen5',
+        channelId: channelId || undefined,
+        enabled: true,
       });
-      this.config.set(updated);
-      this.showToast('Tracker settings saved successfully!', 'success');
+      this.showToast(`Club "${club.name}" added to tracker!`, 'success');
+      await this.loadTrackedClubs(guildId);
     } catch (err: any) {
-      this.showToast(`Failed to save settings: ${err.message}`, 'error');
+      this.showToast(`Failed to add club: ${err.message}`, 'error');
     } finally {
-      this.isActionRunning.set(false);
+      this.isAddingClub.set(false);
+    }
+  }
+
+  onSelectTab(tab: 'matches' | 'roster' | 'players' | 'clubs'): void {
+    this.activeTab.set(tab);
+    if (tab === 'players') {
+      const gId = this.guildStore.activeGuildId() || 'default';
+      this.loadRegisteredPlayers(gId);
+    } else if (tab === 'clubs') {
+      const gId = this.guildStore.activeGuildId() || 'default';
+      this.loadTrackedClubs(gId);
     }
   }
 
@@ -1375,13 +1410,7 @@ export class EaTrackerComponent implements OnInit {
     }
   }
 
-  onSelectTab(tab: 'matches' | 'roster' | 'players' | 'settings'): void {
-    this.activeTab.set(tab);
-    if (tab === 'players') {
-      const gId = this.guildStore.activeGuildId() || 'default';
-      this.loadRegisteredPlayers(gId);
-    }
-  }
+
 
   async loadRegisteredPlayers(guildId: string): Promise<void> {
     if (!guildId || guildId === 'default') return;
