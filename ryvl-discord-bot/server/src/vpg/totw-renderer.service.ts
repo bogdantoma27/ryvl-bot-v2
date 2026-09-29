@@ -39,6 +39,7 @@ export interface RenderTotwOptions {
   accentColor?: string;
   showFlagBar?: boolean;
   transparentBg?: boolean;
+  footerText?: string;
 }
 
 function escapeXml(unsafe: any): string {
@@ -72,19 +73,37 @@ export class TotwRendererService {
 
   // Exact coordinates calibrated to totw-template.jpg (819 x 1024)
   private readonly pitchSlots = [
-    { key: 'st', label: 'LS', cx: 325, cy: 245, r: 35, py: 310, idx: 0 },
-    { key: 'st', label: 'RS', cx: 493, cy: 245, r: 35, py: 310, idx: 1 },
-    { key: 'cam', label: 'CAM', cx: 409, cy: 362, r: 35, py: 428, idx: 0 },
-    { key: 'lm', label: 'LM', cx: 145, cy: 448, r: 35, py: 514, idx: 0 },
-    { key: 'cm', label: 'LCM', cx: 293, cy: 469, r: 35, py: 532, idx: 0 },
-    { key: 'cm', label: 'RCM', cx: 525, cy: 468, r: 35, py: 532, idx: 1 },
-    { key: 'rm', label: 'RM', cx: 673, cy: 448, r: 35, py: 514, idx: 0 },
-    { key: 'cdm', label: 'CDM', cx: 409, cy: 537, r: 34, py: 601, idx: 0 },
-    { key: 'cb', label: 'LCB', cx: 258, cy: 657, r: 34, py: 721, idx: 0 },
-    { key: 'cb', label: 'CCB', cx: 409, cy: 652, r: 36, py: 721, idx: 1 },
-    { key: 'cb', label: 'RCB', cx: 561, cy: 657, r: 34, py: 721, idx: 2 },
-    { key: 'gk', label: 'GK', cx: 409, cy: 774, r: 40, py: 847, idx: 0 },
+    { key: 'st', label: 'LS', cx: 325, cy: 251, r: 38, py: 310, idx: 0 },
+    { key: 'st', label: 'RS', cx: 493, cy: 251, r: 38, py: 310, idx: 1 },
+    { key: 'cam', label: 'CAM', cx: 409, cy: 370, r: 38, py: 428, idx: 0 },
+    { key: 'lm', label: 'LM', cx: 145, cy: 456, r: 38, py: 514, idx: 0 },
+    { key: 'cm', label: 'LCM', cx: 293, cy: 476, r: 38, py: 532, idx: 0 },
+    { key: 'cm', label: 'RCM', cx: 525, cy: 476, r: 38, py: 532, idx: 1 },
+    { key: 'rm', label: 'RM', cx: 673, cy: 456, r: 38, py: 514, idx: 0 },
+    { key: 'cdm', label: 'CDM', cx: 409, cy: 546, r: 38, py: 601, idx: 0 },
+    { key: 'cb', label: 'LCB', cx: 258, cy: 666, r: 38, py: 721, idx: 0 },
+    { key: 'cb', label: 'CCB', cx: 409, cy: 666, r: 38, py: 721, idx: 1 },
+    { key: 'cb', label: 'RCB', cx: 561, cy: 666, r: 38, py: 721, idx: 2 },
+    { key: 'gk', label: 'GK', cx: 409, cy: 790, r: 38, py: 847, idx: 0 },
   ];
+
+  private async createAvatarMask(r: number): Promise<Buffer> {
+    const D = r * 2;
+    // Transparent SVG mask where black produces 0 alpha cutout around bottom arch badge
+    const maskSvg = Buffer.from(`
+      <svg width="${D}" height="${D}" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <mask id="m">
+            <rect width="${D}" height="${D}" fill="black"/>
+            <circle cx="${r}" cy="${r}" r="${r}" fill="white"/>
+            <path d="M ${r - 24} ${D} L ${r - 24} ${r + 28} Q ${r} ${r + 26} ${r + 24} ${r + 28} L ${r + 24} ${D} Z" fill="black"/>
+          </mask>
+        </defs>
+        <rect width="${D}" height="${D}" fill="white" mask="url(#m)"/>
+      </svg>
+    `);
+    return sharp(maskSvg).png().toBuffer();
+  }
 
   private async fetchCircleAvatarBuffer(url: string | null | undefined, r: number): Promise<Buffer | null> {
     if (!url) return null;
@@ -98,14 +117,11 @@ export class TotwRendererService {
       const arrayBuffer = await res.arrayBuffer();
       const inputBuffer = Buffer.from(arrayBuffer);
 
-      // Arch cutout at bottom follows the golden position arch badge
-      const maskSvg = Buffer.from(
-        `<svg width="${D}" height="${D}"><circle cx="${r}" cy="${r}" r="${r - 1}" fill="#fff"/><path d="M ${r - 20} ${D} Q ${r} ${D - 6} ${r + 20} ${D} Z" fill="#000"/></svg>`
-      );
+      const maskPng = await this.createAvatarMask(r);
 
       return sharp(inputBuffer)
         .resize(D, D, { fit: 'cover' })
-        .composite([{ input: maskSvg, blend: 'dest-in' }])
+        .composite([{ input: maskPng, blend: 'dest-in' }])
         .png()
         .toBuffer();
     } catch {
@@ -115,9 +131,7 @@ export class TotwRendererService {
 
   private async getDefaultAvatarBuffer(r: number): Promise<Buffer> {
     const D = r * 2;
-    const maskSvg = Buffer.from(
-      `<svg width="${D}" height="${D}"><circle cx="${r}" cy="${r}" r="${r - 1}" fill="#fff"/><path d="M ${r - 20} ${D} Q ${r} ${D - 6} ${r + 20} ${D} Z" fill="#000"/></svg>`
-    );
+    const maskPng = await this.createAvatarMask(r);
     const svg = `
       <svg width="${D}" height="${D}" viewBox="0 0 ${D} ${D}" xmlns="http://www.w3.org/2000/svg">
         <rect width="${D}" height="${D}" fill="#111828"/>
@@ -126,7 +140,7 @@ export class TotwRendererService {
       </svg>
     `;
     return sharp(Buffer.from(svg))
-      .composite([{ input: maskSvg, blend: 'dest-in' }])
+      .composite([{ input: maskPng, blend: 'dest-in' }])
       .png()
       .toBuffer();
   }
@@ -179,6 +193,13 @@ export class TotwRendererService {
 
         <!-- Player Names on existing purple nameplates -->
         ${playerNamesSvg}
+
+        ${options.footerText ? `
+          <!-- Optional text between the bottom golden lines -->
+          <text x="${W / 2}" y="938" text-anchor="middle" dominant-baseline="central" font-family="'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700" letter-spacing="3" fill="#E2B13C">
+            ${escapeXml(options.footerText.toUpperCase())}
+          </text>
+        ` : ''}
       </svg>
     `;
   }
