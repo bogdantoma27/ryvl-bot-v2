@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/models';
@@ -17,7 +17,7 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
   selector: 'app-ea-tracker',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="max-w-7xl w-full mx-auto space-y-6 pb-12">
       <!-- Toast Notification -->
@@ -683,7 +683,8 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
                   <span>Multi-Club EA FC Pro Clubs Tracker</span>
                 </h3>
                 <p class="text-xs text-slate-400 mt-1">
-                  Track multiple clubs concurrently. Each club can have its own target Discord announcement channel and tracking status.
+                  Track multiple clubs concurrently. Each club can announce into its own channel, or fall back to your
+                  <a routerLink="/admin/settings" class="text-emerald-400 hover:underline font-medium">Default Live Results Channel</a> configured in Settings.
                 </p>
               </div>
               <span class="text-xs bg-[#11192e] border border-slate-700 px-3 py-1.5 rounded-xl text-emerald-400 font-bold">
@@ -738,7 +739,7 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
                             (ngModelChange)="onUpdateClubChannel(tc, $event)"
                             class="bg-[#11192e] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                           >
-                            <option [value]="null">-- No Channel --</option>
+                            <option [value]="null">Default {{ defaultLiveResultsChannelName() ? '(#' + defaultLiveResultsChannelName() + ' from Settings)' : '(from Server Settings)' }}</option>
                             @for (c of availableChannels(); track c.id) {
                               <option [value]="c.id"># {{ c.name }}</option>
                             }
@@ -888,7 +889,7 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
                               (ngModelChange)="setSelectedChannelForClub(club.clubId, $event)"
                               class="w-full bg-[#0d1424] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                             >
-                              <option [value]="null">Default / No Channel</option>
+                              <option [value]="null">Default {{ defaultLiveResultsChannelName() ? '(#' + defaultLiveResultsChannelName() + ' from Settings)' : '(from Server Settings)' }}</option>
                               @for (c of availableChannels(); track c.id) {
                                 <option [value]="c.id"># {{ c.name }}</option>
                               }
@@ -955,7 +956,7 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
                       [(ngModel)]="newClubChannelId"
                       class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                     >
-                      <option [value]="null">Default / No Channel</option>
+                      <option [value]="null">Default {{ defaultLiveResultsChannelName() ? '(#' + defaultLiveResultsChannelName() + ' from Settings)' : '(from Server Settings)' }}</option>
                       @for (c of availableChannels(); track c.id) {
                         <option [value]="c.id"># {{ c.name }}</option>
                       }
@@ -1123,6 +1124,14 @@ export class EaTrackerComponent implements OnInit {
 
   readonly targetChannelName = computed(() => {
     const chId = this.config()?.channelId;
+    if (!chId) return null;
+    const ch = this.availableChannels().find((c) => c.id === chId);
+    return ch ? ch.name : chId;
+  });
+
+  readonly defaultLiveResultsChannelName = computed(() => {
+    const active = this.guildStore.activeGuild();
+    const chId = (active as any)?.defaultLiveResultsChannelId || (active as any)?.settings?.defaultLiveResultsChannelId;
     if (!chId) return null;
     const ch = this.availableChannels().find((c) => c.id === chId);
     return ch ? ch.name : chId;

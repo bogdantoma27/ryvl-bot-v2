@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 
@@ -32,7 +32,7 @@ interface VpgTransfer {
   selector: 'app-vpg-transfers',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="max-w-7xl w-full mx-auto space-y-6 pb-12">
       <!-- Toast Notification -->
@@ -383,23 +383,32 @@ interface VpgTransfer {
               }
             </div>
 
-            <!-- Channel Picker -->
-            <div class="space-y-1.5">
-              <label class="block text-xs font-bold uppercase tracking-wider text-slate-300">
-                Discord Announcement Channel
-              </label>
-              <select
-                [(ngModel)]="selectedChannelId"
-                class="w-full bg-[#11192e] border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 transition cursor-pointer"
+            <!-- Discord Announcement Channel Status & Link to Central Settings -->
+            <div class="p-4 bg-[#11192e] rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div class="text-xs font-bold text-white flex items-center gap-2">
+                  <span>📢</span>
+                  <span>Discord Announcement Channel</span>
+                </div>
+                <div class="text-xs text-slate-300 mt-1">
+                  @if (channelName()) {
+                    Currently publishing transfer cards to <span class="font-bold text-emerald-400">#{{ channelName() }}</span>
+                  } @else {
+                    <span class="text-amber-400 font-medium">⚠️ No announcement channel configured</span>
+                  }
+                </div>
+                <p class="text-[11px] text-slate-500 mt-0.5">
+                  Default announcement channels are configured centrally in Guild Settings.
+                </p>
+              </div>
+
+              <a
+                routerLink="/admin/settings"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-indigo-300 hover:text-white border border-slate-700 transition cursor-pointer shrink-0"
               >
-                <option value="">-- Select a text channel --</option>
-                @for (ch of availableChannels(); track ch.id) {
-                  <option [value]="ch.id">#{{ ch.name }}</option>
-                }
-              </select>
-              <p class="text-[11px] text-slate-500">
-                New transfer cards with "⚽ HERE WE GO", fees, dates, and club badges will be posted here.
-              </p>
+                <span>⚙️ Manage in Settings</span>
+                <span>→</span>
+              </a>
             </div>
 
             <!-- Auto-Posting Toggle -->
@@ -636,7 +645,7 @@ export class VpgTransfersComponent implements OnInit {
     this.isSaving.set(true);
     try {
       const res = await this.api.updateVpgConfig(activeGuildId, {
-        channelId: this.selectedChannelId || null,
+        channelId: this.config()?.channelId || this.guildStore.activeGuild()?.defaultTransfersChannelId || undefined,
         enabled: this.isAutoPostingEnabled,
         pollIntervalSec: Number(this.pollIntervalSec),
         communitySlug: this.selectedCommunitySlug,

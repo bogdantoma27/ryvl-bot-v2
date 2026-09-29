@@ -256,19 +256,46 @@ export class GuildsService {
     const client = this.discordService.client;
 
     try {
-      const cachedGuilds = client.guilds.cache;
+      // 1. Fetch current list of all bot guilds from Discord API (guarantees newly invited guilds appear)
+      const fetchedOAuth = await client.guilds.fetch().catch(() => null);
+      const guildIds = new Set<string>();
 
-      for (const [, guild] of cachedGuilds) {
+      if (fetchedOAuth && fetchedOAuth.size > 0) {
+        for (const [id] of fetchedOAuth) {
+          guildIds.add(id);
+        }
+      }
+      for (const [id] of client.guilds.cache) {
+        guildIds.add(id);
+      }
+      const dbGuilds = await this.prisma.guild.findMany({ select: { id: true } }).catch(() => []);
+      for (const g of dbGuilds) {
+        guildIds.add(g.id);
+      }
+
+      for (const guildId of guildIds) {
         try {
-          const member =
-            guild.members.cache.get(userId) ||
-            (await guild.members.fetch(userId).catch(() => null));
-          const isOwner = guild.ownerId === userId;
-          const hasAdmin = member
-            ? member.permissions.has(PermissionFlagsBits.Administrator) ||
-              member.permissions.has(PermissionFlagsBits.ManageGuild) ||
-              isOwner
-            : isOwner;
+          const guild =
+            client.guilds.cache.get(guildId) ||
+            (await client.guilds.fetch(guildId).catch(() => null));
+
+          if (!guild) continue;
+
+          // Automatically sync guild to database
+          await this.prisma.guild.upsert({
+            where: { id: guild.id },
+            update: {
+              name: guild.name,
+              iconUrl: guild.iconURL({ extension: 'png', size: 256 }) || null,
+            },
+            create: {
+              id: guild.id,
+              name: guild.name,
+              iconUrl: guild.iconURL({ extension: 'png', size: 256 }) || null,
+            },
+          }).catch(() => {});
+
+          const hasAdmin = await this.discordService.checkUserIsAdmin(guild.id, userId);
 
           if (hasAdmin) {
             result.push({
@@ -280,7 +307,7 @@ export class GuildsService {
             });
           }
         } catch (memberErr) {
-          this.logger.debug(`Could not check user permissions in guild ${guild.id}: ${memberErr}`);
+          this.logger.debug(`Could not check user permissions in guild ${guildId}: ${memberErr}`);
         }
       }
     } catch (err) {

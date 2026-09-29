@@ -564,15 +564,40 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       if (!clientGuild) return false;
       if (clientGuild.ownerId === userId) return true;
 
-      const member =
-        clientGuild.members.cache.get(userId) ||
-        (await clientGuild.members.fetch(userId).catch(() => null));
-      if (!member) return false;
+      let member = clientGuild.members.cache.get(userId);
+      if (!member) {
+        member = await clientGuild.members.fetch(userId).catch(() => undefined);
+      }
+      if (member) {
+        return (
+          member.permissions.has(PermissionFlagsBits.Administrator) ||
+          member.permissions.has(PermissionFlagsBits.ManageGuild)
+        );
+      }
 
-      return (
-        member.permissions.has(PermissionFlagsBits.Administrator) ||
-        member.permissions.has(PermissionFlagsBits.ManageGuild)
-      );
+      // REST API fallback in case gateway member cache was missed
+      try {
+        const rest = new REST({ version: '10' }).setToken(this.configService.discordToken);
+        const rawMember = (await rest.get(Routes.guildMember(guildId, userId)).catch(() => null)) as any;
+        if (rawMember) {
+          const roles = await this.getGuildRoles(guildId).catch(() => []);
+          const memberRoleIds = new Set(rawMember.roles || []);
+          for (const role of roles) {
+            if (memberRoleIds.has(role.id)) {
+              const fullRole = clientGuild.roles.cache.get(role.id);
+              if (
+                fullRole &&
+                (fullRole.permissions.has(PermissionFlagsBits.Administrator) ||
+                  fullRole.permissions.has(PermissionFlagsBits.ManageGuild))
+              ) {
+                return true;
+              }
+            }
+          }
+        }
+      } catch {}
+
+      return false;
     } catch (err: any) {
       this.logger.warn(`Could not verify admin permissions for user ${userId} in guild ${guildId}: ${err?.message || err}`);
       return false;

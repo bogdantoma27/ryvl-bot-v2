@@ -77,20 +77,64 @@ import { User } from './core/models';
                 </div>
               </div>
 
-              @if (guildStore.availableGuilds().length > 1) {
-                <div class="mt-3">
-                  <label class="block text-[10px] uppercase font-bold text-slate-400 mb-1">Switch Server</label>
+              <!-- Server Switcher Dropdown (Always visible) -->
+              <div class="mt-3 pt-3 border-t border-slate-800">
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Select Server</span>
+                  <button
+                    type="button"
+                    (click)="onRefreshGuilds()"
+                    [disabled]="isRefreshingGuilds()"
+                    class="text-[10px] text-indigo-400 hover:text-indigo-300 font-semibold flex items-center gap-1 cursor-pointer transition disabled:opacity-50"
+                    title="Refresh list of Discord servers where you are admin"
+                  >
+                    <svg class="w-3 h-3" [class.animate-spin]="isRefreshingGuilds()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span>{{ isRefreshingGuilds() ? 'Syncing...' : 'Sync' }}</span>
+                  </button>
+                </div>
+
+                <div class="relative">
                   <select
                     [ngModel]="guildStore.activeGuildId()"
                     (ngModelChange)="onGuildSelectChange($event)"
-                    class="w-full bg-[#11192e] border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#5865F2] transition cursor-pointer"
+                    class="w-full bg-[#11192e] border border-slate-700/80 hover:border-slate-600 rounded-xl px-3 py-2 text-xs font-semibold text-white focus:outline-none focus:border-[#5865F2] transition cursor-pointer appearance-none pr-8"
                   >
                     @for (g of guildStore.availableGuilds(); track g.id) {
-                      <option [value]="g.id" [selected]="g.id === guildStore.activeGuildId()">{{ g.name }}</option>
+                      <option [value]="g.id" [selected]="g.id === guildStore.activeGuildId()">
+                        {{ g.name }}
+                      </option>
+                    }
+                    @if (guildStore.availableGuilds().length === 0) {
+                      <option [value]="guildStore.activeGuildId()">{{ guildName() }}</option>
                     }
                   </select>
+                  <div class="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
                 </div>
-              }
+
+                @if (guildStore.availableGuilds().length > 1) {
+                  <p class="text-[10px] text-slate-400 mt-1">
+                    Managing {{ guildStore.availableGuilds().length }} servers with admin access.
+                  </p>
+                } @else {
+                  <div class="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                    <span>1 server connected</span>
+                    <a
+                      href="https://discord.com/oauth2/authorize?client_id=1418898129035235328&permissions=8&scope=bot%20applications.commands"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="text-indigo-400 hover:text-indigo-300 font-medium cursor-pointer"
+                    >
+                      + Add to Server
+                    </a>
+                  </div>
+                }
+              </div>
             </div>
 
             <!-- Middle Section: Categorized Navigation Links -->
@@ -320,17 +364,18 @@ import { User } from './core/models';
               </div>
 
               <div class="flex items-center gap-2">
-                @if (guildStore.availableGuilds().length > 1) {
-                  <select
-                    [ngModel]="guildStore.activeGuildId()"
-                    (ngModelChange)="onGuildSelectChange($event)"
-                    class="bg-[#11192e] border border-slate-700 rounded-lg px-2 py-1 text-xs text-white max-w-[130px] truncate focus:outline-none focus:border-[#5865F2]"
-                  >
-                    @for (g of guildStore.availableGuilds(); track g.id) {
-                      <option [value]="g.id" [selected]="g.id === guildStore.activeGuildId()">{{ g.name }}</option>
-                    }
-                  </select>
-                }
+                <select
+                  [ngModel]="guildStore.activeGuildId()"
+                  (ngModelChange)="onGuildSelectChange($event)"
+                  class="bg-[#11192e] border border-slate-700 rounded-lg px-2 py-1 text-xs text-white max-w-[130px] truncate focus:outline-none focus:border-[#5865F2] cursor-pointer"
+                >
+                  @for (g of guildStore.availableGuilds(); track g.id) {
+                    <option [value]="g.id" [selected]="g.id === guildStore.activeGuildId()">{{ g.name }}</option>
+                  }
+                  @if (guildStore.availableGuilds().length === 0) {
+                    <option [value]="guildStore.activeGuildId()">{{ guildName() }}</option>
+                  }
+                </select>
                 <a
                   routerLink="/docs"
                   class="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 text-xs hover:bg-indigo-500/20 transition"
@@ -354,22 +399,36 @@ import { User } from './core/models';
               <div class="flex items-center gap-3">
                 <div class="flex items-center gap-2">
                   <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Server:</span>
-                  @if (guildStore.availableGuilds().length > 1) {
+                  <div class="relative">
                     <select
                       [ngModel]="guildStore.activeGuildId()"
                       (ngModelChange)="onGuildSelectChange($event)"
-                      class="bg-[#11192e] border border-slate-700 hover:border-slate-500 rounded-xl px-3 py-1.5 text-xs font-semibold text-white focus:outline-none focus:border-[#5865F2] transition cursor-pointer"
+                      class="bg-[#11192e] border border-slate-700 hover:border-slate-500 rounded-xl pl-3 pr-7 py-1.5 text-xs font-semibold text-white focus:outline-none focus:border-[#5865F2] transition cursor-pointer appearance-none"
                     >
                       @for (g of guildStore.availableGuilds(); track g.id) {
                         <option [value]="g.id" [selected]="g.id === guildStore.activeGuildId()">{{ g.name }}</option>
                       }
+                      @if (guildStore.availableGuilds().length === 0) {
+                        <option [value]="guildStore.activeGuildId()">{{ guildName() }}</option>
+                      }
                     </select>
-                  } @else {
-                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#11192e] border border-slate-700 text-xs text-white font-medium">
-                      <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-                      <span>{{ guildName() }}</span>
+                    <div class="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                      </svg>
                     </div>
-                  }
+                  </div>
+                  <button
+                    type="button"
+                    (click)="onRefreshGuilds()"
+                    [disabled]="isRefreshingGuilds()"
+                    class="p-1.5 rounded-lg bg-[#11192e] border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-white transition cursor-pointer"
+                    title="Refresh server list"
+                  >
+                    <svg class="w-3.5 h-3.5" [class.animate-spin]="isRefreshingGuilds()" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
                 </div>
                 <a
                   routerLink="/docs"
@@ -535,9 +594,25 @@ export class App implements OnInit {
     }
   }
 
-  onGuildSelectChange(guildId: string): void {
-    if (guildId) {
-      this.guildStore.setActiveGuild(guildId);
+  readonly isRefreshingGuilds = signal<boolean>(false);
+
+  async onRefreshGuilds(): Promise<void> {
+    this.isRefreshingGuilds.set(true);
+    try {
+      await this.guildStore.loadGuilds();
+    } finally {
+      this.isRefreshingGuilds.set(false);
+    }
+  }
+
+  async onGuildSelectChange(guildId: string): Promise<void> {
+    if (guildId && guildId !== this.guildStore.activeGuildId()) {
+      await this.guildStore.setActiveGuild(guildId);
+      const currentUrl = this.router.url.split('?')[0];
+      await this.router.navigate([currentUrl], {
+        queryParams: { guildId },
+        queryParamsHandling: 'merge',
+      });
     }
   }
 

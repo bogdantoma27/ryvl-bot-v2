@@ -133,12 +133,13 @@ const TIMEZONES = [
         <!-- Card 3: Dedicated Feature Channels -->
         <div class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-5">
           <div class="border-b border-slate-700/50 pb-3">
-            <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <h2 class="text-base font-bold text-white flex items-center gap-2 flex-wrap">
               <span class="text-[#EAE905]">⚡</span>
               <span>Dedicated Feature Channels</span>
+              <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Central Channel Hub</span>
             </h2>
             <p class="text-xs text-slate-400">
-              Set default announcement channels for lineups, transfers, fixtures, standings, and live results.
+              Set default announcement channels for lineups, transfers, fixtures, standings, and live results. Feature pages (Lineup, VPG, EA Tracker) link directly to this central configuration.
             </p>
           </div>
 
