@@ -212,6 +212,69 @@ export class TournamentCommands {
       } catch (err: any) {
         await interaction.editReply(`❌ Error fetching status: ${err?.message || err}`);
       }
+    } else if (subcommand === 'set-status') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const tournaments = await this.tournamentService.listTournaments(guildId);
+        const active = tournaments[0];
+        if (!active) {
+          await interaction.editReply('No active tournament found in this server.');
+          return;
+        }
+        const status = interaction.options.getString('status', true);
+        const updated = await this.tournamentService.updateTournamentStatus(active.id, status);
+        await interaction.editReply(`✅ Tournament **${updated.name}** status updated to \`${status}\`.`);
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error updating status: ${err?.message || err}`);
+      }
+    } else if (subcommand === 'toggle-signups') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const tournaments = await this.tournamentService.listTournaments(guildId);
+        const active = tournaments[0];
+        if (!active) {
+          await interaction.editReply('No active tournament found in this server.');
+          return;
+        }
+        const updated = await this.tournamentService.toggleSignups(active.id);
+        await interaction.editReply(`⚡ Tournament **${updated.name}** signups are now: \`${updated.status}\`.`);
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error toggling signups: ${err?.message || err}`);
+      }
+    } else if (subcommand === 'start-draft') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const tournaments = await this.tournamentService.listTournaments(guildId);
+        const activeDraft = tournaments.find((t) => t.type === 'DRAFT');
+        if (!activeDraft) {
+          await interaction.editReply('No draft tournament found in this server.');
+          return;
+        }
+        const updated = await this.tournamentService.updateTournamentStatus(activeDraft.id, 'DRAFTING');
+        const draftChannelId = (updated.discordChannels as any)?.draft;
+        if (draftChannelId) {
+          await this.tournamentService.postDraftWheelEmbed(draftChannelId, updated);
+        }
+        await interaction.editReply(`🎡 Draft phase has been initiated for **${updated.name}**! Check <#${draftChannelId || interaction.channelId}>.`);
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error starting draft: ${err?.message || err}`);
+      }
+    } else if (subcommand === 'notify') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const tournaments = await this.tournamentService.listTournaments(guildId);
+        const active = tournaments[0];
+        if (!active) {
+          await interaction.editReply('No active tournament found in this server.');
+          return;
+        }
+        const title = interaction.options.getString('title', true);
+        const message = interaction.options.getString('message', true);
+        await this.tournamentService.broadcastNotification(active.id, title, message, interaction.user.username);
+        await interaction.editReply(`📢 Announcement broadcasted to tournament channels!`);
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error broadcasting announcement: ${err?.message || err}`);
+      }
     } else if (subcommand === 'generate-standings') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
@@ -272,6 +335,77 @@ export class TournamentCommands {
       }
       const signups: any[] = (active.signupsData as any) || [];
       await interaction.editReply(`📋 **${active.name}**: ${signups.length} signed up.`);
+    } else if (customId === 'tourney:admin:toggle_signups') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const tournaments = await this.tournamentService.listTournaments(interaction.guildId!);
+        const active = tournaments[0];
+        if (!active) {
+          await interaction.editReply('No tournaments found.');
+          return;
+        }
+        const updated = await this.tournamentService.toggleSignups(active.id);
+        await interaction.editReply(`⚡ Signups for **${updated.name}** are now \`${updated.status}\`.`);
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error toggling signups: ${err?.message || err}`);
+      }
+    } else if (customId === 'tourney:admin:start_draft') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const tournaments = await this.tournamentService.listTournaments(interaction.guildId!);
+        const activeDraft = tournaments.find((t) => t.type === 'DRAFT');
+        if (!activeDraft) {
+          await interaction.editReply('No draft tournament found.');
+          return;
+        }
+        const updated = await this.tournamentService.updateTournamentStatus(activeDraft.id, 'DRAFTING');
+        const draftChannelId = (updated.discordChannels as any)?.draft;
+        if (draftChannelId) {
+          await this.tournamentService.postDraftWheelEmbed(draftChannelId, updated);
+        }
+        await interaction.editReply(`🎡 Draft phase started for **${updated.name}**! Draft wheel posted to <#${draftChannelId || interaction.channelId}>.`);
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error starting draft: ${err?.message || err}`);
+      }
+    } else if (customId === 'tourney:admin:notify') {
+      const modal = new ModalBuilder()
+        .setCustomId('tourney:modal:notify')
+        .setTitle('Broadcast Tournament Notification');
+
+      const titleInput = new TextInputBuilder()
+        .setCustomId('notify_title')
+        .setLabel('Title')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('e.g. Schedule Update / Round 1 Fixtures')
+        .setRequired(true);
+
+      const msgInput = new TextInputBuilder()
+        .setCustomId('notify_message')
+        .setLabel('Message')
+        .setStyle(TextInputStyle.Paragraph)
+        .setPlaceholder('Write your announcement here...')
+        .setRequired(true);
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(msgInput),
+      );
+
+      await interaction.showModal(modal);
+    } else if (customId === 'tourney:admin:refresh') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const tournaments = await this.tournamentService.listTournaments(interaction.guildId!);
+        const active = tournaments[0];
+        if (!active) {
+          await interaction.editReply('No tournaments found.');
+          return;
+        }
+        await this.tournamentService.refreshTournamentEmbeds(active.id);
+        await interaction.editReply(`🔄 All embeds refreshed for **${active.name}**!`);
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error refreshing embeds: ${err?.message || err}`);
+      }
     } else if (customId.startsWith('tourney:signup:') || customId.startsWith('tourney:register:')) {
       const tournamentId = customId.replace('tourney:signup:', '').replace('tourney:register:', '');
       const tournament = await this.tournamentService.getTournament(tournamentId);
@@ -425,7 +559,7 @@ export class TournamentCommands {
 
       const homeInput = new TextInputBuilder()
         .setCustomId('home_team')
-        .setLabel('Echipa Gazdă (ex: FC 27 Draft RO 1)')
+        .setLabel('Echipa Gazdă (ex: Echipa 1)')
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
@@ -437,7 +571,7 @@ export class TournamentCommands {
 
       const awayInput = new TextInputBuilder()
         .setCustomId('away_team')
-        .setLabel('Echipa Oaspete (ex: FC 27 Draft RO 2)')
+        .setLabel('Echipa Oaspete (ex: Echipa 2)')
         .setStyle(TextInputStyle.Short)
         .setRequired(true);
 
@@ -480,6 +614,22 @@ export class TournamentCommands {
       const setup = await this.tournamentService.setupTournamentChannels(interaction.guildId!, tournament.id);
 
       await interaction.editReply(`✅ Turneul **${name}** a fost inițializat în categoria <#${setup.categoryId}>!`);
+    } else if (customId === 'tourney:modal:notify') {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      try {
+        const tournaments = await this.tournamentService.listTournaments(interaction.guildId!);
+        const active = tournaments[0];
+        if (!active) {
+          await interaction.editReply('No active tournament found.');
+          return;
+        }
+        const title = interaction.fields.getTextInputValue('notify_title').trim();
+        const message = interaction.fields.getTextInputValue('notify_message').trim();
+        await this.tournamentService.broadcastNotification(active.id, title, message, interaction.user.username);
+        await interaction.editReply('📢 Announcement has been posted to the tournament channel!');
+      } catch (err: any) {
+        await interaction.editReply(`❌ Error sending announcement: ${err?.message || err}`);
+      }
     } else if (customId.startsWith('tourney:modal:draft_spin:')) {
       const tournamentId = customId.replace('tourney:modal:draft_spin:', '');
       await interaction.deferReply();

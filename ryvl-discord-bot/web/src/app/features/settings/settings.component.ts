@@ -143,105 +143,195 @@ const TIMEZONES = [
             </p>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <!-- Default Lineup Channel -->
-            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
-              <div class="flex items-center gap-2 text-xs font-bold text-white">
-                <span class="text-[#EAE905]">📋</span>
-                <span>Default Lineup Channel</span>
+            <div class="p-4.5 rounded-xl bg-[#141d33] border border-slate-700/70 hover:border-slate-600 transition flex flex-col justify-between space-y-3 shadow-sm">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-sm shrink-0">
+                      📋
+                    </div>
+                    <span class="text-xs font-bold text-white">Lineup Channel</span>
+                  </div>
+                  @if (defaultLineupChannelId()) {
+                    <span class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Active
+                    </span>
+                  } @else {
+                    <span class="text-[10px] text-slate-400 bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded-full">
+                      Prompt
+                    </span>
+                  }
+                </div>
+                <p class="text-[11px] text-slate-400 leading-tight">Pre-selected channel in lineup builder (can be overridden before posting).</p>
               </div>
-              <p class="text-[11px] text-slate-400">Pre-selected in the lineup builder (can be changed before posting).</p>
-              <select
-                [ngModel]="defaultLineupChannelId()"
-                (ngModelChange)="defaultLineupChannelId.set($event)"
-                name="defaultLineupChannelId"
-                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
-              >
-                <option value="">None (prompt every time)</option>
-                @for (ch of channels(); track ch.id) {
-                  <option [value]="ch.id"># {{ ch.name }}</option>
-                }
-              </select>
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Channel</label>
+                <select
+                  [ngModel]="defaultLineupChannelId()"
+                  (ngModelChange)="defaultLineupChannelId.set($event)"
+                  name="defaultLineupChannelId"
+                  class="w-full bg-[#11192e] border border-slate-700 hover:border-slate-600 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition cursor-pointer"
+                >
+                  <option value="">None (Prompt every time)</option>
+                  @for (ch of channels(); track ch.id) {
+                    <option [value]="ch.id"># {{ ch.name }}</option>
+                  }
+                </select>
+              </div>
             </div>
 
             <!-- Default Transfers Channel -->
-            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
-              <div class="flex items-center gap-2 text-xs font-bold text-white">
-                <span class="text-[#EAE905]">🔄</span>
-                <span>Default Transfers Channel</span>
+            <div class="p-4.5 rounded-xl bg-[#141d33] border border-slate-700/70 hover:border-slate-600 transition flex flex-col justify-between space-y-3 shadow-sm">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-sm shrink-0">
+                      🔄
+                    </div>
+                    <span class="text-xs font-bold text-white">Transfers Channel</span>
+                  </div>
+                  @if (defaultTransfersChannelId()) {
+                    <span class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Active
+                    </span>
+                  } @else {
+                    <span class="text-[10px] text-slate-400 bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded-full">
+                      Disabled
+                    </span>
+                  }
+                </div>
+                <p class="text-[11px] text-slate-400 leading-tight">Destination for automated VPG transfer cards with player details and fees.</p>
               </div>
-              <p class="text-[11px] text-slate-400">Channel where automated league transfers are published.</p>
-              <select
-                [ngModel]="defaultTransfersChannelId()"
-                (ngModelChange)="defaultTransfersChannelId.set($event)"
-                name="defaultTransfersChannelId"
-                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
-              >
-                <option value="">None (disabled)</option>
-                @for (ch of channels(); track ch.id) {
-                  <option [value]="ch.id"># {{ ch.name }}</option>
-                }
-              </select>
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Channel</label>
+                <select
+                  [ngModel]="defaultTransfersChannelId()"
+                  (ngModelChange)="defaultTransfersChannelId.set($event)"
+                  name="defaultTransfersChannelId"
+                  class="w-full bg-[#11192e] border border-slate-700 hover:border-slate-600 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400 transition cursor-pointer"
+                >
+                  <option value="">None (Disabled)</option>
+                  @for (ch of channels(); track ch.id) {
+                    <option [value]="ch.id"># {{ ch.name }}</option>
+                  }
+                </select>
+              </div>
             </div>
 
             <!-- Default Fixtures Channel -->
-            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
-              <div class="flex items-center gap-2 text-xs font-bold text-white">
-                <span class="text-[#EAE905]">📅</span>
-                <span>Default Fixtures Channel</span>
+            <div class="p-4.5 rounded-xl bg-[#141d33] border border-slate-700/70 hover:border-slate-600 transition flex flex-col justify-between space-y-3 shadow-sm">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-sm shrink-0">
+                      📅
+                    </div>
+                    <span class="text-xs font-bold text-white">Fixtures Channel</span>
+                  </div>
+                  @if (defaultFixturesChannelId()) {
+                    <span class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Active
+                    </span>
+                  } @else {
+                    <span class="text-[10px] text-slate-400 bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded-full">
+                      Disabled
+                    </span>
+                  }
+                </div>
+                <p class="text-[11px] text-slate-400 leading-tight">Channel where upcoming league match schedules and kickoffs are published.</p>
               </div>
-              <p class="text-[11px] text-slate-400">Channel where upcoming league match schedules are published.</p>
-              <select
-                [ngModel]="defaultFixturesChannelId()"
-                (ngModelChange)="defaultFixturesChannelId.set($event)"
-                name="defaultFixturesChannelId"
-                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
-              >
-                <option value="">None (disabled)</option>
-                @for (ch of channels(); track ch.id) {
-                  <option [value]="ch.id"># {{ ch.name }}</option>
-                }
-              </select>
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Channel</label>
+                <select
+                  [ngModel]="defaultFixturesChannelId()"
+                  (ngModelChange)="defaultFixturesChannelId.set($event)"
+                  name="defaultFixturesChannelId"
+                  class="w-full bg-[#11192e] border border-slate-700 hover:border-slate-600 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-400 transition cursor-pointer"
+                >
+                  <option value="">None (Disabled)</option>
+                  @for (ch of channels(); track ch.id) {
+                    <option [value]="ch.id"># {{ ch.name }}</option>
+                  }
+                </select>
+              </div>
             </div>
 
             <!-- Default Standings Channel -->
-            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
-              <div class="flex items-center gap-2 text-xs font-bold text-white">
-                <span class="text-[#EAE905]">🏆</span>
-                <span>Default Standings Channel</span>
+            <div class="p-4.5 rounded-xl bg-[#141d33] border border-slate-700/70 hover:border-slate-600 transition flex flex-col justify-between space-y-3 shadow-sm">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-center justify-center text-sm shrink-0">
+                      🏆
+                    </div>
+                    <span class="text-xs font-bold text-white">Standings Channel</span>
+                  </div>
+                  @if (defaultStandingsChannelId()) {
+                    <span class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Active
+                    </span>
+                  } @else {
+                    <span class="text-[10px] text-slate-400 bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded-full">
+                      Disabled
+                    </span>
+                  }
+                </div>
+                <p class="text-[11px] text-slate-400 leading-tight">Channel where official league table standings graphic cards are posted.</p>
               </div>
-              <p class="text-[11px] text-slate-400">Channel where official league table & standings updates are posted.</p>
-              <select
-                [ngModel]="defaultStandingsChannelId()"
-                (ngModelChange)="defaultStandingsChannelId.set($event)"
-                name="defaultStandingsChannelId"
-                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
-              >
-                <option value="">None (disabled)</option>
-                @for (ch of channels(); track ch.id) {
-                  <option [value]="ch.id"># {{ ch.name }}</option>
-                }
-              </select>
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Channel</label>
+                <select
+                  [ngModel]="defaultStandingsChannelId()"
+                  (ngModelChange)="defaultStandingsChannelId.set($event)"
+                  name="defaultStandingsChannelId"
+                  class="w-full bg-[#11192e] border border-slate-700 hover:border-slate-600 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-yellow-400 transition cursor-pointer"
+                >
+                  <option value="">None (Disabled)</option>
+                  @for (ch of channels(); track ch.id) {
+                    <option [value]="ch.id"># {{ ch.name }}</option>
+                  }
+                </select>
+              </div>
             </div>
 
             <!-- Default Live Results Channel -->
-            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
-              <div class="flex items-center gap-2 text-xs font-bold text-white">
-                <span class="text-emerald-400">⚽</span>
-                <span>Default Live Results Channel</span>
+            <div class="p-4.5 rounded-xl bg-[#141d33] border border-slate-700/70 hover:border-slate-600 transition flex flex-col justify-between space-y-3 shadow-sm">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-teal-500/10 border border-teal-500/30 flex items-center justify-center text-sm shrink-0">
+                      ⚽
+                    </div>
+                    <span class="text-xs font-bold text-white">Live Results Channel</span>
+                  </div>
+                  @if (defaultLiveResultsChannelId()) {
+                    <span class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Active
+                    </span>
+                  } @else {
+                    <span class="text-[10px] text-slate-400 bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded-full">
+                      Disabled
+                    </span>
+                  }
+                </div>
+                <p class="text-[11px] text-slate-400 leading-tight">Channel where verified match cards are posted automatically after Pro Clubs games.</p>
               </div>
-              <p class="text-[11px] text-slate-400">Channel where completed match cards are posted automatically.</p>
-              <select
-                [ngModel]="defaultLiveResultsChannelId()"
-                (ngModelChange)="defaultLiveResultsChannelId.set($event)"
-                name="defaultLiveResultsChannelId"
-                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-400 transition"
-              >
-                <option value="">None (disabled)</option>
-                @for (ch of channels(); track ch.id) {
-                  <option [value]="ch.id"># {{ ch.name }}</option>
-                }
-              </select>
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Channel</label>
+                <select
+                  [ngModel]="defaultLiveResultsChannelId()"
+                  (ngModelChange)="defaultLiveResultsChannelId.set($event)"
+                  name="defaultLiveResultsChannelId"
+                  class="w-full bg-[#11192e] border border-slate-700 hover:border-slate-600 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-400 transition cursor-pointer"
+                >
+                  <option value="">None (Disabled)</option>
+                  @for (ch of channels(); track ch.id) {
+                    <option [value]="ch.id"># {{ ch.name }}</option>
+                  }
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -278,65 +368,119 @@ const TIMEZONES = [
             <p class="text-[11px] text-slate-400 mt-1">Identifies RYVL Esports in VPG Superliga matches and team leaderboards.</p>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 pt-2">
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
             <!-- RYVL Results Channel -->
-            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
-              <div class="flex items-center gap-2 text-xs font-bold text-white">
-                <span class="text-emerald-400">🏆</span>
-                <span>RYVL Results Channel</span>
+            <div class="p-4.5 rounded-xl bg-[#141d33] border border-slate-700/70 hover:border-slate-600 transition flex flex-col justify-between space-y-3 shadow-sm">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-sm shrink-0">
+                      🏆
+                    </div>
+                    <span class="text-xs font-bold text-white">RYVL Results</span>
+                  </div>
+                  @if (defaultRyvlResultsChannelId()) {
+                    <span class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Active
+                    </span>
+                  } @else {
+                    <span class="text-[10px] text-slate-400 bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded-full">
+                      Disabled
+                    </span>
+                  }
+                </div>
+                <p class="text-[11px] text-slate-400 leading-tight">Target channel for #ryvl-results (exclusive to RYVL matches).</p>
               </div>
-              <p class="text-[11px] text-slate-400">Target channel for #ryvl-results (RYVL matches only).</p>
-              <select
-                [ngModel]="defaultRyvlResultsChannelId()"
-                (ngModelChange)="defaultRyvlResultsChannelId.set($event)"
-                name="defaultRyvlResultsChannelId"
-                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
-              >
-                <option value="">None (disabled)</option>
-                @for (ch of channels(); track ch.id) {
-                  <option [value]="ch.id"># {{ ch.name }}</option>
-                }
-              </select>
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Channel</label>
+                <select
+                  [ngModel]="defaultRyvlResultsChannelId()"
+                  (ngModelChange)="defaultRyvlResultsChannelId.set($event)"
+                  name="defaultRyvlResultsChannelId"
+                  class="w-full bg-[#11192e] border border-slate-700 hover:border-slate-600 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition cursor-pointer"
+                >
+                  <option value="">None (Disabled)</option>
+                  @for (ch of channels(); track ch.id) {
+                    <option [value]="ch.id"># {{ ch.name }}</option>
+                  }
+                </select>
+              </div>
             </div>
 
             <!-- RYVL Fixtures Channel -->
-            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
-              <div class="flex items-center gap-2 text-xs font-bold text-white">
-                <span class="text-[#EAE905]">📅</span>
-                <span>RYVL Fixtures Channel</span>
+            <div class="p-4.5 rounded-xl bg-[#141d33] border border-slate-700/70 hover:border-slate-600 transition flex flex-col justify-between space-y-3 shadow-sm">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-sm shrink-0">
+                      📅
+                    </div>
+                    <span class="text-xs font-bold text-white">RYVL Fixtures</span>
+                  </div>
+                  @if (defaultRyvlFixturesChannelId()) {
+                    <span class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Active
+                    </span>
+                  } @else {
+                    <span class="text-[10px] text-slate-400 bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded-full">
+                      Disabled
+                    </span>
+                  }
+                </div>
+                <p class="text-[11px] text-slate-400 leading-tight">Target channel for #ryvl-fixtures (upcoming RYVL games schedule).</p>
               </div>
-              <p class="text-[11px] text-slate-400">Target channel for #ryvl-fixtures (upcoming games).</p>
-              <select
-                [ngModel]="defaultRyvlFixturesChannelId()"
-                (ngModelChange)="defaultRyvlFixturesChannelId.set($event)"
-                name="defaultRyvlFixturesChannelId"
-                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
-              >
-                <option value="">None (disabled)</option>
-                @for (ch of channels(); track ch.id) {
-                  <option [value]="ch.id"># {{ ch.name }}</option>
-                }
-              </select>
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Channel</label>
+                <select
+                  [ngModel]="defaultRyvlFixturesChannelId()"
+                  (ngModelChange)="defaultRyvlFixturesChannelId.set($event)"
+                  name="defaultRyvlFixturesChannelId"
+                  class="w-full bg-[#11192e] border border-slate-700 hover:border-slate-600 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition cursor-pointer"
+                >
+                  <option value="">None (Disabled)</option>
+                  @for (ch of channels(); track ch.id) {
+                    <option [value]="ch.id"># {{ ch.name }}</option>
+                  }
+                </select>
+              </div>
             </div>
 
             <!-- RYVL Leaderboards Channel -->
-            <div class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
-              <div class="flex items-center gap-2 text-xs font-bold text-white">
-                <span class="text-blue-400">📊</span>
-                <span>RYVL Leaderboards Channel</span>
+            <div class="p-4.5 rounded-xl bg-[#141d33] border border-slate-700/70 hover:border-slate-600 transition flex flex-col justify-between space-y-3 shadow-sm">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-2">
+                  <div class="flex items-center gap-2">
+                    <div class="w-7 h-7 rounded-lg bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-sm shrink-0">
+                      📊
+                    </div>
+                    <span class="text-xs font-bold text-white">RYVL Leaderboards</span>
+                  </div>
+                  @if (defaultRyvlLeaderboardChannelId()) {
+                    <span class="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Active
+                    </span>
+                  } @else {
+                    <span class="text-[10px] text-slate-400 bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded-full">
+                      Disabled
+                    </span>
+                  }
+                </div>
+                <p class="text-[11px] text-slate-400 leading-tight">Target channel for #ryvl-leaderboards and team performance summaries.</p>
               </div>
-              <p class="text-[11px] text-slate-400">Target channel for #ryvl-leaderboards and performance.</p>
-              <select
-                [ngModel]="defaultRyvlLeaderboardChannelId()"
-                (ngModelChange)="defaultRyvlLeaderboardChannelId.set($event)"
-                name="defaultRyvlLeaderboardChannelId"
-                class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
-              >
-                <option value="">None (disabled)</option>
-                @for (ch of channels(); track ch.id) {
-                  <option [value]="ch.id"># {{ ch.name }}</option>
-                }
-              </select>
+              <div>
+                <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">Target Channel</label>
+                <select
+                  [ngModel]="defaultRyvlLeaderboardChannelId()"
+                  (ngModelChange)="defaultRyvlLeaderboardChannelId.set($event)"
+                  name="defaultRyvlLeaderboardChannelId"
+                  class="w-full bg-[#11192e] border border-slate-700 hover:border-slate-600 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition cursor-pointer"
+                >
+                  <option value="">None (Disabled)</option>
+                  @for (ch of channels(); track ch.id) {
+                    <option [value]="ch.id"># {{ ch.name }}</option>
+                  }
+                </select>
+              </div>
             </div>
           </div>
         </div>

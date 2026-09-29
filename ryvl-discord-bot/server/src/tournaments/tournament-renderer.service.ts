@@ -53,7 +53,7 @@ export class TournamentRendererService {
    * - Bold numbered list 1 to 11 with Player Names & Positions
    * - Bottom Division Banner ("THE ROAD TO DIVISION 1" / Tournament Banner)
    */
-  renderRosterSvg(team: TournamentTeamRoster, tournamentName = 'FC DRAFT RO'): string {
+  renderRosterSvg(team: TournamentTeamRoster, tournamentName = 'FC DRAFT'): string {
     const W = 800;
     const H = 1050;
     const teamName = team.name.toUpperCase();
@@ -166,7 +166,7 @@ export class TournamentRendererService {
     `;
   }
 
-  async renderRosterPng(team: TournamentTeamRoster, tournamentName = 'FC DRAFT RO'): Promise<Buffer> {
+  async renderRosterPng(team: TournamentTeamRoster, tournamentName = 'FC DRAFT'): Promise<Buffer> {
     const svg = this.renderRosterSvg(team, tournamentName);
     return sharp(Buffer.from(svg))
       .png({ quality: 95, compressionLevel: 8 })
@@ -174,7 +174,7 @@ export class TournamentRendererService {
   }
 
   /**
-   * Renders Standings Table matching the FC Draft RO standard:
+   * Renders Standings Table matching the tournament standard:
    * # | TEAM | P | W | D | L | GF | GA | GD | PTS
    */
   renderStandingsSvg(tournamentName: string, rows: TournamentStandingsRow[]): string {

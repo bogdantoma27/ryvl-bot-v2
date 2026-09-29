@@ -460,7 +460,7 @@ import { TournamentInstance } from '../../core/models';
                 <input
                   type="text"
                   [(ngModel)]="newTournamentName"
-                  [placeholder]="newTournamentType === 'STANDARD' ? 'e.g. RYVL Champions League Ed. 1' : 'e.g. FC Draft RO - Cupa Romaniei Ed. 1'"
+                  [placeholder]="newTournamentType === 'STANDARD' ? 'e.g. RYVL Champions League Ed. 1' : 'e.g. Cupa României Draft Ed. 1'"
                   class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>

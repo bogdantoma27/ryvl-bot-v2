@@ -145,7 +145,7 @@ export class TournamentService {
 
     const defaultTeams: TournamentTeamRoster[] = Array.from({ length: 8 }, (_, i) => ({
       id: `team_${i + 1}`,
-      name: `FC 27 Draft RO ${i + 1}`,
+      name: `${data.name} Team ${i + 1}`,
       managerName: undefined,
       picks: [],
     }));
@@ -766,11 +766,13 @@ export class TournamentService {
     }
 
     const isFull = count >= 32;
+    const isClosed = tournament.status === 'SIGNUPS_CLOSED' || tournament.status === 'CLOSED';
+    const isDisabled = isFull || isClosed;
     const statusText = isFull ? 'REGISTRATION_CLOSED (FULL)' : tournament.status;
 
     const embed = new EmbedBuilder()
       .setTitle(`📋 Registration Portal — ${tournament.name}`)
-      .setColor(isFull ? 0xed4245 : 0x00d26a)
+      .setColor(isDisabled ? 0xed4245 : 0x00d26a)
       .setDescription(
         `⭐ **Registration Status**: \`${statusText}\`\n\n` +
         `**Registered Participants / Teams** (${count} Registered):\n${participantsList}\n\n` +
@@ -779,17 +781,19 @@ export class TournamentService {
         `• Bracket Sizing: **Auto-scales to 8, 16, or 32 teams**\n` +
         (isFull
           ? `🚫 **Registration is now full (32 teams reached)!**`
-          : `• Click **Sign Up** below to register your team or gamertag.`),
+          : (isClosed
+            ? `🔒 **Signups are currently closed by administration.**`
+            : `• Click **Sign Up** below to register your team or gamertag.`)),
       )
       .setFooter({ text: 'RYVL Esports Bot • Tournament Registration' });
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
         .setCustomId(`tourney:signup:${tournament.id}`)
-        .setLabel(isFull ? 'Registration Full' : 'Sign Up')
-        .setStyle(isFull ? ButtonStyle.Secondary : ButtonStyle.Success)
+        .setLabel(isClosed ? 'Signups Closed' : (isFull ? 'Registration Full' : 'Sign Up'))
+        .setStyle(isDisabled ? ButtonStyle.Secondary : ButtonStyle.Success)
         .setEmoji('⬆')
-        .setDisabled(isFull),
+        .setDisabled(isDisabled),
       new ButtonBuilder()
         .setCustomId(`tourney:pullout:${tournament.id}`)
         .setLabel('Pull Out')
@@ -835,7 +839,7 @@ export class TournamentService {
       : '🎰 *Wheel is ready. Captain: Click **Spin Wheel** to select a position.*';
 
     const embed = new EmbedBuilder()
-      .setTitle(`🎡 FC Draft RO — Interactive Draft Wheel`)
+      .setTitle(`🎡 ${tournament.name} — Interactive Draft Wheel`)
       .setColor(draft.complete ? 0x5865f2 : 0xf1c40f)
       .setDescription(
         draft.complete
@@ -980,12 +984,78 @@ export class TournamentService {
         .setStyle(ButtonStyle.Secondary)
         .setEmoji('⚡'),
       new ButtonBuilder()
+        .setCustomId('tourney:admin:start_draft')
+        .setLabel('Start Draft Phase')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('🎡'),
+      new ButtonBuilder()
         .setCustomId('tourney:admin:refresh')
-        .setLabel('Refresh')
+        .setLabel('Refresh Embeds')
         .setStyle(ButtonStyle.Secondary)
         .setEmoji('🔄'),
     );
 
     return this.discordService.sendMessageToChannel(channelId, embed, [row1, row2]);
+  }
+
+  async updateTournamentStatus(tournamentId: string, status: string) {
+    const tournament = await this.prisma.tournamentInstance.update({
+      where: { id: tournamentId },
+      data: { status },
+    });
+    const channels = (tournament.discordChannels as any) || {};
+    if (channels.registration) {
+      await this.postRegistrationEmbed(channels.registration, tournament);
+    }
+    if (status === 'DRAFTING' && channels.draft) {
+      await this.postDraftWheelEmbed(channels.draft, tournament);
+    }
+    return tournament;
+  }
+
+  async toggleSignups(tournamentId: string) {
+    const tournament = await this.getTournament(tournamentId);
+    const newStatus = tournament.status === 'SIGNUPS_OPEN' ? 'SIGNUPS_CLOSED' : 'SIGNUPS_OPEN';
+    return this.updateTournamentStatus(tournamentId, newStatus);
+  }
+
+  async broadcastNotification(tournamentId: string, title: string, message: string, authorTag?: string) {
+    const tournament = await this.getTournament(tournamentId);
+    const channels = (tournament.discordChannels as any) || {};
+    const channelId = channels.announcements || channels.registration;
+    if (!channelId) {
+      throw new BadRequestException('No announcement or registration channel configured for tournament.');
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`📢 ${title}`)
+      .setColor(0x5865f2)
+      .setDescription(message)
+      .setFooter({
+        text: authorTag
+          ? `Announced by ${authorTag} • ${tournament.name}`
+          : `Tournament Announcement • ${tournament.name}`,
+      })
+      .setTimestamp();
+
+    return this.discordService.sendMessageToChannel(channelId, embed);
+  }
+
+  async refreshTournamentEmbeds(tournamentId: string) {
+    const tournament = await this.getTournament(tournamentId);
+    const channels = (tournament.discordChannels as any) || {};
+    if (channels.info) {
+      await this.postInfoEmbed(channels.info, tournament);
+    }
+    if (channels.registration) {
+      await this.postRegistrationEmbed(channels.registration, tournament);
+    }
+    if (channels.draft && tournament.type === 'DRAFT') {
+      await this.postDraftWheelEmbed(channels.draft, tournament);
+    }
+    if (channels.fixtures) {
+      await this.postResultsEmbed(channels.fixtures, tournament);
+    }
+    return tournament;
   }
 }

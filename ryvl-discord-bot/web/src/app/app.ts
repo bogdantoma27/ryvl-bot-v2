@@ -125,7 +125,7 @@ import { User } from './core/models';
                   <div class="flex items-center justify-between text-[10px] text-slate-400 mt-1">
                     <span>1 server connected</span>
                     <a
-                      href="https://discord.com/oauth2/authorize?client_id=1418898129035235328&permissions=8&scope=bot%20applications.commands"
+                      href="https://discord.com/oauth2/authorize?client_id=1503459239610290318&permissions=8&scope=bot%20applications.commands"
                       target="_blank"
                       rel="noopener noreferrer"
                       class="text-indigo-400 hover:text-indigo-300 font-medium cursor-pointer"
@@ -288,29 +288,28 @@ import { User } from './core/models';
                     <span class="text-sm">⚡</span>
                     <span>RYVL Performance</span>
                   </a>
+
+                  @if (isBotSubdomain()) {
+                    <a
+                      href="https://ryvl.top"
+                      (click)="closeMobileSidebar()"
+                      class="flex items-center gap-3 px-3 py-2 rounded-xl font-semibold text-[#EAE905] hover:text-white hover:bg-[#1f2e54] transition cursor-pointer"
+                    >
+                      <span class="text-sm">🌐</span>
+                      <span>Public RYVL Site</span>
+                    </a>
+                  } @else {
+                    <a
+                      routerLink="/"
+                      (click)="closeMobileSidebar()"
+                      class="flex items-center gap-3 px-3 py-2 rounded-xl font-semibold text-[#EAE905] hover:text-white hover:bg-[#1f2e54] transition cursor-pointer"
+                    >
+                      <span class="text-sm">🌐</span>
+                      <span>Public RYVL Site</span>
+                    </a>
+                  }
                 </div>
               }
-
-              <!-- Return to Public Site Link -->
-              <div class="pt-3 border-t border-slate-800">
-                @if (isBotSubdomain()) {
-                  <a
-                    href="https://ryvl.top"
-                    class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-[#EAE905] bg-[#EAE905]/10 border border-[#EAE905]/30 hover:bg-[#EAE905]/20 transition cursor-pointer"
-                  >
-                    <span>🌐</span>
-                    <span>Public RYVL Site</span>
-                  </a>
-                } @else {
-                  <a
-                    routerLink="/"
-                    class="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-[#EAE905] bg-[#EAE905]/10 border border-[#EAE905]/30 hover:bg-[#EAE905]/20 transition cursor-pointer"
-                  >
-                    <span>🌐</span>
-                    <span>Public RYVL Site</span>
-                  </a>
-                }
-              </div>
             </nav>
 
             <!-- Bottom Section: User Avatar, Name, Logout -->

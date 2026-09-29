@@ -90,7 +90,9 @@ export class TotwController {
   ) {
     const data = await this.totwService.generateTotw(leagueSlug, isTots === 'true');
     res.setHeader('Content-Type', 'image/png');
-    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     return res.send(data.imageBuffer);
   }
 

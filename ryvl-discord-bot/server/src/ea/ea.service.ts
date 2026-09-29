@@ -594,10 +594,36 @@ export class EaService {
   // ----------------------------------------------------
 
   async getTrackedClubs(guildId: string) {
-    return this.prisma.trackedClub.findMany({
+    let clubs = await this.prisma.trackedClub.findMany({
       where: { guildId },
       orderBy: { createdAt: 'asc' },
     });
+
+    if (clubs.length === 0) {
+      try {
+        const config = await this.getOrCreateTrackerConfig(guildId);
+        const primaryClub = await this.prisma.trackedClub.upsert({
+          where: {
+            guildId_clubId: { guildId, clubId: config.clubId || '128199' },
+          },
+          update: {},
+          create: {
+            guildId,
+            clubId: config.clubId || '128199',
+            clubName: config.clubName || 'RYVL Esports',
+            channelId: config.channelId || null,
+            platform: config.platform || 'common-gen5',
+            enabled: config.enabled ?? true,
+            elo: 1200,
+          },
+        });
+        clubs = [primaryClub];
+      } catch (err: any) {
+        this.logger.warn(`Could not seed default tracked club for guild ${guildId}: ${err.message}`);
+      }
+    }
+
+    return clubs;
   }
 
   async addTrackedClub(

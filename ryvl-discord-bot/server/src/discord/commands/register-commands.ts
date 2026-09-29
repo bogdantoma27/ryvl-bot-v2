@@ -232,7 +232,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
 
   const tournamentCommand = new SlashCommandBuilder()
     .setName('tournament')
-    .setDescription('FC Draft RO tournament management and setup')
+    .setDescription('Tournament management and Discord-native administration')
     .addSubcommand((sub) =>
       sub
         .setName('setup-admin')
@@ -257,6 +257,45 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
               { name: '3-5-2', value: '3-5-2' },
               { name: '3-1-4-2', value: '3-1-4-2' },
             ),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('set-status')
+        .setDescription('Set tournament lifecycle status / phase')
+        .addStringOption((opt) =>
+          opt
+            .setName('status')
+            .setDescription('Status to apply')
+            .setRequired(true)
+            .addChoices(
+              { name: 'Signups Open', value: 'SIGNUPS_OPEN' },
+              { name: 'Signups Closed', value: 'SIGNUPS_CLOSED' },
+              { name: 'Drafting Phase', value: 'DRAFTING' },
+              { name: 'Active Matches', value: 'ACTIVE' },
+              { name: 'Completed', value: 'COMPLETED' },
+            ),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('toggle-signups')
+        .setDescription('Toggle tournament registrations open or closed'),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('start-draft')
+        .setDescription('Start the draft phase and post the draft wheel in the draft channel'),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('notify')
+        .setDescription('Broadcast an announcement to the tournament announcements channel')
+        .addStringOption((opt) =>
+          opt.setName('title').setDescription('Announcement Title').setRequired(true),
+        )
+        .addStringOption((opt) =>
+          opt.setName('message').setDescription('Announcement Message').setRequired(true),
         ),
     )
     .addSubcommand((sub) =>

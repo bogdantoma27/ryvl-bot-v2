@@ -848,7 +848,7 @@ export class ApiService {
   }
 
   // ----------------------------------------------------
-  // FC Draft RO Tournaments
+  // Tournaments
   // ----------------------------------------------------
 
   getTournaments(guildId: string): Promise<TournamentInstance[]> {

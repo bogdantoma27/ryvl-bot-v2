@@ -193,39 +193,43 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
       <div class="flex items-center gap-2 border-b border-slate-800 pb-2 flex-wrap">
         <button
           type="button"
+          (click)="onSelectTab('clubs')"
+          class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
+          [ngClass]="activeTab() === 'clubs' ? 'bg-[#00d26a] text-black shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'"
+        >
+          <span>🛡️</span>
+          <span>Tracked Clubs ({{ trackedClubs().length }})</span>
+        </button>
+
+        <button
+          type="button"
           (click)="activeTab.set('matches')"
-          class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
+          class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
           [ngClass]="activeTab() === 'matches' ? 'bg-[#00d26a] text-black shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'"
         >
-          Recent Matches ({{ matches().length }})
+          <span>⚽</span>
+          <span>Recent Matches ({{ matches().length }})</span>
         </button>
 
         <button
           type="button"
           (click)="activeTab.set('roster')"
-          class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
+          class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
           [ngClass]="activeTab() === 'roster' ? 'bg-[#00d26a] text-black shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'"
         >
-          Squad & Member Stats ({{ members().length }})
+          <span>👥</span>
+          <span>Squad & Member Stats ({{ members().length }})</span>
         </button>
 
         @if (isAdmin()) {
           <button
             type="button"
             (click)="onSelectTab('players')"
-            class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
+            class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5"
             [ngClass]="activeTab() === 'players' ? 'bg-[#00d26a] text-black shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'"
           >
-            Registered Players ({{ registeredPlayers().length }})
-          </button>
-
-          <button
-            type="button"
-            (click)="activeTab.set('clubs')"
-            class="px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer"
-            [ngClass]="activeTab() === 'clubs' ? 'bg-[#00d26a] text-black shadow-md shadow-emerald-500/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'"
-          >
-            Tracked Clubs ({{ trackedClubs().length }})
+            <span>🎮</span>
+            <span>Registered Players ({{ registeredPlayers().length }})</span>
           </button>
         }
       </div>
@@ -672,7 +676,7 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
 
 
       <!-- Tab: Multi-Club EA Tracker -->
-      @if (isAdmin() && activeTab() === 'clubs') {
+      @if (activeTab() === 'clubs') {
         <div class="space-y-6">
           <!-- Overview Card -->
           <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
@@ -755,21 +759,44 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
                             {{ tc.enabled ? '● Active' : '○ Paused' }}
                           </button>
                         </td>
-                        <td class="py-3 px-4 text-right space-x-2">
-                          <button
-                            type="button"
-                            (click)="switchActiveClub(tc)"
-                            class="text-xs font-bold text-emerald-400 hover:text-emerald-300 cursor-pointer"
-                          >
-                            View Stats
-                          </button>
-                          <button
-                            type="button"
-                            (click)="onDeleteTrackedClub(tc.clubId)"
-                            class="text-xs font-bold text-rose-400 hover:text-rose-300 cursor-pointer ml-2"
-                          >
-                            Delete
-                          </button>
+                        <td class="py-3 px-4 text-right">
+                          <div class="flex items-center justify-end gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              (click)="switchActiveClubTo(tc, 'matches')"
+                              class="px-2 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[11px] font-bold border border-emerald-500/30 transition cursor-pointer"
+                              title="View recent match scorecard & timeline"
+                            >
+                              ⚽ Matches
+                            </button>
+                            <button
+                              type="button"
+                              (click)="switchActiveClubTo(tc, 'roster')"
+                              class="px-2 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 text-[11px] font-bold border border-indigo-500/30 transition cursor-pointer"
+                              title="View player squad roster & stats"
+                            >
+                              👥 Squad
+                            </button>
+                            <button
+                              type="button"
+                              (click)="switchActiveClubTo(tc, 'players')"
+                              class="px-2 py-1 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 text-[11px] font-bold border border-purple-500/30 transition cursor-pointer"
+                              title="View linked Discord registrations"
+                            >
+                              🎮 Players
+                            </button>
+                            @if (isAdmin()) {
+                              <button
+                                type="button"
+                                (click)="onDeleteTrackedClub(tc.clubId)"
+                                [disabled]="trackedClubs().length <= 1"
+                                class="p-1 rounded-lg text-slate-500 hover:text-rose-400 transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ml-1"
+                                title="Remove tracked club"
+                              >
+                                ✕
+                              </button>
+                            }
+                          </div>
                         </td>
                       </tr>
                     }
@@ -780,7 +807,8 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
           </div>
 
           <!-- Add Club to Tracker Card -->
-          <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
+          @if (isAdmin()) {
+            <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
             <div class="border-b border-slate-800 pb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 class="text-sm font-bold text-white flex items-center gap-2">
@@ -981,7 +1009,8 @@ import { RegisteredDiscordPlayer, PlayerRegistrationAudit } from '../../core/mod
                 </div>
               </div>
             }
-          </div>
+            </div>
+          }
         </div>
       }
 
@@ -1061,7 +1090,7 @@ export class EaTrackerComponent implements OnInit {
     'https://media.contentapi.ea.com/content/dam/ea/fc/common/global/tertiary-logo.svg';
 
   // State
-  readonly activeTab = signal<'matches' | 'roster' | 'players' | 'clubs'>('matches');
+  readonly activeTab = signal<'clubs' | 'matches' | 'roster' | 'players'>('clubs');
   readonly config = signal<any>(null);
   readonly clubInfo = signal<any>(null);
   readonly overallStats = signal<any>(null);
@@ -1201,14 +1230,20 @@ export class EaTrackerComponent implements OnInit {
       const tab = params.get('tab');
       if (tab === 'players') {
         this.activeTab.set('players');
+      } else if (tab === 'matches') {
+        this.activeTab.set('matches');
+      } else if (tab === 'roster') {
+        this.activeTab.set('roster');
+      } else if (tab === 'clubs') {
+        this.activeTab.set('clubs');
       }
       this.loadAllData(gId);
     });
   }
 
   async loadAllData(guildId: string): Promise<void> {
-    if (!this.isAdmin() && (this.activeTab() === 'clubs' || this.activeTab() === 'players')) {
-      this.activeTab.set('matches');
+    if (!this.isAdmin() && this.activeTab() === 'players') {
+      this.activeTab.set('clubs');
     }
 
     try {
@@ -1223,10 +1258,12 @@ export class EaTrackerComponent implements OnInit {
       // Load members
       this.loadMembers(guildId);
 
-      // Load registered players and tracked clubs for admins
-      if (this.isAdmin() && guildId !== 'default') {
-        this.loadRegisteredPlayers(guildId);
+      // Always load tracked clubs for the guild
+      if (guildId !== 'default') {
         this.loadTrackedClubs(guildId);
+        if (this.isAdmin()) {
+          this.loadRegisteredPlayers(guildId);
+        }
       }
     } catch (err: any) {
       console.error('Error loading EA config:', err);
@@ -1585,15 +1622,27 @@ export class EaTrackerComponent implements OnInit {
   }
 
   async switchActiveClub(club: any): Promise<void> {
+    await this.switchActiveClubTo(club, 'matches');
+  }
+
+  async switchActiveClubTo(
+    club: any,
+    targetTab: 'clubs' | 'matches' | 'roster' | 'players' = 'matches',
+  ): Promise<void> {
     const guildId = this.guildStore.activeGuildId();
     if (!guildId) return;
 
     try {
-      await this.selectClub({
-        clubId: club.clubId,
-        name: club.clubName || club.name,
-      });
-      this.activeTab.set('matches');
+      if (String(club.clubId) !== String(this.clubId())) {
+        await this.selectClub({
+          clubId: club.clubId,
+          name: club.clubName || club.name,
+        });
+      }
+      this.activeTab.set(targetTab);
+      if (targetTab === 'players' && this.isAdmin()) {
+        await this.loadRegisteredPlayers(guildId);
+      }
     } catch (err: any) {
       this.showToast(`Failed to switch active club: ${err.message}`, 'error');
     }
