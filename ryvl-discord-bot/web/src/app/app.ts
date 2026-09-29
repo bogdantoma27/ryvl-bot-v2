@@ -527,8 +527,7 @@ export class App implements OnInit {
     const g = this.guildStore.activeGuild();
     if (!g) return false;
     const name = (g.name || '').toLowerCase();
-    const teamName = (g.ryvlTeamName || '').toLowerCase().trim();
-    return name.includes('ryvl') || teamName === 'ryvl' || teamName === 'ryvl esports';
+    return name.includes('ryvl');
   });
 
   async ngOnInit(): Promise<void> {

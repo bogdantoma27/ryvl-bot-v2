@@ -152,11 +152,23 @@ export class TotwService {
       st: [],
     };
 
+    const VPG_CDN = 'https://virtualprogaming.com/cdn-cgi/imagedelivery/cl8ocWLdmZDs72LEaQYaYw';
+
+    const buildAvatarUrl = (raw: any): string | undefined => {
+      const av = raw.user_avatar || raw.avatar_url || raw.avatar || raw.player_avatar || raw.photo;
+      if (!av) return undefined;
+      if (typeof av === 'string' && (av.startsWith('http://') || av.startsWith('https://'))) {
+        return av;
+      }
+      return `${VPG_CDN}/${av}/public`;
+    };
+
     const mapToPlayer = (raw: any): TotwPlayer => ({
       username: raw.username || raw.player_name || 'Player',
       display_name: raw.display_name || raw.username || raw.player_name,
       team_name: raw.team_name || raw.team || '',
       team_logo: raw.team_logo || null,
+      avatar_url: buildAvatarUrl(raw),
       rating: raw.rating || raw.avg_rating || null,
       goals: Number(raw.goals || 0),
       assists: Number(raw.assists || 0),

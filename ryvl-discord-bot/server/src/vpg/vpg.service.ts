@@ -358,10 +358,11 @@ export class VpgService {
       config = await this.prisma.vpgTransferConfig.create({
         data: {
           guildId,
-          communitySlug: this.COMMUNITY_SLUG,
-          leagueSlug: 'Superliga-Romania',
-          leagueName: 'Superliga România',
-          enabled: true,
+          communitySlug: '',
+          leagueSlug: '',
+          leagueName: '',
+          channelId: null,
+          enabled: false,
           pollIntervalSec: 120,
         },
       });
@@ -688,29 +689,29 @@ export class VpgService {
       }
     }
 
-    // Default 3 competition slots (Slot 1 active, Slot 2 & 3 ready for easy configuration)
+    // Default 3 competition slots (Unassigned until configured by admin)
     return [
       {
         id: 'slot-1',
-        name: 'VPG Superliga Romania',
-        slug: 'Superliga-Romania',
-        communitySlug: 'VPGRoPS5',
-        active: true,
+        name: 'Slot 1 (Unassigned)',
+        slug: '',
+        communitySlug: '',
+        active: false,
         displayOrder: 1,
       },
       {
         id: 'slot-2',
-        name: 'VPG Competition 2',
-        slug: 'vpg-competition-2',
-        communitySlug: 'VPGRoPS5',
+        name: 'Slot 2 (Unassigned)',
+        slug: '',
+        communitySlug: '',
         active: false,
         displayOrder: 2,
       },
       {
         id: 'slot-3',
-        name: 'VPG Competition 3',
-        slug: 'vpg-competition-3',
-        communitySlug: 'VPGRoPS5',
+        name: 'Slot 3 (Unassigned)',
+        slug: '',
+        communitySlug: '',
         active: false,
         displayOrder: 3,
       },

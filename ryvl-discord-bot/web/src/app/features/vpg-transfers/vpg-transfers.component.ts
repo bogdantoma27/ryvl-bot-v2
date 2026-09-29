@@ -60,11 +60,13 @@ interface VpgTransfer {
             <div>
               <div class="flex items-center gap-3 flex-wrap">
                 <h1 class="text-2xl font-black text-white tracking-tight">
-                  {{ config()?.leagueName || 'VPG Superliga România' }}
+                  {{ config()?.leagueName || (selectedLeagueName ? selectedLeagueName : 'VPG Transfer Tracker') }}
                 </h1>
-                <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  {{ config()?.communitySlug || 'VPGRoPS5' }}
-                </span>
+                @if (config()?.communitySlug || selectedCommunitySlug) {
+                  <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wide uppercase bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    {{ config()?.communitySlug || selectedCommunitySlug }}
+                  </span>
+                }
                 @if (config()?.enabled) {
                   <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-900/60 text-emerald-300 border border-emerald-600 flex items-center gap-1.5">
                     <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
@@ -78,7 +80,7 @@ interface VpgTransfer {
               </div>
 
               <p class="text-xs text-slate-400 mt-1.5 flex items-center gap-2 flex-wrap">
-                <span>Real-time transfer updates, contracts, and player movements in {{ config()?.leagueName || 'VPG' }}.</span>
+                <span>Real-time transfer updates, contracts, and player movements in {{ config()?.leagueName || selectedLeagueName || 'VPG' }}.</span>
                 @if (channelName()) {
                   <span class="text-slate-500">•</span>
                   <span class="text-emerald-400 font-medium">Auto-posting to #{{ channelName() }}</span>
@@ -215,10 +217,27 @@ interface VpgTransfer {
         </div>
 
         <!-- Transfer Cards Grid -->
-        @if (isLoading()) {
+        @if (!config()?.leagueSlug) {
+          <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-12 text-center text-slate-400 space-y-4">
+            <div class="text-4xl">⚽</div>
+            <h3 class="text-lg font-bold text-white">No VPG League Configured</h3>
+            <p class="text-xs max-w-md mx-auto text-slate-400">
+              No league has been selected yet for this server. Switch to the <strong>Tracker Settings & Channel</strong> tab to search for your VPG competition and select a Discord channel.
+            </p>
+            @if (isAdmin()) {
+              <button
+                type="button"
+                (click)="activeTab.set('settings')"
+                class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition cursor-pointer"
+              >
+                ⚙️ Configure League & Channel
+              </button>
+            }
+          </div>
+        } @else if (isLoading()) {
           <div class="py-16 text-center text-slate-400 space-y-3">
             <div class="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-            <p class="text-xs">Fetching latest VPG Superliga transfers...</p>
+            <p class="text-xs">Fetching latest transfers for {{ config()?.leagueName || 'selected league' }}...</p>
           </div>
         } @else if (filteredTransfers().length === 0) {
           <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-12 text-center text-slate-400 space-y-3">
@@ -383,32 +402,35 @@ interface VpgTransfer {
               }
             </div>
 
-            <!-- Discord Announcement Channel Status & Link to Central Settings -->
-            <div class="p-4 bg-[#11192e] rounded-xl border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
+            <!-- Discord Announcement Channel -->
+            <div class="space-y-2 p-4 bg-[#11192e] rounded-xl border border-slate-800">
+              <div class="flex items-center justify-between">
                 <div class="text-xs font-bold text-white flex items-center gap-2">
                   <span>📢</span>
                   <span>Discord Announcement Channel</span>
                 </div>
-                <div class="text-xs text-slate-300 mt-1">
-                  @if (channelName()) {
-                    Currently publishing transfer cards to <span class="font-bold text-emerald-400">#{{ channelName() }}</span>
-                  } @else {
-                    <span class="text-amber-400 font-medium">⚠️ No announcement channel configured</span>
-                  }
-                </div>
-                <p class="text-[11px] text-slate-500 mt-0.5">
-                  Default announcement channels are configured centrally in Guild Settings.
-                </p>
+                @if (selectedChannelId) {
+                  <span class="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Active
+                  </span>
+                } @else {
+                  <span class="text-[10px] text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full">
+                    Disabled
+                  </span>
+                }
               </div>
-
-              <a
-                routerLink="/admin/settings"
-                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-indigo-300 hover:text-white border border-slate-700 transition cursor-pointer shrink-0"
+              <p class="text-[11px] text-slate-400">
+                Target text channel where new player signings and departures will be posted automatically.
+              </p>
+              <select
+                [(ngModel)]="selectedChannelId"
+                class="w-full bg-[#0d1424] border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 transition cursor-pointer"
               >
-                <span>⚙️ Manage in Settings</span>
-                <span>→</span>
-              </a>
+                <option value="">None (Disabled)</option>
+                @for (ch of availableChannels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
             </div>
 
             <!-- Auto-Posting Toggle -->
@@ -508,11 +530,11 @@ export class VpgTransfersComponent implements OnInit {
 
   // Settings form model
   selectedChannelId = '';
-  isAutoPostingEnabled = true;
+  isAutoPostingEnabled = false;
   pollIntervalSec = 120;
-  selectedCommunitySlug = 'VPGRoPS5';
-  selectedLeagueSlug = 'Superliga-Romania';
-  selectedLeagueName = 'Superliga România';
+  selectedCommunitySlug = '';
+  selectedLeagueSlug = '';
+  selectedLeagueName = '';
 
   readonly leagueSearchQuery = signal<string>('');
   readonly leagueSearchResults = signal<Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }>>([]);
@@ -525,7 +547,7 @@ export class VpgTransfersComponent implements OnInit {
   });
 
   readonly channelName = computed(() => {
-    const chId = this.config()?.channelId;
+    const chId = this.selectedChannelId || this.config()?.channelId;
     if (!chId) return null;
     const found = this.availableChannels().find((c: any) => c.id === chId);
     return found ? found.name : chId;
@@ -575,7 +597,7 @@ export class VpgTransfersComponent implements OnInit {
         t.username.toLowerCase().includes(q) ||
         t.fromName.toLowerCase().includes(q) ||
         t.toName.toLowerCase().includes(q) ||
-        (t.superligaClubs && t.superligaClubs.some((c) => c.toLowerCase().includes(q)));
+        (t.superligaClubs && t.superligaClubs.some((c) => c.toLowerCase().includes(c)));
 
       if (!matchesSearch) return false;
 
@@ -614,15 +636,12 @@ export class VpgTransfersComponent implements OnInit {
 
       if (configRes && configRes.config) {
         this.config.set(configRes.config);
-        this.selectedChannelId =
-          configRes.config.channelId ||
-          this.guildStore.activeGuild()?.defaultTransfersChannelId ||
-          '';
-        this.isAutoPostingEnabled = configRes.config.enabled ?? true;
+        this.selectedChannelId = configRes.config.channelId || '';
+        this.isAutoPostingEnabled = configRes.config.enabled ?? false;
         this.pollIntervalSec = configRes.config.pollIntervalSec || 120;
-        this.selectedCommunitySlug = configRes.config.communitySlug || 'VPGRoPS5';
-        this.selectedLeagueSlug = configRes.config.leagueSlug || 'Superliga-Romania';
-        this.selectedLeagueName = configRes.config.leagueName || 'Superliga România';
+        this.selectedCommunitySlug = configRes.config.communitySlug || '';
+        this.selectedLeagueSlug = configRes.config.leagueSlug || '';
+        this.selectedLeagueName = configRes.config.leagueName || '';
       }
 
       if (transfersRes && Array.isArray(transfersRes.transfers)) {
@@ -645,12 +664,12 @@ export class VpgTransfersComponent implements OnInit {
     this.isSaving.set(true);
     try {
       const res = await this.api.updateVpgConfig(activeGuildId, {
-        channelId: this.config()?.channelId || this.guildStore.activeGuild()?.defaultTransfersChannelId || undefined,
+        channelId: this.selectedChannelId || null,
         enabled: this.isAutoPostingEnabled,
         pollIntervalSec: Number(this.pollIntervalSec),
-        communitySlug: this.selectedCommunitySlug,
-        leagueSlug: this.selectedLeagueSlug,
-        leagueName: this.selectedLeagueName,
+        communitySlug: this.selectedCommunitySlug || undefined,
+        leagueSlug: this.selectedLeagueSlug || undefined,
+        leagueName: this.selectedLeagueName || undefined,
       });
 
       if (res && res.config) {

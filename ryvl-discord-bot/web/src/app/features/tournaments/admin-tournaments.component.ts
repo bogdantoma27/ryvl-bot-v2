@@ -173,7 +173,7 @@ import { TournamentInstance } from '../../core/models';
             <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4 md:col-span-2">
               <h3 class="text-sm font-bold text-white flex items-center gap-2">
                 <span>🤖</span>
-                <span>Provisioned Discord Channels</span>
+                <span>Provisioned Discord Category & Channels</span>
               </h3>
               @if (activeTournament()?.categoryId) {
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -448,9 +448,9 @@ import { TournamentInstance } from '../../core/models';
                 </select>
                 <p class="text-[10px] text-slate-400 mt-1">
                   @if (newTournamentType === 'STANDARD') {
-                    Creates automated Discord category with #info-rules, #announcements, #registration, #fixtures-results, #table-standings, and #tournament-chat.
+                    Creates a Discord category <code>🏆 [Name]</code> first, then nests inside it: #info-rules, #announcements, #registration, #fixtures-results, #table-standings, and #tournament-chat.
                   } @else {
-                    Creates automated Discord category with #draft-wheel for interactive Discord wheel spins, joker rules, and custom formations.
+                    Creates a Discord category <code>🏆 [Name]</code> first, then nests inside it: #draft-wheel for interactive Discord wheel spins, joker rules, and custom formations.
                   }
                 </p>
               </div>

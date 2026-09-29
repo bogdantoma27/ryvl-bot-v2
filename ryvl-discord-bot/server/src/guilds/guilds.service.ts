@@ -91,7 +91,7 @@ export class GuildsService {
     const defaultChannelId =
       guild.defaultChannelId && channels.some((c) => c.id === guild.defaultChannelId)
         ? guild.defaultChannelId
-        : channels[0]?.id || null;
+        : null;
 
     return {
       id: guild.id,

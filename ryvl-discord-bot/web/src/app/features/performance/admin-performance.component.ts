@@ -92,7 +92,7 @@ import {
               <span>Tracked VPG Competition Slots</span>
             </h2>
             <p class="text-xs text-slate-400 mt-0.5">
-              Specify the 3 VPG tournament slots for RYVL Esports. Slot 1 is active by default (Superliga România). Configure Slots 2 & 3 for upcoming tournaments.
+              Configure up to 3 VPG competition slots. Search the VPG API to assign any league to each slot. Leave unassigned slots blank — they won't appear on the public performance page.
             </p>
           </div>
           <div class="text-[11px] font-mono text-slate-400">
@@ -133,25 +133,43 @@ import {
                   />
                 </div>
 
-                <div class="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">VPG League Slug</label>
+
+                <!-- VPG League Search -->
+                <div class="relative">
+                  <label class="block text-[11px] font-semibold text-slate-400 mb-1">Search VPG League</label>
+                  <div class="flex gap-2">
                     <input
                       type="text"
-                      [(ngModel)]="comp.slug"
-                      placeholder="e.g. Superliga-Romania"
-                      class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-2.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#EAE905] transition"
+                      [ngModel]="getSlotSearch($index)"
+                      (ngModelChange)="setSlotSearch($index, $event)"
+                      (input)="onSearchLeagues($index)"
+                      [placeholder]="comp.name || 'Search a VPG league...'"
+                      class="flex-1 bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
                     />
+                    @if (comp.slug) {
+                      <span class="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400 shrink-0">
+                        ✓ Set
+                      </span>
+                    }
                   </div>
-                  <div>
-                    <label class="block text-[11px] font-semibold text-slate-400 mb-1">Community Slug</label>
-                    <input
-                      type="text"
-                      [(ngModel)]="comp.communitySlug"
-                      placeholder="VPGRoPS5"
-                      class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-2.5 py-2 text-xs font-mono text-white focus:outline-none focus:border-[#EAE905] transition"
-                    />
-                  </div>
+                  <!-- Search Results Dropdown -->
+                  @if (getSlotResults($index).length > 0) {
+                    <div class="absolute z-10 top-full mt-1 left-0 right-0 bg-[#1a1a2e] border border-slate-700 rounded-xl shadow-xl max-h-44 overflow-y-auto">
+                      @for (result of getSlotResults($index); track result.leagueSlug) {
+                        <button
+                          type="button"
+                          (click)="selectLeague($index, comp, result)"
+                          class="w-full px-3 py-2.5 text-left hover:bg-white/5 transition border-b border-slate-800 last:border-0"
+                        >
+                          <div class="text-xs font-semibold text-white">{{ result.leagueName }}</div>
+                          <div class="text-[10px] text-slate-400 font-mono">{{ result.communityName }} · {{ result.leagueSlug }}</div>
+                        </button>
+                      }
+                    </div>
+                  }
+                  @if (comp.slug) {
+                    <p class="text-[10px] text-slate-500 mt-1 font-mono">slug: {{ comp.slug }} · community: {{ comp.communitySlug }}</p>
+                  }
                 </div>
 
                 <div class="grid grid-cols-2 gap-2.5 items-center">
@@ -491,6 +509,54 @@ export class AdminPerformanceComponent implements OnInit {
   selectedResultsChannel = '';
   selectedFixturesChannel = '';
   selectedLeaderboardChannel = '';
+
+  // Per-slot VPG league search state
+  private readonly slotSearchQueries = new Map<number, string>();
+  private readonly slotSearchResultsMap = new Map<number, Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }>>();
+
+  getSlotSearch(idx: number): string {
+    return this.slotSearchQueries.get(idx) ?? '';
+  }
+
+  setSlotSearch(idx: number, val: string): void {
+    this.slotSearchQueries.set(idx, val);
+  }
+
+  getSlotResults(idx: number): Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }> {
+    return this.slotSearchResultsMap.get(idx) ?? [];
+  }
+
+  private searchDebounceTimers = new Map<number, ReturnType<typeof setTimeout>>();
+
+  onSearchLeagues(idx: number): void {
+    const existing = this.searchDebounceTimers.get(idx);
+    if (existing) clearTimeout(existing);
+    const timer = setTimeout(() => this.doSearch(idx), 350);
+    this.searchDebounceTimers.set(idx, timer);
+  }
+
+  private async doSearch(idx: number): Promise<void> {
+    const q = (this.slotSearchQueries.get(idx) ?? '').trim();
+    if (!q) {
+      this.slotSearchResultsMap.set(idx, []);
+      return;
+    }
+    try {
+      const res = await this.api.searchVpgLeagues(q);
+      this.slotSearchResultsMap.set(idx, res.leagues || []);
+    } catch {
+      this.slotSearchResultsMap.set(idx, []);
+    }
+  }
+
+  selectLeague(idx: number, comp: RyvlCompetition, result: { communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }): void {
+    comp.slug = result.leagueSlug;
+    comp.communitySlug = result.communitySlug;
+    comp.name = result.leagueName;
+    this.slotSearchQueries.set(idx, '');
+    this.slotSearchResultsMap.set(idx, []);
+  }
+
 
   readonly channels = computed(() => this.guildStore.activeGuild()?.channels ?? []);
 
