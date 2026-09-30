@@ -3,6 +3,7 @@ import {
   Component,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -429,9 +430,23 @@ export class AdminTotwComponent implements OnInit {
     return this.guildStore.activeGuild()?.channels || [];
   });
 
+  private lastLoadedGuildId: string | null = null;
+
+  constructor() {
+    effect(() => {
+      const guildId = this.guildStore.activeGuildId();
+      if (guildId && guildId !== this.lastLoadedGuildId) {
+        this.lastLoadedGuildId = guildId;
+        void this.loadConfig(guildId);
+        void this.loadPreview();
+      }
+    });
+  }
+
   ngOnInit(): void {
     const guildId = this.guildStore.activeGuildId();
-    if (guildId) {
+    if (guildId && guildId !== this.lastLoadedGuildId) {
+      this.lastLoadedGuildId = guildId;
       this.loadConfig(guildId);
       this.loadPreview();
     }

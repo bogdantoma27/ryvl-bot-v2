@@ -3,6 +3,7 @@ import {
   Component,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -615,18 +616,37 @@ export class VpgTransfersComponent implements OnInit {
     });
   });
 
+  private lastLoadedGuildId: string | null = null;
+
+  constructor() {
+    effect(() => {
+      const activeGuildId = this.guildStore.activeGuildId();
+      if (activeGuildId && activeGuildId !== this.lastLoadedGuildId) {
+        this.lastLoadedGuildId = activeGuildId;
+        void this.loadData();
+      }
+    });
+  }
+
   async ngOnInit(): Promise<void> {
     const queryGuildId = this.route.snapshot.queryParamMap.get('guildId');
     if (queryGuildId && queryGuildId !== this.guildStore.activeGuildId()) {
-      this.guildStore.setActiveGuild(queryGuildId);
+      await this.guildStore.setActiveGuild(queryGuildId);
     }
 
-    await this.loadData();
+    const currentGid = this.guildStore.activeGuildId();
+    if (currentGid && currentGid !== this.lastLoadedGuildId) {
+      this.lastLoadedGuildId = currentGid;
+      await this.loadData();
+    }
   }
 
   async loadData(): Promise<void> {
     this.isLoading.set(true);
     const activeGuildId = this.guildStore.activeGuildId();
+
+    this.leagueSearchQuery.set('');
+    this.leagueSearchResults.set([]);
 
     try {
       const [configRes, transfersRes] = await Promise.all([
@@ -642,10 +662,20 @@ export class VpgTransfersComponent implements OnInit {
         this.selectedCommunitySlug = configRes.config.communitySlug || '';
         this.selectedLeagueSlug = configRes.config.leagueSlug || '';
         this.selectedLeagueName = configRes.config.leagueName || '';
+      } else {
+        this.config.set(null);
+        this.selectedChannelId = '';
+        this.isAutoPostingEnabled = false;
+        this.pollIntervalSec = 120;
+        this.selectedCommunitySlug = '';
+        this.selectedLeagueSlug = '';
+        this.selectedLeagueName = '';
       }
 
       if (transfersRes && Array.isArray(transfersRes.transfers)) {
         this.transfers.set(transfersRes.transfers);
+      } else {
+        this.transfers.set([]);
       }
     } catch (err: any) {
       this.showToast(`Failed to load VPG transfers: ${err.message}`, 'error');

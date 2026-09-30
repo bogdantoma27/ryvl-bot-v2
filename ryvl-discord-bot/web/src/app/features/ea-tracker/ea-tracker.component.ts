@@ -3,6 +3,7 @@ import {
   Component,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -1224,9 +1225,25 @@ export class EaTrackerComponent implements OnInit {
     return data?.cleanSheets || 0;
   });
 
+  private lastLoadedGuildId: string | null = null;
+
+  constructor() {
+    effect(() => {
+      const gid = this.guildStore.activeGuildId();
+      if (gid && gid !== this.lastLoadedGuildId) {
+        this.lastLoadedGuildId = gid;
+        void this.loadAllData(gid);
+      }
+    });
+  }
+
   ngOnInit(): void {
     this.route.queryParamMap.subscribe((params) => {
-      const gId = params.get('guildId') || this.guildStore.activeGuildId() || 'default';
+      const queryGid = params.get('guildId');
+      if (queryGid && queryGid !== this.guildStore.activeGuildId()) {
+        void this.guildStore.setActiveGuild(queryGid);
+      }
+      const gId = queryGid || this.guildStore.activeGuildId() || 'default';
       const tab = params.get('tab');
       if (tab === 'players') {
         this.activeTab.set('players');
@@ -1237,7 +1254,10 @@ export class EaTrackerComponent implements OnInit {
       } else if (tab === 'clubs') {
         this.activeTab.set('clubs');
       }
-      this.loadAllData(gId);
+      if (gId !== this.lastLoadedGuildId) {
+        this.lastLoadedGuildId = gId;
+        void this.loadAllData(gId);
+      }
     });
   }
 

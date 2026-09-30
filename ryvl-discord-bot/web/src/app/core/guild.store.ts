@@ -73,7 +73,6 @@ export class GuildStore {
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(STORAGE_KEY, guildId);
 
-      // Check for cached bootstrap for this guild to render immediately
       try {
         const cached = window.localStorage.getItem(`${STORAGE_BOOTSTRAP_PREFIX}${guildId}`);
         if (cached) {
@@ -81,6 +80,16 @@ export class GuildStore {
           if (parsed) {
             this.activeGuild.set(parsed);
           }
+        } else {
+          const summary = this.availableGuilds().find((g) => g.id === guildId);
+          this.activeGuild.set({
+            id: guildId,
+            name: summary?.name || 'Discord Server',
+            iconUrl: summary?.iconUrl || null,
+            channels: [],
+            roles: [],
+            members: [],
+          });
         }
       } catch {
         // ignore

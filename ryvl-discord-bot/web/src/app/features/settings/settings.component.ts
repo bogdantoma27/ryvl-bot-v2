@@ -485,13 +485,22 @@ export class SettingsComponent implements OnInit {
         this.ryvlTeamName.set(teamName);
 
         this.botStatus.set(active.settings?.botActive ? 'online' : 'offline');
+
+        if (active.id && active.id !== this.lastLoadedSettingsGuildId) {
+          this.lastLoadedSettingsGuildId = active.id;
+          void this.loadSettings(active.id);
+          void this.loadCompetitions(active.id);
+        }
       }
     });
   }
 
+  private lastLoadedSettingsGuildId: string | null = null;
+
   ngOnInit(): void {
     const gid = this.guildStore.activeGuildId();
-    if (gid) {
+    if (gid && gid !== this.lastLoadedSettingsGuildId) {
+      this.lastLoadedSettingsGuildId = gid;
       this.loadSettings(gid);
       this.loadCompetitions(gid);
     }

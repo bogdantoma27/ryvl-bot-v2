@@ -560,19 +560,25 @@ export class AdminPerformanceComponent implements OnInit {
 
   readonly channels = computed(() => this.guildStore.activeGuild()?.channels ?? []);
 
+  private lastLoadedGuildId: string | null = null;
+
   constructor() {
     effect(() => {
       const gid = this.guildStore.activeGuildId();
-      if (gid) {
-        this.reloadAll(gid);
+      if (gid && gid !== this.lastLoadedGuildId) {
+        this.lastLoadedGuildId = gid;
+        this.selectedCompSlug.set(null);
+        void this.reloadAll(gid);
       }
     });
   }
 
   ngOnInit(): void {
     const gid = this.guildStore.activeGuildId();
-    if (gid) {
-      this.reloadAll(gid);
+    if (gid && gid !== this.lastLoadedGuildId) {
+      this.lastLoadedGuildId = gid;
+      this.selectedCompSlug.set(null);
+      void this.reloadAll(gid);
     }
   }
 
@@ -584,10 +590,8 @@ export class AdminPerformanceComponent implements OnInit {
     this.errorMessage.set(null);
 
     try {
-      await Promise.all([
-        this.loadCompetitions(gid),
-        this.loadPerformance(gid, this.selectedCompSlug() || undefined),
-      ]);
+      await this.loadCompetitions(gid);
+      await this.loadPerformance(gid, this.selectedCompSlug() || undefined);
     } catch (err: any) {
       this.errorMessage.set(err.message || 'Failed to load telemetry.');
     } finally {

@@ -3,6 +3,7 @@ import {
   Component,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -546,9 +547,23 @@ export class AdminTournamentsComponent implements OnInit {
     return `${this.api.baseUrl}/api/guilds/${gId}/tournaments/${tId}/standings-image?t=${Date.now()}`;
   });
 
+  private lastLoadedGuildId: string | null = null;
+
+  constructor() {
+    effect(() => {
+      const guildId = this.guildStore.activeGuildId();
+      if (guildId && guildId !== this.lastLoadedGuildId) {
+        this.lastLoadedGuildId = guildId;
+        this.selectedTournamentId.set(null);
+        void this.loadTournaments(guildId);
+      }
+    });
+  }
+
   ngOnInit(): void {
     const guildId = this.guildStore.activeGuildId();
-    if (guildId) {
+    if (guildId && guildId !== this.lastLoadedGuildId) {
+      this.lastLoadedGuildId = guildId;
       this.loadTournaments(guildId);
     }
   }
@@ -557,8 +572,13 @@ export class AdminTournamentsComponent implements OnInit {
     try {
       const list = await this.api.getTournaments(guildId);
       this.tournaments.set(list || []);
-      if (list && list.length > 0 && !this.selectedTournamentId()) {
-        this.selectedTournamentId.set(list[0].id);
+      if (list && list.length > 0) {
+        const currentSelected = this.selectedTournamentId();
+        if (!currentSelected || !list.some((t) => t.id === currentSelected)) {
+          this.selectedTournamentId.set(list[0].id);
+        }
+      } else {
+        this.selectedTournamentId.set(null);
       }
     } catch (err) {
       console.error('Failed to load tournaments:', err);
