@@ -10,8 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push",
-    "test": "npm run build && node --test test/*.test.cjs",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test": "npm run build && node --test test/*.test.cjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
