@@ -1,4 +1,6 @@
 import {
+  ChannelType,
+  PermissionFlagsBits,
   SlashCommandBuilder,
   RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
@@ -553,6 +555,37 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         ),
     );
 
+  const superligaMvpCommand = new SlashCommandBuilder()
+    .setName('superliga_mvp')
+    .setDescription('Superliga MVP stats leaderboard (admins only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDMPermission(false)
+    .addSubcommand((sub) =>
+      sub
+        .setName('leaderboard')
+        .setDescription('Show the current Superliga MVP leaderboard (only you can see it)')
+        .addIntegerOption((opt) => opt.setName('count').setDescription('Players to show (default 15)').setMinValue(1).setMaxValue(25))
+        .addIntegerOption((opt) => opt.setName('min_matches').setDescription('Minimum tracked matches to qualify (default: half of the most played)').setMinValue(1))
+        .addIntegerOption((opt) => opt.setName('season').setDescription('VPG season (default: current)').setMinValue(1)),
+    )
+    .addSubcommand((sub) =>
+      sub
+        .setName('post')
+        .setDescription('Post the Superliga MVP leaderboard publicly in a channel')
+        .addChannelOption((opt) =>
+          opt
+            .setName('channel')
+            .setDescription('Channel to post in (default: this channel)')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+        )
+        .addIntegerOption((opt) => opt.setName('count').setDescription('Players to show (default 15)').setMinValue(1).setMaxValue(25))
+        .addIntegerOption((opt) => opt.setName('min_matches').setDescription('Minimum tracked matches to qualify (default: half of the most played)').setMinValue(1))
+        .addIntegerOption((opt) => opt.setName('season').setDescription('VPG season (default: current)').setMinValue(1)),
+    )
+    .addSubcommand((sub) =>
+      sub.setName('sync').setDescription('Fetch new Superliga results and their EA match stats now'),
+    );
+
   return [
     eventCommand.toJSON(),
     lineupPostCommand.toJSON(),
@@ -571,6 +604,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     superligaCommand.toJSON(),
     liveResultsCommand.toJSON(),
     ryvlCommand.toJSON(),
+    superligaMvpCommand.toJSON(),
   ];
 }
 

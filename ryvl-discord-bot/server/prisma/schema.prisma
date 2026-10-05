@@ -441,3 +441,115 @@ model TournamentInstance {
 
   @@map("tournament_instances")
 }
+
+// Superliga MVP: VPG Superliga matches linked to the EA Pro Clubs match that was
+// played, with every player's full EA match stats. Shared by all guilds because the
+// league data is the same everywhere; see prisma/deploy/superliga-mvp.sql.
+model SuperligaMvpTeam {
+  id         String   @id @default(uuid())
+  leagueSlug String   @map("league_slug")
+  vpgTeamId  Int      @map("vpg_team_id")
+  slug       String
+  name       String
+  logoUrl    String?  @map("logo_url")
+  eaClubId   String?  @map("ea_club_id")
+  eaClubName String?  @map("ea_club_name")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@unique([leagueSlug, vpgTeamId])
+  @@map("superliga_mvp_teams")
+}
+
+model SuperligaMvpMatch {
+  id            String    @id @default(uuid())
+  vpgMatchId    Int       @unique @map("vpg_match_id")
+  leagueSlug    String    @map("league_slug")
+  season        Int
+  matchDay      Int?      @map("match_day")
+  kickoffAt     DateTime  @map("kickoff_at")
+  // Set the first time VPG moves the kickoff (a rescheduled fixture).
+  originalKickoffAt DateTime? @map("original_kickoff_at")
+  // When the sync first saw the result as complete on VPG.
+  completedAt   DateTime? @map("completed_at")
+  homeVpgTeamId Int?      @map("home_vpg_team_id")
+  awayVpgTeamId Int?      @map("away_vpg_team_id")
+  homeTeamName  String    @map("home_team_name")
+  awayTeamName  String    @map("away_team_name")
+  homeScore     Int?      @map("home_score")
+  awayScore     Int?      @map("away_score")
+  homeEaClubId  String?   @map("home_ea_club_id")
+  awayEaClubId  String?   @map("away_ea_club_id")
+  eaMatchId     String?   @map("ea_match_id")
+  eaPlayedAt    DateTime? @map("ea_played_at")
+  // SCHEDULED (not played yet), PENDING (played, looking for the EA match),
+  // LINKED (stats stored), EXPIRED (played, but no EA match was found)
+  status        String    @default("PENDING")
+  attempts      Int       @default(0)
+  lastError     String?   @map("last_error")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  rawPayload    Json?     @map("raw_payload")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  players       SuperligaMvpPlayerStat[]
+
+  @@index([leagueSlug, season, status])
+  @@map("superliga_mvp_matches")
+}
+
+model SuperligaMvpPlayerStat {
+  id             String            @id @default(uuid())
+  matchId        String            @map("match_id")
+  match          SuperligaMvpMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  vpgMatchId     Int               @map("vpg_match_id")
+  leagueSlug     String            @map("league_slug")
+  season         Int
+  eaMatchId      String            @map("ea_match_id")
+  eaClubId       String            @map("ea_club_id")
+  teamName       String            @map("team_name")
+  playerProId    String            @map("player_pro_id")
+  playerName     String            @map("player_name")
+  pos            String?
+  rating         Float             @default(0)
+  goals          Int               @default(0)
+  assists        Int               @default(0)
+  shots          Int               @default(0)
+  passesMade     Int               @default(0) @map("passes_made")
+  passAttempts   Int               @default(0) @map("pass_attempts")
+  tacklesMade    Int               @default(0) @map("tackles_made")
+  tackleAttempts Int               @default(0) @map("tackle_attempts")
+  saves          Int               @default(0)
+  goalsConceded  Int               @default(0) @map("goals_conceded")
+  cleanSheetDef  Int               @default(0) @map("clean_sheet_def")
+  cleanSheetGk   Int               @default(0) @map("clean_sheet_gk")
+  mom            Int               @default(0)
+  redCards       Int               @default(0) @map("red_cards")
+  secondsPlayed  Int               @default(0) @map("seconds_played")
+  // Every field EA returned for this player, including the encoded event aggregates.
+  raw            Json
+  playedAt       DateTime          @map("played_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  @@unique([vpgMatchId, eaClubId, playerProId])
+  @@index([leagueSlug, season])
+  @@map("superliga_mvp_player_stats")
+}
+
+// One row per player per weekly Team of the Week, recorded when the TOTW is posted.
+// Used as the Superliga MVP tiebreaker. eaNames holds the player's PSN, Xbox and EA
+// names from their VPG profile, so they can be matched to EA match gamertags.
+model SuperligaMvpTotwSelection {
+  id          String   @id @default(uuid())
+  leagueSlug  String   @map("league_slug")
+  season      Int
+  week        Int
+  vpgUsername String   @map("vpg_username")
+  eaNames     String[] @default([]) @map("ea_names")
+  position    String
+  teamName    String?  @map("team_name")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([leagueSlug, season, week, vpgUsername])
+  @@index([leagueSlug, season])
+  @@map("superliga_mvp_totw_selections")
+}

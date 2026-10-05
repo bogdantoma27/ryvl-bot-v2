@@ -26,6 +26,9 @@ export const authGuard: CanMatchFn = async () => {
   }
 };
 
+const awardsTab = (tab: 'mvp' | 'totw') => () =>
+  inject(Router).createUrlTree(['/admin/superliga-awards'], { queryParams: { tab } });
+
 export const routes: Routes = [
   // ---------------------------------------------------------------------------
   // Public Organization Website (Official RYVL Esports Shell & Pages)
@@ -172,11 +175,15 @@ export const routes: Routes = [
       import('./features/vpg-transfers/vpg-transfers.component').then((m) => m.VpgTransfersComponent),
   },
   {
-    path: 'admin/totw',
+    path: 'admin/superliga-awards',
     canMatch: [authGuard],
+    title: 'Superliga Awards | RYVL',
     loadComponent: () =>
-      import('./features/totw/admin-totw.component').then((m) => m.AdminTotwComponent),
+      import('./features/superliga-awards/admin-superliga-awards.component').then((m) => m.AdminSuperligaAwardsComponent),
   },
+  // Team of the Week and Superliga MVP now live together on Superliga Awards.
+  { path: 'admin/totw', redirectTo: awardsTab('totw') },
+  { path: 'admin/superliga-mvp', redirectTo: awardsTab('mvp') },
   {
     path: 'admin/tournaments',
     canMatch: [authGuard],
@@ -227,7 +234,7 @@ export const routes: Routes = [
   },
   {
     path: 'totw',
-    redirectTo: 'admin/totw',
+    redirectTo: awardsTab('totw'),
   },
   {
     path: 'tournaments',

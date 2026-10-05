@@ -52,6 +52,7 @@ sudo caddy validate --config "$ROOT/ryvl-discord-bot/Caddyfile" --adapter caddyf
 cd "$SERVER"
 npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
 npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/stats-totw-tournaments.sql
+npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/superliga-mvp.sql
 
 
 # Publish a complete release without deleting files from the current release.

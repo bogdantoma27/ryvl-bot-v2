@@ -15,6 +15,8 @@ import {
   RyvlPerformanceStats,
   RyvlPerformanceResponse,
   RyvlCompetitionDto,
+  VpgTeamSummary,
+  VpgTeamProfile,
 } from './vpg.types';
 
 @Injectable()
@@ -614,6 +616,59 @@ export class VpgService {
       rating: entry.match_rating != null ? Number(entry.match_rating) : null,
       points: entry.points != null ? Number(entry.points) : null,
     }));
+  }
+
+  private async getJson(path: string): Promise<any> {
+    const res = await fetch(`${this.API_BASE}${path}`, {
+      signal: AbortSignal.timeout(15000),
+      headers: { 'User-Agent': 'RYVLBot/2.0' },
+    });
+    if (!res.ok) throw new Error(`VPG HTTP ${res.status} for ${path}`);
+    return res.json();
+  }
+
+  /** Teams currently in a league. The list omits the EA link; use fetchTeam for that. */
+  async fetchLeagueTeams(leagueSlug = 'Superliga-Romania'): Promise<VpgTeamSummary[]> {
+    const json = await this.getJson(`/leagues/${encodeURIComponent(leagueSlug)}/teams/?limit=100&offset=0`);
+    const list = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+    return list
+      .filter((t: any) => t && t.id != null && t.slug)
+      .map((t: any) => ({ id: Number(t.id), slug: String(t.slug), name: String(t.name || t.slug), logoUrl: this.buildLogoUrl(t.logo) }));
+  }
+
+  /** A team's profile, including the FC in-game club it linked on VPG. */
+  async fetchTeam(teamSlug: string): Promise<VpgTeamProfile> {
+    const t = await this.getJson(`/teams/${encodeURIComponent(teamSlug)}/`);
+    return {
+      id: Number(t.id),
+      slug: String(t.slug || teamSlug),
+      name: String(t.name || teamSlug),
+      logoUrl: this.buildLogoUrl(t.logo_id),
+      eaClubId: t.ea_club_id != null && String(t.ea_club_id).trim() ? String(t.ea_club_id).trim() : null,
+      eaClubName: t.ea_club_name ? String(t.ea_club_name) : null,
+    };
+  }
+
+  /**
+   * The console/EA names a VPG user linked (PSN, Xbox, EA), used to match them to EA
+   * match gamertags. The profile also holds personal data, which is deliberately dropped.
+   */
+  async fetchUserGamertags(username: string): Promise<string[]> {
+    const u = await this.getJson(`/users/${encodeURIComponent(username)}/`);
+    return [u?.psn, u?.xbox, u?.origin]
+      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+      .map((v) => v.trim());
+  }
+
+  /** Single match, which (unlike the list endpoint) carries both team ids. */
+  async fetchMatchDetail(matchId: number): Promise<{ id: number; homeTeamId: number | null; awayTeamId: number | null; season: number | null }> {
+    const m = await this.getJson(`/matches/${encodeURIComponent(String(matchId))}/`);
+    return {
+      id: Number(m.id),
+      homeTeamId: m.home_id != null ? Number(m.home_id) : null,
+      awayTeamId: m.away_id != null ? Number(m.away_id) : null,
+      season: m.season != null ? Number(m.season) : null,
+    };
   }
 
   async isMatchProcessed(guildId: string, vpgMatchId: number): Promise<boolean> {

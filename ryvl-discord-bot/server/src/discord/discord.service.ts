@@ -37,6 +37,7 @@ import {
 import { EaCommands } from './commands/ea-commands';
 import { VpgCommands } from './commands/vpg-commands';
 import { SuperligaCommands } from './commands/superliga-commands';
+import { SuperligaMvpCommands } from './commands/superliga-mvp-commands';
 import { RyvlCommands } from './commands/ryvl-commands';
 import { TotwCommands } from './commands/totw-commands';
 import { TournamentCommands } from './commands/tournament-commands';
@@ -93,6 +94,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     private readonly totwCommands: TotwCommands,
     @Inject(forwardRef(() => TournamentCommands))
     private readonly tournamentCommands: TournamentCommands,
+    @Inject(forwardRef(() => SuperligaMvpCommands))
+    private readonly superligaMvpCommands: SuperligaMvpCommands,
   ) {
     this.client = new Client({
       intents: [
@@ -218,6 +221,8 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
             }
           } else if (interaction.commandName === 'superliga') {
             await this.superligaCommands.handleSuperliga(interaction);
+          } else if (interaction.commandName === 'superliga_mvp') {
+            await this.superligaMvpCommands.handle(interaction);
           } else if (interaction.commandName === 'live_results') {
             await this.superligaCommands.handleLiveResults(interaction);
           } else if (interaction.commandName === 'ryvl') {

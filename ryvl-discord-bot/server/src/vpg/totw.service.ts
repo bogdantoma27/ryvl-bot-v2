@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DiscordService } from '../discord/discord.service';
 import { TotwRendererService, TotwPositionsMap, TotwPlayer } from './totw-renderer.service';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { VpgService } from './vpg.service';
 
 const POSITIONS = ['gk', 'cb', 'cdm', 'cam', 'wingers', 'strikers'];
 const LEADERBOARD_NAMES: Record<string, string> = {
@@ -33,7 +34,41 @@ export class TotwService {
     private readonly renderer: TotwRendererService,
     @Inject(forwardRef(() => DiscordService))
     private readonly discordService: DiscordService,
+    private readonly vpgService: VpgService,
   ) {}
+
+  /**
+   * Stores who made a posted weekly Team of the Week, replacing any earlier record of
+   * the same week. Superliga MVP uses the count as its tiebreaker.
+   */
+  async recordWeeklySelections(leagueSlug: string, season: number, week: number | null, players: TotwPositionsMap): Promise<number> {
+    if (!week) {
+      this.logger.warn(`TOTW for ${leagueSlug} S${season} has no week number; selections not recorded.`);
+      return 0;
+    }
+    const rows: Array<{ vpgUsername: string; position: string; teamName: string | null }> = [];
+    for (const [position, list] of Object.entries(players)) {
+      for (const p of list || []) {
+        if (p?.username && !rows.some((r) => r.vpgUsername === p.username)) {
+          rows.push({ vpgUsername: p.username, position: position.toUpperCase(), teamName: p.team_name || null });
+        }
+      }
+    }
+    const withNames = await Promise.all(
+      rows.map(async (r) => ({
+        ...r,
+        eaNames: await this.vpgService.fetchUserGamertags(r.vpgUsername).catch(() => [] as string[]),
+      })),
+    );
+    await this.prisma.$transaction([
+      this.prisma.superligaMvpTotwSelection.deleteMany({ where: { leagueSlug, season, week } }),
+      this.prisma.superligaMvpTotwSelection.createMany({
+        data: withNames.map((r) => ({ leagueSlug, season, week, ...r })),
+        skipDuplicates: true,
+      }),
+    ]);
+    return withNames.length;
+  }
 
   async getOrCreateConfig(guildId: string, leagueSlug = 'Superliga-Romania') {
     const existing = await this.prisma.totwConfig.findUnique({
@@ -291,6 +326,12 @@ export class TotwService {
       totwData.imageBuffer,
       'totw.png',
     );
+
+    if (!isTots) {
+      await this.recordWeeklySelections(config.leagueSlug, totwData.season, totwData.week, totwData.players).catch((err: any) =>
+        this.logger.warn(`Could not record TOTW selections: ${err.message}`),
+      );
+    }
 
     return {
       success: true,
