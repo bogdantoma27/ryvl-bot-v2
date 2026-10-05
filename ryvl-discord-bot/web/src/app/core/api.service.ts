@@ -27,6 +27,9 @@ import {
   PlayerRegistrationAudit,
   TotwConfig,
   TournamentInstance,
+  SuperligaMvpLeaderboard,
+  SuperligaMvpMatches,
+  SuperligaMvpSyncResult,
 } from './models';
 
 const DEVELOPMENT_API_BASE_URL = 'http://localhost:3000';
@@ -842,6 +845,50 @@ export class ApiService {
   postTotw(guildId: string, body: { channelId?: string; isTots?: boolean }): Promise<{ success: boolean; messageId?: string }> {
     return firstValueFrom(
       this.http.post<{ success: boolean; messageId?: string }>(`${this.baseUrl}/api/guilds/${guildId}/vpg/totw/post`, body, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  // ----------------------------------------------------
+  // Superliga MVP
+  // ----------------------------------------------------
+
+  getSuperligaMvpLeaderboard(guildId: string, opts: { season?: number | null; minMatches?: number | null } = {}): Promise<SuperligaMvpLeaderboard> {
+    const params: Record<string, string> = {};
+    if (opts.season) params['season'] = String(opts.season);
+    if (opts.minMatches) params['minMatches'] = String(opts.minMatches);
+    return firstValueFrom(
+      this.http.get<SuperligaMvpLeaderboard>(`${this.baseUrl}/api/guilds/${guildId}/superliga-mvp/leaderboard`, {
+        headers: this.headers(),
+        params,
+      }),
+    );
+  }
+
+  getSuperligaMvpMatches(guildId: string, season?: number | null): Promise<SuperligaMvpMatches> {
+    return firstValueFrom(
+      this.http.get<SuperligaMvpMatches>(`${this.baseUrl}/api/guilds/${guildId}/superliga-mvp/matches`, {
+        headers: this.headers(),
+        params: season ? { season: String(season) } : {},
+      }),
+    );
+  }
+
+  syncSuperligaMvp(guildId: string): Promise<SuperligaMvpSyncResult> {
+    return firstValueFrom(
+      this.http.post<SuperligaMvpSyncResult>(`${this.baseUrl}/api/guilds/${guildId}/superliga-mvp/sync`, {}, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  postSuperligaMvp(
+    guildId: string,
+    body: { channelId: string; season?: number | null; minMatches?: number | null; count?: number },
+  ): Promise<{ success: boolean; messageId?: string }> {
+    return firstValueFrom(
+      this.http.post<{ success: boolean; messageId?: string }>(`${this.baseUrl}/api/guilds/${guildId}/superliga-mvp/post`, body, {
         headers: this.headers(),
       }),
     );

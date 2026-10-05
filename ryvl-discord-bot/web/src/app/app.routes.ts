@@ -178,6 +178,13 @@ export const routes: Routes = [
       import('./features/totw/admin-totw.component').then((m) => m.AdminTotwComponent),
   },
   {
+    path: 'admin/superliga-mvp',
+    canMatch: [authGuard],
+    title: 'Superliga MVP | RYVL',
+    loadComponent: () =>
+      import('./features/superliga-mvp/admin-superliga-mvp.component').then((m) => m.AdminSuperligaMvpComponent),
+  },
+  {
     path: 'admin/tournaments',
     canMatch: [authGuard],
     loadComponent: () =>

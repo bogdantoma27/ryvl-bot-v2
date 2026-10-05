@@ -430,3 +430,80 @@ export interface TournamentInstance {
   teams?: any[];
   matches?: any[];
 }
+
+export interface SuperligaMvpMetric {
+  key: string;
+  label: string;
+  value: number;
+  percentile: number;
+}
+
+export interface SuperligaMvpEntry {
+  rank: number;
+  playerName: string;
+  teamName: string;
+  role: 'GK' | 'OUTFIELD';
+  matches: number;
+  score: number;
+  totals: {
+    matches: number;
+    goals: number;
+    assists: number;
+    shots: number;
+    passesMade: number;
+    passAttempts: number;
+    tacklesMade: number;
+    tackleAttempts: number;
+    saves: number;
+    goalsConceded: number;
+    cleanSheets: number;
+    mom: number;
+    redCards: number;
+    ratingSum: number;
+  };
+  metrics: SuperligaMvpMetric[];
+}
+
+export interface SuperligaMvpLeaderboard {
+  leagueSlug: string;
+  season: number;
+  formula: string;
+  minMatches: number;
+  totalPlayers: number;
+  eligiblePlayers: number;
+  matches: { linked: number; pending: number; expired: number };
+  lastLinkedAt: string | null;
+  entries: SuperligaMvpEntry[];
+}
+
+export interface SuperligaMvpMatchRow {
+  vpgMatchId: number;
+  matchDay: number | null;
+  kickoffAt: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  homeScore: number;
+  awayScore: number;
+  eaMatchId: string | null;
+  status: 'PENDING' | 'LINKED' | 'EXPIRED';
+  attempts: number;
+  lastError: string | null;
+  playerCount: number;
+}
+
+export interface SuperligaMvpMatches {
+  season: number;
+  matches: SuperligaMvpMatchRow[];
+  teams: Array<{ name: string; slug: string; logoUrl: string | null; eaClubId: string | null; eaClubName: string | null }>;
+}
+
+export interface SuperligaMvpSyncResult {
+  season: number;
+  teamsLinkedToEa: number;
+  teamsTotal: number;
+  newMatches: number;
+  linked: number;
+  stillPending: number;
+  expired: number;
+  errors: string[];
+}

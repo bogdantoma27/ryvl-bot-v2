@@ -185,3 +185,15 @@ export interface RecruitmentFormPayload {
   experience?: string;
   guildId?: string;
 }
+
+export interface VpgTeamSummary {
+  id: number;
+  slug: string;
+  name: string;
+  logoUrl?: string | null;
+}
+
+export interface VpgTeamProfile extends VpgTeamSummary {
+  eaClubId: string | null;
+  eaClubName: string | null;
+}

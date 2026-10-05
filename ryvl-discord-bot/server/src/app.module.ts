@@ -11,6 +11,7 @@ import { LineupModule } from './lineup/lineup.module';
 import { EaModule } from './ea/ea.module';
 import { VpgModule } from './vpg/vpg.module';
 import { TournamentModule } from './tournaments/tournament.module';
+import { SuperligaMvpModule } from './superliga-mvp/superliga-mvp.module';
 
 import { AppController } from './app.controller';
 
@@ -28,6 +29,7 @@ import { AppController } from './app.controller';
     EaModule,
     VpgModule,
     TournamentModule,
+    SuperligaMvpModule,
   ],
   controllers: [AppController],
 })

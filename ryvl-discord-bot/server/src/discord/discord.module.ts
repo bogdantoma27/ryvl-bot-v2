@@ -18,6 +18,8 @@ import { RyvlCommands } from './commands/ryvl-commands';
 import { TotwCommands } from './commands/totw-commands';
 import { TournamentCommands } from './commands/tournament-commands';
 import { TournamentModule } from '../tournaments/tournament.module';
+import { SuperligaMvpModule } from '../superliga-mvp/superliga-mvp.module';
+import { SuperligaMvpCommands } from './commands/superliga-mvp-commands';
 
 @Global()
 @Module({
@@ -27,6 +29,7 @@ import { TournamentModule } from '../tournaments/tournament.module';
     forwardRef(() => EaModule),
     forwardRef(() => VpgModule),
     forwardRef(() => TournamentModule),
+    forwardRef(() => SuperligaMvpModule),
   ],
   providers: [
     DiscordService,
@@ -43,6 +46,7 @@ import { TournamentModule } from '../tournaments/tournament.module';
     RyvlCommands,
     TotwCommands,
     TournamentCommands,
+    SuperligaMvpCommands,
   ],
   exports: [DiscordService, RyvlCommands],
 })
