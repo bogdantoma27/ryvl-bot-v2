@@ -92,11 +92,12 @@ jobs:
           assert ':443' in text and ':80' in text
           print('Caddy domain, redirect, TLS-listener and internal upstream configuration valid.')
           PY
-      - name: Angular production build
+      - name: Angular production build and unit tests
         working-directory: ryvl-discord-bot/web
         run: |
           npm ci
           npm run build
+          npm test -- --watch=false
       - name: Desktop and mobile browser checks
         run: |
           npm install --prefix "$RUNNER_TEMP/ryvl-browser" --no-save @playwright/test@1.56.1
