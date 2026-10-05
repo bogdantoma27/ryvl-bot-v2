@@ -64,6 +64,14 @@ const ea = (matchId, ts, clubs) => ({
   players: {}, aggregate: {},
 });
 
+test('equal MVP scores are broken by Team of the Week picks', () => {
+  const twin = (name) => row(name, 'midfielder', { goals: 1, rating: 7.5 });
+  const count = score.totwCounter([{ names: ['vpg_b', 'Twin B'] }, { names: ['twin b'] }, { names: ['Twin A'] }]);
+  const board = score.buildMvpLeaderboard([twin('Twin A'), twin('Twin B')], null, count);
+  assert.equal(board.entries[0].score, board.entries[1].score);
+  assert.deepEqual(board.entries.map((e) => [e.playerName, e.totwCount]), [['Twin B', 2], ['Twin A', 1]]);
+});
+
 test('EA match linking requires both clubs, the time window and prefers the reported score', () => {
   const kickoff = new Date('2026-10-01T19:00:00Z');
   const t = (min) => kickoff.getTime() / 1000 + min * 60;
@@ -94,25 +102,50 @@ test('with one linked club the opponent is inferred but the score must match', (
   assert.equal(pickEaMatch([ea('scrim', t(30), { 999: 1, 200: 1 })], vpg), null);
 });
 
+test('a rescheduled game played days after the original kickoff is found up to when it was reported', () => {
+  const kickoff = new Date('2026-10-01T19:00:00Z');
+  const day = 24 * 60 * 60;
+  const t = (min) => kickoff.getTime() / 1000 + min * 60;
+  const reportedAt = new Date(kickoff.getTime() + 7 * day * 1000 + 60 * 60 * 1000);
+  const vpg = { kickoffAt: kickoff, homeScore: 1, awayScore: 1, homeEaClubId: '100', awayEaClubId: '200' };
+  const replayed = ea('played-a-week-later', t(7 * 24 * 60 + 30), { 100: 1, 200: 1 });
+  const friendly = ea('midweek-friendly', t(3 * 24 * 60), { 100: 4, 200: 0 });
+  assert.equal(pickEaMatch([replayed, friendly], vpg), null, 'without a report time only the original window counts');
+  assert.equal(pickEaMatch([friendly, replayed], { ...vpg, reportedAt }).raw.matchId, 'played-a-week-later');
+  // Same score twice: take the last game before the result was reported.
+  const earlierSameScore = ea('earlier-1-1', t(2 * 24 * 60), { 100: 1, 200: 1 });
+  assert.equal(pickEaMatch([earlierSameScore, replayed], { ...vpg, reportedAt }).raw.matchId, 'played-a-week-later');
+});
+
 const safeDatabase = process.env.RUN_DATABASE_TESTS === '1' && /^postgres(?:ql)?:\/\/[^@]+@(?:localhost|127\.0\.0\.1):5432\/ryvl_ci(?:\?|$)/.test(process.env.DATABASE_URL || '');
 test('sync links a VPG result to its EA match and stores every player stat', { skip: !safeDatabase }, async () => {
   const { PrismaClient } = require('@prisma/client');
   const prisma = new PrismaClient();
   const { SuperligaMvpService } = require('../dist/superliga-mvp/superliga-mvp.service.js');
   const kickoff = new Date(Date.now() - 60 * 60 * 1000);
-  const ids = [990001, 990002, 990003];
+  const ids = [990001, 990002, 990003, 990004, 990005];
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const lists = {
+    complete: [
+      { id: ids[0], datetime: kickoff.toISOString(), matchDay: 3, homeName: 'Home FC', awayName: 'Away FC', homeScore: 2, awayScore: 1 },
+      { id: ids[1], datetime: kickoff.toISOString(), matchDay: 3, homeName: 'Away FC', awayName: 'Nobody', homeScore: 1, awayScore: 1 },
+      { id: ids[2], datetime: '2020-01-01T19:00:00Z', matchDay: 1, homeName: 'Home FC', awayName: 'Away FC', homeScore: 0, awayScore: 0 },
+    ],
+    scheduled: [
+      // Postponed: kickoff was a week ago and it has not been played yet.
+      { id: ids[3], datetime: weekAgo.toISOString(), matchDay: 2, homeName: 'Away FC', awayName: 'Home FC' },
+      { id: ids[4], datetime: nextWeek.toISOString(), matchDay: 4, homeName: 'Home FC', awayName: 'Away FC' },
+    ],
+  };
   const vpg = {
     fetchLatestSeason: async () => 99,
     fetchLeagueTeams: async () => [{ id: 1, slug: 'home', name: 'Home FC' }, { id: 2, slug: 'away', name: 'Away FC' }],
     fetchTeam: async (slug) => slug === 'home'
       ? { id: 1, slug, name: 'Home FC', eaClubId: '100', eaClubName: 'Home EA' }
       : { id: 2, slug, name: 'Away FC', eaClubId: null, eaClubName: null },
-    fetchAllMatches: async () => [
-      { id: ids[0], datetime: kickoff.toISOString(), matchDay: 3, homeName: 'Home FC', awayName: 'Away FC', homeScore: 2, awayScore: 1 },
-      { id: ids[1], datetime: kickoff.toISOString(), matchDay: 3, homeName: 'Away FC', awayName: 'Nobody', homeScore: 1, awayScore: 1 },
-      { id: ids[2], datetime: '2020-01-01T19:00:00Z', matchDay: 1, homeName: 'Home FC', awayName: 'Away FC', homeScore: 0, awayScore: 0 },
-    ],
-    fetchMatchDetail: async (id) => id === ids[0] ? { id, homeTeamId: 1, awayTeamId: 2 } : { id, homeTeamId: 2, awayTeamId: 3 },
+    fetchAllMatches: async (status) => lists[status],
+    fetchMatchDetail: async (id) => id === ids[0] ? { id, homeTeamId: 1, awayTeamId: 2 } : id === ids[3] ? { id, homeTeamId: 2, awayTeamId: 1 } : { id, homeTeamId: 2, awayTeamId: 3 },
   };
   const player = (name, extra) => ({ playername: name, pos: 'forward', rating: '8.1', goals: '1', assists: '0', shots: '3', passesmade: '10', passattempts: '12', tacklesmade: '1', tackleattempts: '2', saves: '0', mom: '0', redcards: '0', cleansheetsdef: '0', cleansheetsgk: '0', match_event_aggregate_0: '214:1', ...extra });
   const raw = {
@@ -126,6 +159,7 @@ test('sync links a VPG result to its EA match and stores every player stat', { s
   const service = new SuperligaMvpService(prisma, vpg, eaService);
   const cleanup = async () => {
     await prisma.superligaMvpMatch.deleteMany({ where: { vpgMatchId: { in: ids } } });
+    await prisma.superligaMvpTotwSelection.deleteMany({ where: { leagueSlug: 'Superliga-Romania', season: 99 } });
     await prisma.superligaMvpTeam.deleteMany({ where: { leagueSlug: 'Superliga-Romania', vpgTeamId: { in: [1, 2] } } });
   };
   try {
@@ -142,6 +176,8 @@ test('sync links a VPG result to its EA match and stores every player stat', { s
     assert.equal(star.goals, 2); assert.equal(star.teamName, 'Home FC'); assert.equal(star.raw.match_event_aggregate_0, '214:1');
     assert.equal((await prisma.superligaMvpMatch.findUnique({ where: { vpgMatchId: ids[1] } })).status, 'PENDING');
     assert.equal((await prisma.superligaMvpMatch.findUnique({ where: { vpgMatchId: ids[2] } })).status, 'EXPIRED');
+    const postponed = await prisma.superligaMvpMatch.findUnique({ where: { vpgMatchId: ids[3] } });
+    assert.equal(postponed.status, 'SCHEDULED'); assert.equal(postponed.homeScore, null);
 
     const callsBefore = eaCalls;
     const second = await service.sync();
@@ -149,8 +185,36 @@ test('sync links a VPG result to its EA match and stores every player stat', { s
     assert.equal(await prisma.superligaMvpPlayerStat.count({ where: { vpgMatchId: ids[0] } }), 2, 'no duplicate stats');
     assert.equal(eaCalls, callsBefore, 'linked matches are not looked up again; unlinked teams cost no EA calls');
 
+    // The postponed game is played and reported today, with its original kickoff kept.
+    // The other fixture is moved once, then removed from the calendar.
+    const movedTo = new Date(nextWeek.getTime() + 2 * 24 * 60 * 60 * 1000);
+    lists.scheduled = [{ ...lists.scheduled[1], datetime: movedTo.toISOString() }];
+    await service.sync();
+    const moved = await prisma.superligaMvpMatch.findUnique({ where: { vpgMatchId: ids[4] } });
+    assert.equal(moved.kickoffAt.getTime(), movedTo.getTime()); assert.equal(moved.originalKickoffAt.getTime(), nextWeek.getTime());
+    lists.scheduled = [];
+    lists.complete = [...lists.complete, { id: ids[3], datetime: weekAgo.toISOString(), matchDay: 2, homeName: 'Away FC', awayName: 'Home FC', homeScore: 0, awayScore: 2 }];
+    const lateRaw = { ...raw, matchId: 'ea-late', timestamp: Math.floor(Date.now() / 1000) - 20 * 60, clubs: { 100: { goals: '2', score: '2' }, 200: { goals: '0', score: '0' } } };
+    eaService.fetchMatchesRaw = async (clubId, type) => clubId === '100' && type === 'friendlyMatch' ? [lateRaw, raw] : [];
+    const third = await service.sync();
+    assert.equal(third.newMatches, 1); assert.equal(third.linked, 1);
+    const late = await prisma.superligaMvpMatch.findUnique({ where: { vpgMatchId: ids[3] } });
+    assert.equal(late.status, 'LINKED'); assert.equal(late.eaMatchId, 'ea-late');
+    assert.equal(late.homeEaClubId, '200'); assert.equal(late.awayEaClubId, '100');
+    assert.ok(late.completedAt, 'completion time recorded');
+    assert.equal((await prisma.superligaMvpMatch.findUnique({ where: { vpgMatchId: ids[4] } })).status, 'CANCELLED');
+
+    // TOTW picks are matched to EA gamertags through the VPG profile names.
+    await prisma.superligaMvpTotwSelection.deleteMany({ where: { leagueSlug: 'Superliga-Romania', season: 99 } });
+    await prisma.superligaMvpTotwSelection.createMany({ data: [
+      { leagueSlug: 'Superliga-Romania', season: 99, week: 1, vpgUsername: 'vpg_star', eaNames: ['homestar'], position: 'ST' },
+      { leagueSlug: 'Superliga-Romania', season: 99, week: 2, vpgUsername: 'HomeStar', eaNames: [], position: 'ST' },
+    ] });
+
     const board = await service.getLeaderboard({ season: 99 });
-    assert.equal(board.matches.linked, 1); assert.equal(board.matches.pending, 1); assert.equal(board.matches.expired, 1);
+    assert.equal(board.matches.linked, 2); assert.equal(board.matches.pending, 1); assert.equal(board.matches.expired, 1);
+    assert.equal(board.matches.cancelled, 1); assert.equal(board.totwWeeks, 2);
+    assert.equal(board.entries.find((e) => e.playerName === 'HomeStar').totwCount, 2);
     assert.deepEqual(board.entries.map((e) => [e.playerName, e.role]).sort(), [['AwayKeeper', 'GK'], ['HomeStar', 'OUTFIELD']]);
   } finally {
     await cleanup();

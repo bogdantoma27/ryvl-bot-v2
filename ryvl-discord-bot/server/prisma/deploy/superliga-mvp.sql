@@ -1,5 +1,5 @@
 -- Reviewed additive upgrade for Superliga MVP stat tracking.
--- Creates three new tables only. Deliberately no DROP, TRUNCATE, DELETE, or changes to existing tables.
+-- Creates four new tables only. Deliberately no DROP, TRUNCATE, DELETE, or changes to existing tables.
 BEGIN;
 SELECT pg_advisory_xact_lock(739201631);
 
@@ -25,12 +25,14 @@ CREATE TABLE IF NOT EXISTS "superliga_mvp_matches" (
     "season" INTEGER NOT NULL,
     "match_day" INTEGER,
     "kickoff_at" TIMESTAMP(3) NOT NULL,
+    "original_kickoff_at" TIMESTAMP(3),
+    "completed_at" TIMESTAMP(3),
     "home_vpg_team_id" INTEGER,
     "away_vpg_team_id" INTEGER,
     "home_team_name" TEXT NOT NULL,
     "away_team_name" TEXT NOT NULL,
-    "home_score" INTEGER NOT NULL,
-    "away_score" INTEGER NOT NULL,
+    "home_score" INTEGER,
+    "away_score" INTEGER,
     "home_ea_club_id" TEXT,
     "away_ea_club_id" TEXT,
     "ea_match_id" TEXT,
@@ -81,6 +83,21 @@ CREATE TABLE IF NOT EXISTS "superliga_mvp_player_stats" (
 );
 CREATE INDEX IF NOT EXISTS "superliga_mvp_player_stats_league_slug_season_idx" ON "superliga_mvp_player_stats"("league_slug", "season");
 CREATE UNIQUE INDEX IF NOT EXISTS "superliga_mvp_player_stats_vpg_match_id_ea_club_id_player_p_key" ON "superliga_mvp_player_stats"("vpg_match_id", "ea_club_id", "player_pro_id");
+
+CREATE TABLE IF NOT EXISTS "superliga_mvp_totw_selections" (
+    "id" TEXT NOT NULL,
+    "league_slug" TEXT NOT NULL,
+    "season" INTEGER NOT NULL,
+    "week" INTEGER NOT NULL,
+    "vpg_username" TEXT NOT NULL,
+    "ea_names" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "position" TEXT NOT NULL,
+    "team_name" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "superliga_mvp_totw_selections_pkey" PRIMARY KEY ("id")
+);
+CREATE INDEX IF NOT EXISTS "superliga_mvp_totw_selections_league_slug_season_idx" ON "superliga_mvp_totw_selections"("league_slug", "season");
+CREATE UNIQUE INDEX IF NOT EXISTS "superliga_mvp_totw_selections_league_slug_season_week_vpg_u_key" ON "superliga_mvp_totw_selections"("league_slug", "season", "week", "vpg_username");
 
 DO $$
 BEGIN

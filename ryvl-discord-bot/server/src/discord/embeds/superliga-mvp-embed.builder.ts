@@ -31,7 +31,8 @@ export function buildSuperligaMvpEmbed(board: MvpLeaderboardResponse, count = 15
       ? `${t.saves} saves · ${t.cleanSheets} CS`
       : `${t.goals}G ${t.assists}A`;
     return `${badge} **${e.playerName}** · ${e.teamName}${e.role === 'GK' ? ' · GK' : ''}\n` +
-      `   Score **${e.score.toFixed(1)}** · ${e.matches} MP · ${avg} avg · ${line}`;
+      `   Score **${e.score.toFixed(1)}** · ${e.matches} MP · ${avg} avg · ${line}` +
+      (e.totwCount ? ` · ⭐ ${e.totwCount} TOTW` : '');
   });
 
   let description = lines.join('\n');

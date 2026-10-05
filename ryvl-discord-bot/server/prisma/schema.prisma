@@ -468,17 +468,22 @@ model SuperligaMvpMatch {
   season        Int
   matchDay      Int?      @map("match_day")
   kickoffAt     DateTime  @map("kickoff_at")
+  // Set the first time VPG moves the kickoff (a rescheduled fixture).
+  originalKickoffAt DateTime? @map("original_kickoff_at")
+  // When the sync first saw the result as complete on VPG.
+  completedAt   DateTime? @map("completed_at")
   homeVpgTeamId Int?      @map("home_vpg_team_id")
   awayVpgTeamId Int?      @map("away_vpg_team_id")
   homeTeamName  String    @map("home_team_name")
   awayTeamName  String    @map("away_team_name")
-  homeScore     Int       @map("home_score")
-  awayScore     Int       @map("away_score")
+  homeScore     Int?      @map("home_score")
+  awayScore     Int?      @map("away_score")
   homeEaClubId  String?   @map("home_ea_club_id")
   awayEaClubId  String?   @map("away_ea_club_id")
   eaMatchId     String?   @map("ea_match_id")
   eaPlayedAt    DateTime? @map("ea_played_at")
-  // PENDING (still looking), LINKED (stats stored), EXPIRED (gave up looking)
+  // SCHEDULED (not played yet), PENDING (played, looking for the EA match),
+  // LINKED (stats stored), EXPIRED (played, but no EA match was found)
   status        String    @default("PENDING")
   attempts      Int       @default(0)
   lastError     String?   @map("last_error")
@@ -528,4 +533,23 @@ model SuperligaMvpPlayerStat {
   @@unique([vpgMatchId, eaClubId, playerProId])
   @@index([leagueSlug, season])
   @@map("superliga_mvp_player_stats")
+}
+
+// One row per player per weekly Team of the Week, recorded when the TOTW is posted.
+// Used as the Superliga MVP tiebreaker. eaNames holds the player's PSN, Xbox and EA
+// names from their VPG profile, so they can be matched to EA match gamertags.
+model SuperligaMvpTotwSelection {
+  id          String   @id @default(uuid())
+  leagueSlug  String   @map("league_slug")
+  season      Int
+  week        Int
+  vpgUsername String   @map("vpg_username")
+  eaNames     String[] @default([]) @map("ea_names")
+  position    String
+  teamName    String?  @map("team_name")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([leagueSlug, season, week, vpgUsername])
+  @@index([leagueSlug, season])
+  @@map("superliga_mvp_totw_selections")
 }

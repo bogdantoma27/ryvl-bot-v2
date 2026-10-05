@@ -649,6 +649,17 @@ export class VpgService {
     };
   }
 
+  /**
+   * The console/EA names a VPG user linked (PSN, Xbox, EA), used to match them to EA
+   * match gamertags. The profile also holds personal data, which is deliberately dropped.
+   */
+  async fetchUserGamertags(username: string): Promise<string[]> {
+    const u = await this.getJson(`/users/${encodeURIComponent(username)}/`);
+    return [u?.psn, u?.xbox, u?.origin]
+      .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+      .map((v) => v.trim());
+  }
+
   /** Single match, which (unlike the list endpoint) carries both team ids. */
   async fetchMatchDetail(matchId: number): Promise<{ id: number; homeTeamId: number | null; awayTeamId: number | null; season: number | null }> {
     const m = await this.getJson(`/matches/${encodeURIComponent(String(matchId))}/`);

@@ -445,6 +445,7 @@ export interface SuperligaMvpEntry {
   role: 'GK' | 'OUTFIELD';
   matches: number;
   score: number;
+  totwCount: number;
   totals: {
     matches: number;
     goals: number;
@@ -471,7 +472,8 @@ export interface SuperligaMvpLeaderboard {
   minMatches: number;
   totalPlayers: number;
   eligiblePlayers: number;
-  matches: { linked: number; pending: number; expired: number };
+  matches: { linked: number; pending: number; expired: number; scheduled: number; overdue: number; cancelled: number };
+  totwWeeks: number;
   lastLinkedAt: string | null;
   entries: SuperligaMvpEntry[];
 }
@@ -480,12 +482,14 @@ export interface SuperligaMvpMatchRow {
   vpgMatchId: number;
   matchDay: number | null;
   kickoffAt: string;
+  originalKickoffAt: string | null;
+  completedAt: string | null;
   homeTeamName: string;
   awayTeamName: string;
-  homeScore: number;
-  awayScore: number;
+  homeScore: number | null;
+  awayScore: number | null;
   eaMatchId: string | null;
-  status: 'PENDING' | 'LINKED' | 'EXPIRED';
+  status: 'SCHEDULED' | 'PENDING' | 'LINKED' | 'EXPIRED' | 'CANCELLED';
   attempts: number;
   lastError: string | null;
   playerCount: number;

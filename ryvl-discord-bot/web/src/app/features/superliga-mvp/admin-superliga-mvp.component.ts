@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
-import { SuperligaMvpEntry, SuperligaMvpLeaderboard, SuperligaMvpMatches } from '../../core/models';
+import { SuperligaMvpEntry, SuperligaMvpLeaderboard, SuperligaMvpMatches, SuperligaMvpMatchRow } from '../../core/models';
 
 @Component({
   selector: 'app-admin-superliga-mvp',
@@ -54,14 +54,18 @@ import { SuperligaMvpEntry, SuperligaMvpLeaderboard, SuperligaMvpMatches } from 
         </div>
 
         @if (board(); as b) {
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-5">
+          <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mt-5">
             <div class="bg-[#11192e] border border-slate-800 rounded-xl p-3">
-              <div class="text-[11px] uppercase font-bold text-slate-400">Matches tracked</div>
+              <div class="text-[11px] uppercase font-bold text-slate-400">Played, stats saved</div>
               <div class="text-xl font-black text-white">{{ b.matches.linked }}</div>
             </div>
             <div class="bg-[#11192e] border border-slate-800 rounded-xl p-3">
-              <div class="text-[11px] uppercase font-bold text-slate-400">Waiting for EA</div>
+              <div class="text-[11px] uppercase font-bold text-slate-400">Played, waiting for EA</div>
               <div class="text-xl font-black text-white">{{ b.matches.pending }}</div>
+            </div>
+            <div class="bg-[#11192e] border border-slate-800 rounded-xl p-3">
+              <div class="text-[11px] uppercase font-bold text-slate-400">Not played yet</div>
+              <div class="text-xl font-black text-white">{{ b.matches.overdue }} <span class="text-xs text-slate-400 font-semibold">overdue · {{ b.matches.scheduled }} upcoming</span></div>
             </div>
             <div class="bg-[#11192e] border border-slate-800 rounded-xl p-3">
               <div class="text-[11px] uppercase font-bold text-slate-400">Ranked players</div>
@@ -70,6 +74,10 @@ import { SuperligaMvpEntry, SuperligaMvpLeaderboard, SuperligaMvpMatches } from 
             <div class="bg-[#11192e] border border-slate-800 rounded-xl p-3">
               <div class="text-[11px] uppercase font-bold text-slate-400">Teams linked to EA</div>
               <div class="text-xl font-black text-white">{{ linkedTeams() }} <span class="text-xs text-slate-400 font-semibold">of {{ matchData()?.teams?.length || 0 }}</span></div>
+            </div>
+            <div class="bg-[#11192e] border border-slate-800 rounded-xl p-3">
+              <div class="text-[11px] uppercase font-bold text-slate-400">TOTW weeks saved</div>
+              <div class="text-xl font-black text-white">{{ b.totwWeeks }}</div>
             </div>
           </div>
         }
@@ -124,6 +132,7 @@ import { SuperligaMvpEntry, SuperligaMvpLeaderboard, SuperligaMvpMatches } from 
             <h2 class="text-sm font-bold text-white">🧮 How the score works</h2>
             <p class="text-xs text-slate-300 leading-relaxed">{{ board()?.formula }}</p>
             @if (board(); as b) {
+              <p class="text-xs text-slate-300 leading-relaxed">Team of the Week picks are saved each time the weekly TOTW is posted, from the Team of the Week tab or automatically.</p>
               <p class="text-xs text-slate-400">Minimum to qualify right now: <span class="text-white font-bold">{{ b.minMatches }}</span> tracked matches.</p>
             }
           </div>
@@ -167,6 +176,7 @@ import { SuperligaMvpEntry, SuperligaMvpLeaderboard, SuperligaMvpMatches } from 
                     <th class="px-3 py-2 text-right">A</th>
                     <th class="px-3 py-2 text-right">Saves</th>
                     <th class="px-3 py-2 text-right">MOTM</th>
+                    <th class="px-3 py-2 text-right" title="Team of the Week picks (tiebreaker)">TOTW</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -190,10 +200,11 @@ import { SuperligaMvpEntry, SuperligaMvpLeaderboard, SuperligaMvpMatches } from 
                       <td class="px-3 py-2 text-right text-slate-200">{{ e.totals.assists }}</td>
                       <td class="px-3 py-2 text-right text-slate-200">{{ e.totals.saves }}</td>
                       <td class="px-3 py-2 text-right text-slate-200">{{ e.totals.mom }}</td>
+                      <td class="px-3 py-2 text-right text-slate-200">{{ e.totwCount }}</td>
                     </tr>
                     @if (expanded() === e.playerName) {
                       <tr class="bg-[#11192e]">
-                        <td colspan="9" class="px-4 py-3">
+                        <td colspan="10" class="px-4 py-3">
                           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
                             @for (m of e.metrics; track m.key) {
                               <div>
@@ -226,8 +237,8 @@ import { SuperligaMvpEntry, SuperligaMvpLeaderboard, SuperligaMvpMatches } from 
       <!-- Match tracking -->
       <div class="bg-[#16213e] border border-slate-800 rounded-2xl shadow-lg overflow-hidden">
         <div class="px-5 py-4 border-b border-slate-800">
-          <h2 class="text-sm font-bold text-white">Match tracking</h2>
-          <p class="text-[11px] text-slate-400">Each Superliga result and the EA match its stats came from.</p>
+          <h2 class="text-sm font-bold text-white">Fixtures and tracking</h2>
+          <p class="text-[11px] text-slate-400">Every Superliga fixture this season: whether it has been played, rescheduled, and whether its EA stats were saved.</p>
         </div>
         <div class="overflow-x-auto max-h-[28rem]">
           <table class="w-full text-xs">
@@ -243,13 +254,26 @@ import { SuperligaMvpEntry, SuperligaMvpLeaderboard, SuperligaMvpMatches } from 
               @for (m of matchData()?.matches || []; track m.vpgMatchId) {
                 <tr class="border-t border-slate-800">
                   <td class="px-3 py-2 text-slate-400">{{ m.matchDay ?? '-' }}</td>
-                  <td class="px-3 py-2 text-white">{{ m.homeTeamName }} <b>{{ m.homeScore }}-{{ m.awayScore }}</b> {{ m.awayTeamName }}</td>
-                  <td class="px-3 py-2 text-slate-300">{{ m.kickoffAt | date: 'd MMM, HH:mm' }}</td>
+                  <td class="px-3 py-2 text-white">
+                    {{ m.homeTeamName }}
+                    @if (m.homeScore !== null) { <b>{{ m.homeScore }}-{{ m.awayScore }}</b> } @else { <span class="text-slate-500">vs</span> }
+                    {{ m.awayTeamName }}
+                  </td>
+                  <td class="px-3 py-2 text-slate-300">
+                    {{ m.kickoffAt | date: 'd MMM, HH:mm' }}
+                    @if (m.originalKickoffAt) { <div class="text-[10px] text-amber-300">Rescheduled from {{ m.originalKickoffAt | date: 'd MMM, HH:mm' }}</div> }
+                    @if (m.completedAt && m.status !== 'EXPIRED' && isLateResult(m)) { <div class="text-[10px] text-slate-500">Result reported {{ m.completedAt | date: 'd MMM, HH:mm' }}</div> }
+                  </td>
                   <td class="px-3 py-2">
                     @switch (m.status) {
-                      @case ('LINKED') { <span class="text-emerald-400 font-bold">Tracked · {{ m.playerCount }} players</span> }
-                      @case ('PENDING') { <span class="text-amber-300 font-bold">Waiting</span> }
-                      @default { <span class="text-slate-500 font-bold">Not tracked</span> }
+                      @case ('LINKED') { <span class="text-emerald-400 font-bold">Played · stats saved ({{ m.playerCount }} players)</span> }
+                      @case ('PENDING') { <span class="text-amber-300 font-bold">Played · waiting for EA match</span> }
+                      @case ('SCHEDULED') {
+                        @if (isOverdue(m)) { <span class="text-rose-300 font-bold">Not played yet (overdue)</span> }
+                        @else { <span class="text-sky-300 font-bold">Upcoming</span> }
+                      }
+                      @case ('CANCELLED') { <span class="text-slate-500 font-bold">Removed from calendar</span> }
+                      @default { <span class="text-slate-500 font-bold">Played · stats not available</span> }
                     }
                     @if (m.lastError) { <div class="text-[10px] text-slate-500">{{ m.lastError }}</div> }
                   </td>
@@ -293,6 +317,14 @@ export class AdminSuperligaMvpComponent {
         void this.load();
       }
     });
+  }
+
+  isOverdue(m: SuperligaMvpMatchRow): boolean {
+    return Date.parse(m.kickoffAt) < Date.now() - 4 * 60 * 60 * 1000;
+  }
+
+  isLateResult(m: SuperligaMvpMatchRow): boolean {
+    return !!m.completedAt && Date.parse(m.completedAt) - Date.parse(m.kickoffAt) > 24 * 60 * 60 * 1000;
   }
 
   medal(rank: number): string {

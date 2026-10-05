@@ -84,7 +84,8 @@ export const MVP_FORMULA_DESCRIPTION =
   'Each stat is converted to a percentile rank (0-100) among eligible players of the same role ' +
   '(goalkeepers vs outfield), and the MVP score is the median of those percentiles. ' +
   'Stats are per-match averages, plus pass and tackle accuracy. Red cards and goals conceded count against. ' +
-  'Players need at least the minimum number of tracked Superliga matches to be ranked.';
+  'Players need at least the minimum number of tracked Superliga matches to be ranked. ' +
+  'If two players have the same score, the one picked for more Teams of the Week ranks higher.';
 
 export interface MvpLeaderboardEntry {
   rank: number;
@@ -93,6 +94,7 @@ export interface MvpLeaderboardEntry {
   role: MvpRole;
   matches: number;
   score: number;
+  totwCount: number;
   totals: MvpTotals;
   metrics: Array<{ key: string; label: string; value: number; percentile: number }>;
 }
@@ -198,7 +200,20 @@ export function defaultMinMatches(maxMatches: number): number {
   return Math.max(1, Math.ceil(maxMatches / 2));
 }
 
-export function buildMvpLeaderboard(rows: MvpStatRow[], minMatches?: number | null): MvpLeaderboardResult {
+/** Counts Team of the Week picks per player. Selections carry every name a player is known by. */
+export function totwCounter(selections: Array<{ names: string[] }>): (playerName: string) => number {
+  const counts = new Map<string, number>();
+  for (const s of selections) {
+    for (const key of new Set(s.names.map(playerKey).filter(Boolean))) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return (playerName) => counts.get(playerKey(playerName)) ?? 0;
+}
+
+export function buildMvpLeaderboard(
+  rows: MvpStatRow[],
+  minMatches?: number | null,
+  totwCountFor: (playerName: string) => number = () => 0,
+): MvpLeaderboardResult {
   const players = aggregatePlayers(rows);
   const maxMatches = players.reduce((m, p) => Math.max(m, p.totals.matches), 0);
   const threshold = minMatches && minMatches > 0 ? Math.floor(minMatches) : defaultMinMatches(maxMatches);
@@ -220,6 +235,7 @@ export function buildMvpLeaderboard(rows: MvpStatRow[], minMatches?: number | nu
         role,
         matches: p.totals.matches,
         score: round1(median(metrics.map((m) => m.percentile))),
+        totwCount: totwCountFor(p.playerName),
         totals: p.totals,
         metrics,
       });
@@ -229,6 +245,7 @@ export function buildMvpLeaderboard(rows: MvpStatRow[], minMatches?: number | nu
   scored.sort(
     (a, b) =>
       b.score - a.score ||
+      b.totwCount - a.totwCount ||
       b.totals.ratingSum / b.matches - a.totals.ratingSum / a.matches ||
       b.matches - a.matches ||
       a.playerName.localeCompare(b.playerName),

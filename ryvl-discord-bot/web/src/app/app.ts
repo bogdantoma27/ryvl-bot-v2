@@ -231,23 +231,13 @@ import { User } from './core/models';
                 </a>
 
                 <a
-                  routerLink="/admin/totw"
+                  routerLink="/admin/superliga-awards"
                   routerLinkActive="!bg-gradient-to-r !from-amber-500 !to-yellow-500 !text-black font-bold shadow-md shadow-amber-500/20"
                   (click)="closeMobileSidebar()"
                   class="flex items-center gap-3 px-3 py-2 rounded-xl font-semibold text-slate-200 hover:text-white hover:bg-[#1f2e54] transition cursor-pointer"
                 >
-                  <span class="text-sm">⭐</span>
-                  <span>Team of the Week</span>
-                </a>
-
-                <a
-                  routerLink="/admin/superliga-mvp"
-                  routerLinkActive="!bg-gradient-to-r !from-amber-500 !to-yellow-500 !text-black font-bold shadow-md shadow-amber-500/20"
-                  (click)="closeMobileSidebar()"
-                  class="flex items-center gap-3 px-3 py-2 rounded-xl font-semibold text-slate-200 hover:text-white hover:bg-[#1f2e54] transition cursor-pointer"
-                >
-                  <span class="text-sm">🏅</span>
-                  <span>Superliga MVP</span>
+                  <span class="text-sm">🏆</span>
+                  <span>Superliga Awards</span>
                 </a>
               </div>
 

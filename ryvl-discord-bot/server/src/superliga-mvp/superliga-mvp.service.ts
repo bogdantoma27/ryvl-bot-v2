@@ -5,13 +5,17 @@ import { VpgMatchItem } from '../vpg/vpg.types';
 import { EaService } from '../ea/ea.service';
 import { EaRawMatch, EaMatchPlayerStat } from '../ea/ea.types';
 import { mergeEaRawMatch } from '../ea/ea-match-type';
-import { pickEaMatch, MATCH_WINDOW_AFTER_MS } from './mvp-matching';
-import { buildMvpLeaderboard, MVP_FORMULA_DESCRIPTION, MvpLeaderboardEntry } from './mvp-score';
+import { pickEaMatch } from './mvp-matching';
+import { buildMvpLeaderboard, totwCounter, MVP_FORMULA_DESCRIPTION, MvpLeaderboardEntry } from './mvp-score';
 
 export const SUPERLIGA_LEAGUE_SLUG = 'Superliga-Romania';
 // EA only keeps each club's last few games per category, so a VPG result is only
-// linkable for a while after kickoff. After this we stop looking.
+// linkable for a while after it is played. We look for this long after the later of
+// kickoff and the moment the result appeared on VPG (a rescheduled game can be
+// reported days after its original kickoff).
 export const LINK_GIVE_UP_MS = 72 * 60 * 60 * 1000;
+// A fixture still not reported this long after kickoff is shown as not played yet.
+export const OVERDUE_AFTER_MS = 4 * 60 * 60 * 1000;
 // VPG Superliga games are played as private club friendlies, but check every feed.
 const EA_MATCH_TYPES = ['friendlyMatch', 'leagueMatch', 'playoffMatch'];
 const EA_PLATFORM = 'common-gen5';
@@ -35,7 +39,8 @@ export interface MvpLeaderboardResponse {
   minMatches: number;
   totalPlayers: number;
   eligiblePlayers: number;
-  matches: { linked: number; pending: number; expired: number };
+  matches: { linked: number; pending: number; expired: number; scheduled: number; overdue: number; cancelled: number };
+  totwWeeks: number;
   lastLinkedAt: string | null;
   entries: MvpLeaderboardEntry[];
 }
@@ -90,7 +95,13 @@ export class SuperligaMvpService {
     const teamsById = await this.refreshTeams(leagueSlug, errors);
 
     const completed = await this.vpg.fetchAllMatches('complete', season, leagueSlug);
-    const newMatches = await this.recordNewMatches(leagueSlug, season, completed);
+    let scheduled: VpgMatchItem[] | null = null;
+    try {
+      scheduled = await this.vpg.fetchAllMatches('scheduled', season, leagueSlug);
+    } catch (err: any) {
+      errors.push(`Could not load upcoming fixtures: ${err.message}`);
+    }
+    const newMatches = await this.syncFixtures(leagueSlug, season, completed, scheduled);
 
     const pending = await this.prisma.superligaMvpMatch.findMany({
       where: { leagueSlug, season, status: 'PENDING' },
@@ -142,43 +153,80 @@ export class SuperligaMvpService {
     return byId;
   }
 
-  private async recordNewMatches(leagueSlug: string, season: number, completed: VpgMatchItem[]): Promise<number> {
-    const playable = completed.filter((m) => m.homeScore != null && m.awayScore != null && !Number.isNaN(Date.parse(m.datetime)));
-    if (!playable.length) return 0;
-    const known = await this.prisma.superligaMvpMatch.findMany({
-      where: { vpgMatchId: { in: playable.map((m) => m.id) } },
-      select: { vpgMatchId: true },
-    });
-    const knownIds = new Set(known.map((k) => k.vpgMatchId));
-    const now = Date.now();
-    let created = 0;
-    for (const m of playable) {
-      if (knownIds.has(m.id)) continue;
-      const kickoffAt = new Date(m.datetime);
-      // Results from before tracking started are too old for EA's short match history.
-      const tooOld = now - kickoffAt.getTime() > LINK_GIVE_UP_MS;
-      const inserted = await this.prisma.superligaMvpMatch.create({
-        data: {
-          vpgMatchId: m.id,
-          leagueSlug,
-          season,
-          matchDay: m.matchDay || null,
-          kickoffAt,
-          homeTeamName: m.homeName,
-          awayTeamName: m.awayName,
-          homeScore: Number(m.homeScore),
-          awayScore: Number(m.awayScore),
-          status: tooOld ? 'EXPIRED' : 'PENDING',
-          lastError: tooOld ? 'Played before Superliga MVP tracking could reach it in EA match history' : null,
-        },
-      }).then(() => true).catch((err: any) => {
-        // A concurrent sync may have inserted it; anything else is a real error.
+  /**
+   * Keeps one row per Superliga fixture: upcoming ones as SCHEDULED (following any
+   * kickoff change VPG makes), and completed ones as PENDING until their EA match is
+   * found. Returns how many results were newly seen as complete.
+   */
+  private async syncFixtures(leagueSlug: string, season: number, completed: VpgMatchItem[], scheduled: VpgMatchItem[] | null) {
+    const valid = (m: VpgMatchItem) => Number.isFinite(m.id) && !Number.isNaN(Date.parse(m.datetime));
+    const done = completed.filter((m) => valid(m) && m.homeScore != null && m.awayScore != null);
+    const upcoming = (scheduled ?? []).filter(valid);
+    const existing = await this.prisma.superligaMvpMatch.findMany({ where: { leagueSlug, season } });
+    const byId = new Map(existing.map((r) => [r.vpgMatchId, r]));
+    // On the very first sync of a season, results older than the EA history were played
+    // before tracking started. Later, any newly completed result is fresh, even when its
+    // kickoff is old because the game was rescheduled.
+    const isBackfill = existing.length === 0;
+    const now = new Date();
+
+    const kickoffChange = (row: (typeof existing)[number] | undefined, kickoffAt: Date) =>
+      row && row.kickoffAt.getTime() !== kickoffAt.getTime()
+        ? { kickoffAt, originalKickoffAt: row.originalKickoffAt ?? row.kickoffAt }
+        : {};
+    const create = (data: any) =>
+      this.prisma.superligaMvpMatch.create({ data }).then(() => true).catch((err: any) => {
+        // Another server process may have inserted it; anything else is a real error.
         if (err?.code !== 'P2002') throw err;
         return false;
       });
-      if (inserted) created++;
+
+    for (const m of upcoming) {
+      const kickoffAt = new Date(m.datetime);
+      const row = byId.get(m.id);
+      if (!row) {
+        await create({ vpgMatchId: m.id, leagueSlug, season, matchDay: m.matchDay || null, kickoffAt, homeTeamName: m.homeName, awayTeamName: m.awayName, status: 'SCHEDULED' });
+      } else if (row.status === 'SCHEDULED' || row.status === 'CANCELLED') {
+        await this.prisma.superligaMvpMatch.update({
+          where: { id: row.id },
+          data: { status: 'SCHEDULED', homeTeamName: m.homeName, awayTeamName: m.awayName, matchDay: m.matchDay || row.matchDay, ...kickoffChange(row, kickoffAt) },
+        });
+      }
     }
-    return created;
+
+    let newlyCompleted = 0;
+    for (const m of done) {
+      const kickoffAt = new Date(m.datetime);
+      const scores = { homeScore: Number(m.homeScore), awayScore: Number(m.awayScore) };
+      const row = byId.get(m.id);
+      if (!row) {
+        const tooOld = isBackfill && now.getTime() - kickoffAt.getTime() > LINK_GIVE_UP_MS;
+        const inserted = await create({
+          vpgMatchId: m.id, leagueSlug, season, matchDay: m.matchDay || null, kickoffAt,
+          homeTeamName: m.homeName, awayTeamName: m.awayName, ...scores, completedAt: now,
+          status: tooOld ? 'EXPIRED' : 'PENDING',
+          lastError: tooOld ? 'Played before Superliga MVP tracking could reach it in EA match history' : null,
+        });
+        if (inserted) newlyCompleted++;
+      } else if (row.status === 'SCHEDULED' || row.status === 'CANCELLED') {
+        await this.prisma.superligaMvpMatch.update({
+          where: { id: row.id },
+          data: { ...scores, ...kickoffChange(row, kickoffAt), status: 'PENDING', completedAt: now, lastError: null },
+        });
+        newlyCompleted++;
+      } else if (row.homeScore !== scores.homeScore || row.awayScore !== scores.awayScore) {
+        // A corrected result. Stats already stored stay; an unlinked match retries with the new score.
+        await this.prisma.superligaMvpMatch.update({ where: { id: row.id }, data: scores });
+      }
+    }
+
+    // A fixture that disappeared from both lists was removed from the calendar.
+    if (scheduled) {
+      const listed = new Set([...done, ...upcoming].map((m) => m.id));
+      const gone = existing.filter((r) => r.status === 'SCHEDULED' && !listed.has(r.vpgMatchId)).map((r) => r.id);
+      if (gone.length) await this.prisma.superligaMvpMatch.updateMany({ where: { id: { in: gone } }, data: { status: 'CANCELLED' } });
+    }
+    return newlyCompleted;
   }
 
   private async fetchClubMatches(clubId: string, cache: Map<string, EaRawMatch[]>): Promise<EaRawMatch[]> {
@@ -198,7 +246,7 @@ export class SuperligaMvpService {
   }
 
   private async tryLink(
-    match: { id: string; vpgMatchId: number; kickoffAt: Date; homeScore: number; awayScore: number; homeVpgTeamId: number | null; awayVpgTeamId: number | null; attempts: number },
+    match: { id: string; vpgMatchId: number; kickoffAt: Date; completedAt: Date | null; createdAt: Date; homeScore: number | null; awayScore: number | null; homeVpgTeamId: number | null; awayVpgTeamId: number | null; attempts: number },
     teams: Map<number, { name: string; eaClubId: string | null }>,
     eaCache: Map<string, EaRawMatch[]>,
   ): Promise<'LINKED' | 'PENDING' | 'EXPIRED'> {
@@ -211,7 +259,8 @@ export class SuperligaMvpService {
     }
     const homeEa = homeTeamId != null ? teams.get(homeTeamId)?.eaClubId ?? null : null;
     const awayEa = awayTeamId != null ? teams.get(awayTeamId)?.eaClubId ?? null : null;
-    const giveUp = Date.now() - match.kickoffAt.getTime() > LINK_GIVE_UP_MS;
+    const reportedAt = match.completedAt ?? match.createdAt;
+    const giveUp = Date.now() - Math.max(match.kickoffAt.getTime(), reportedAt.getTime()) > LINK_GIVE_UP_MS;
 
     const base = {
       homeVpgTeamId: homeTeamId,
@@ -229,12 +278,10 @@ export class SuperligaMvpService {
       for (const clubId of [homeEa, awayEa]) {
         if (!clubId) continue;
         candidates.push(...(await this.fetchClubMatches(clubId, eaCache)));
-        found = pickEaMatch(candidates, { kickoffAt: match.kickoffAt, homeScore: match.homeScore, awayScore: match.awayScore, homeEaClubId: homeEa, awayEaClubId: awayEa });
+        found = pickEaMatch(candidates, { kickoffAt: match.kickoffAt, reportedAt, homeScore: match.homeScore ?? 0, awayScore: match.awayScore ?? 0, homeEaClubId: homeEa, awayEaClubId: awayEa });
         if (found) break;
       }
-      reason = Date.now() < match.kickoffAt.getTime() + MATCH_WINDOW_AFTER_MS
-        ? 'Waiting for the EA match to appear'
-        : 'No EA match between these clubs near kickoff';
+      reason = giveUp ? 'No EA match between these clubs was found' : 'Waiting for the EA match to appear';
     }
 
     if (!found) {
@@ -305,12 +352,15 @@ export class SuperligaMvpService {
   async getLeaderboard(opts: { season?: number | null; minMatches?: number | null; limit?: number | null } = {}): Promise<MvpLeaderboardResponse> {
     const leagueSlug = SUPERLIGA_LEAGUE_SLUG;
     const season = await this.resolveSeason(leagueSlug, opts.season);
-    const [rows, counts, lastLinked] = await Promise.all([
+    const [rows, counts, lastLinked, totw, overdue] = await Promise.all([
       this.prisma.superligaMvpPlayerStat.findMany({ where: { leagueSlug, season } }),
       this.prisma.superligaMvpMatch.groupBy({ by: ['status'], where: { leagueSlug, season }, _count: { _all: true } }),
       this.prisma.superligaMvpMatch.findFirst({ where: { leagueSlug, season, status: 'LINKED' }, orderBy: { eaPlayedAt: 'desc' } }),
+      this.prisma.superligaMvpTotwSelection.findMany({ where: { leagueSlug, season } }),
+      this.prisma.superligaMvpMatch.count({ where: { leagueSlug, season, status: 'SCHEDULED', kickoffAt: { lt: new Date(Date.now() - OVERDUE_AFTER_MS) } } }),
     ]);
-    const board = buildMvpLeaderboard(rows, opts.minMatches);
+    const countTotw = totwCounter(totw.map((t) => ({ names: [t.vpgUsername, ...t.eaNames] })));
+    const board = buildMvpLeaderboard(rows, opts.minMatches, countTotw);
     const count = (s: string) => counts.find((c) => c.status === s)?._count._all ?? 0;
     const limit = opts.limit && opts.limit > 0 ? Math.min(opts.limit, 200) : 50;
     return {
@@ -320,7 +370,15 @@ export class SuperligaMvpService {
       minMatches: board.minMatches,
       totalPlayers: board.totalPlayers,
       eligiblePlayers: board.eligiblePlayers,
-      matches: { linked: count('LINKED'), pending: count('PENDING'), expired: count('EXPIRED') },
+      matches: {
+        linked: count('LINKED'),
+        pending: count('PENDING'),
+        expired: count('EXPIRED'),
+        scheduled: count('SCHEDULED') - overdue,
+        overdue,
+        cancelled: count('CANCELLED'),
+      },
+      totwWeeks: new Set(totw.map((t) => t.week)).size,
       lastLinkedAt: lastLinked?.eaPlayedAt?.toISOString() ?? null,
       entries: board.entries.slice(0, limit),
     };
@@ -332,9 +390,9 @@ export class SuperligaMvpService {
     const [matches, teams] = await Promise.all([
       this.prisma.superligaMvpMatch.findMany({
         where: { leagueSlug, season: resolved },
-        orderBy: { kickoffAt: 'desc' },
+        orderBy: [{ kickoffAt: 'desc' }, { vpgMatchId: 'desc' }],
         select: {
-          vpgMatchId: true, matchDay: true, kickoffAt: true, homeTeamName: true, awayTeamName: true,
+          vpgMatchId: true, matchDay: true, kickoffAt: true, originalKickoffAt: true, completedAt: true, homeTeamName: true, awayTeamName: true,
           homeScore: true, awayScore: true, eaMatchId: true, eaPlayedAt: true, status: true,
           attempts: true, lastError: true, _count: { select: { players: true } },
         },
