@@ -24,7 +24,24 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
+      - name: Skip if a newer main commit superseded this run
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          MAIN_SHA="$(gh api "repos/$GH_REPO/commits/main" --jq '.sha')"
+          if [ "$MAIN_SHA" = "$RELEASE_SHA" ]; then
+            echo 'deploy=true' >> "$GITHUB_OUTPUT"
+          else
+            # The run for the newer commit deploys it (it includes this commit).
+            echo "::notice::main moved to $MAIN_SHA; skipping deploy of superseded $RELEASE_SHA."
+            echo 'deploy=false' >> "$GITHUB_OUTPUT"
+          fi
       - name: Deploy the validated revision over SSH
+        if: steps.current.outputs.deploy == 'true'
         uses: appleboy/ssh-action@7eaf76671a0d7eec5d98ee897acda4f968735a17
         env:
           RELEASE_SHA: ${{ github.sha }}
@@ -71,10 +88,12 @@ jobs:
             console.log('Verified deployed EA friendly embed classification; no Discord or database requests.');
             NODE
       - name: Verify public DNS, TLS, application and OAuth configuration
+        if: steps.current.outputs.deploy == 'true'
         env:
           EXPECTED_REVISION: ${{ github.sha }}
         run: node ryvl-discord-bot/deploy/verify-public-site.mjs
       - name: Verify live public headers, Club Tracker and Admin navigation
+        if: steps.current.outputs.deploy == 'true'
         run: |
           # Guest-only checks; do not sign into Discord or send test data to production.
           npm install --prefix "$RUNNER_TEMP/ryvl-browser" --no-save @playwright/test@1.56.1
