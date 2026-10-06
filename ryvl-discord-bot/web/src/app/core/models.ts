@@ -699,3 +699,49 @@ export interface SuperligaMvpSyncResult {
   expired: number;
   errors: string[];
 }
+
+// Dashboard health (GET api/guilds/:guildId/health)
+export type HealthState = 'ok' | 'warning' | 'error' | 'off';
+
+export interface HealthVerdict {
+  status: HealthState;
+  reason: string;
+}
+
+export interface GuildHealth {
+  generatedAt: string;
+  eaTracker: HealthVerdict & {
+    configured: boolean;
+    enabled: boolean;
+    clubId: string | null;
+    clubName: string | null;
+    channelId: string | null;
+    lastPolledAt: string | null;
+    pollIntervalSec: number | null;
+    pendingPosts: number;
+    failedPosts: number;
+  };
+  trackedClubs: HealthVerdict & {
+    total: number;
+    enabled: number;
+    clubs: Array<{ clubId: string; clubName: string; platform: string; enabled: boolean; channelId: string | null; lastPolledAt: string | null }>;
+  };
+  vpgTransfers: HealthVerdict & { configured: boolean; enabled: boolean; channelId: string | null; lastPolledAt: string | null; pollIntervalSec: number | null };
+  vpgNotifications: HealthVerdict & {
+    configured: boolean;
+    lastPolledAt: string | null;
+    lastSuccessAt: string | null;
+    lastError: string | null;
+    retryAfter: string | null;
+    pollIntervalSec: number | null;
+  };
+  superligaMvp: HealthVerdict & { season: number | null; counts: Record<string, number>; lastAttemptAt: string | null; lastError: string | null };
+  totw: HealthVerdict & {
+    configs: Array<{ leagueSlug: string; enabled: boolean; channelId: string | null; cronSchedule: string | null; lastPostedAt: string | null }>;
+  };
+  events: HealthVerdict & {
+    nextOccurrence: { eventId: string; title: string; startsAt: string } | null;
+    stuckClaims: number;
+    overdue: number;
+  };
+}

@@ -8,6 +8,7 @@ import {
   EventItem,
   EventRsvp,
   GuildBootstrap,
+  GuildHealth,
   GuildMemberOption,
   GuildSettings,
   GuildSummary,
@@ -221,6 +222,14 @@ export class ApiService {
   getSettings(guildId: string): Promise<GuildSettings> {
     return firstValueFrom(
       this.http.get<GuildSettings>(`${this.baseUrl}/api/guilds/${guildId}/settings`, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  getGuildHealth(guildId: string): Promise<GuildHealth> {
+    return firstValueFrom(
+      this.http.get<GuildHealth>(`${this.baseUrl}/api/guilds/${guildId}/health`, {
         headers: this.headers(),
       })
     );

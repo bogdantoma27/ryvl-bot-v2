@@ -1,4 +1,3 @@
-import { VpgNotificationsComponent } from './vpg-notifications.component';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -23,7 +22,7 @@ import {
   selector: 'app-admin-performance',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, RouterLink, VpgNotificationsComponent],
+  imports: [CommonModule, FormsModule, RouterLink],
   template: `
     <div class="max-w-7xl w-full mx-auto space-y-8 animate-fadeIn">
       <!-- Header -->
@@ -80,8 +79,6 @@ import {
           <button type="button" (click)="errorMessage.set(null)" class="text-slate-300 hover:text-white font-bold p-1 cursor-pointer">✕</button>
         </div>
       }
-
-      <app-vpg-notifications />
 
       <!-- Section 1: Multi-Competition Tracking Slots -->
       <div class="p-6 rounded-2xl bg-[#16213e] border border-slate-700/60 shadow-xl space-y-6">
@@ -239,7 +236,8 @@ import {
             </p>
           </div>
           <a
-            routerLink="/admin/settings"
+            routerLink="/admin/server"
+            [queryParams]="{ tab: 'channels' }"
             class="text-xs font-semibold text-[#5865F2] hover:underline flex items-center gap-1 self-start sm:self-center"
           >
             <span>Configure Default Channels</span>
@@ -265,7 +263,7 @@ import {
                   [(ngModel)]="selectedResultsChannel"
                   class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#EAE905]"
                 >
-                  <option value="">Default (from Settings)</option>
+                  <option value="">Default (from Channels)</option>
                   @for (ch of channels(); track ch.id) {
                     <option [value]="ch.id"># {{ ch.name }}</option>
                   }
@@ -305,7 +303,7 @@ import {
                   [(ngModel)]="selectedFixturesChannel"
                   class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#EAE905]"
                 >
-                  <option value="">Default (from Settings)</option>
+                  <option value="">Default (from Channels)</option>
                   @for (ch of channels(); track ch.id) {
                     <option [value]="ch.id"># {{ ch.name }}</option>
                   }
@@ -345,7 +343,7 @@ import {
                   [(ngModel)]="selectedLeaderboardChannel"
                   class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-[#EAE905]"
                 >
-                  <option value="">Default (from Settings)</option>
+                  <option value="">Default (from Channels)</option>
                   @for (ch of channels(); track ch.id) {
                     <option [value]="ch.id"># {{ ch.name }}</option>
                   }

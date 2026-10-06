@@ -25,8 +25,8 @@ export type EaTrackerTab = 'clubs' | 'matches' | 'roster' | 'players';
               <span>Multi-Club EA FC Pro Clubs Tracker</span>
             </h3>
             <p class="text-xs text-slate-400 mt-1">
-              Track multiple clubs concurrently. Each club can announce into its own channel, or fall back to your
-              <a routerLink="/admin/settings" class="text-emerald-400 hover:underline font-medium">Default Live Results Channel</a> configured in Settings.
+              Track multiple clubs concurrently. Each club can announce into its own channel, or fall back to the
+              <a routerLink="/admin/server" [queryParams]="{ tab: 'channels' }" class="text-emerald-400 hover:underline font-medium">Superliga results channel</a> set on the Channels tab.
               Elo uses K=32 against the opponent's Elo (1200 for clubs this server does not track).
             </p>
           </div>
@@ -86,7 +86,7 @@ export type EaTrackerTab = 'clubs' | 'matches' | 'roster' | 'players';
                         (ngModelChange)="onUpdateClubChannel(tc, $event)"
                         class="bg-[#11192e] border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                       >
-                        <option [ngValue]="null">Default {{ defaultLiveResultsChannelName() ? '(#' + defaultLiveResultsChannelName() + ' from Settings)' : '(from Server Settings)' }}</option>
+                        <option [ngValue]="null">Default {{ defaultLiveResultsChannelName() ? '(#' + defaultLiveResultsChannelName() + ' from Channels)' : '(Superliga results channel)' }}</option>
                         @for (c of availableChannels(); track c.id) {
                           <option [ngValue]="c.id"># {{ c.name }}</option>
                         }
@@ -327,7 +327,7 @@ export type EaTrackerTab = 'clubs' | 'matches' | 'roster' | 'players';
                             (ngModelChange)="setSelectedChannelForClub(club.clubId, $event)"
                             class="w-full bg-[#0d1424] border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                           >
-                            <option [ngValue]="null">Default {{ defaultLiveResultsChannelName() ? '(#' + defaultLiveResultsChannelName() + ' from Settings)' : '(from Server Settings)' }}</option>
+                            <option [ngValue]="null">Default {{ defaultLiveResultsChannelName() ? '(#' + defaultLiveResultsChannelName() + ' from Channels)' : '(Superliga results channel)' }}</option>
                             @for (c of availableChannels(); track c.id) {
                               <option [ngValue]="c.id"># {{ c.name }}</option>
                             }
@@ -404,7 +404,7 @@ export type EaTrackerTab = 'clubs' | 'matches' | 'roster' | 'players';
                     [(ngModel)]="newClubChannelId"
                     class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 cursor-pointer"
                   >
-                    <option [ngValue]="null">Default {{ defaultLiveResultsChannelName() ? '(#' + defaultLiveResultsChannelName() + ' from Settings)' : '(from Server Settings)' }}</option>
+                    <option [ngValue]="null">Default {{ defaultLiveResultsChannelName() ? '(#' + defaultLiveResultsChannelName() + ' from Channels)' : '(Superliga results channel)' }}</option>
                     @for (c of availableChannels(); track c.id) {
                       <option [ngValue]="c.id"># {{ c.name }}</option>
                     }

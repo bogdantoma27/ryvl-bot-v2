@@ -1,5 +1,5 @@
 import { inject } from '@angular/core';
-import { CanMatchFn, Router, Routes } from '@angular/router';
+import { CanMatchFn, Params, Router, Routes } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ApiService } from './core/api.service';
 
@@ -26,8 +26,26 @@ export const authGuard: CanMatchFn = async () => {
   }
 };
 
-const awardsTab = (tab: 'mvp' | 'totw') => () =>
-  inject(Router).createUrlTree(['/admin/superliga-awards'], { queryParams: { tab } });
+type Section = 'club' | 'superliga' | 'community' | 'server';
+
+/**
+ * Redirect for a page that became a tab of a section (`/admin/<section>?tab=<tab>`).
+ * Keeps the old URL's query parameters (e.g. a lineup `draftId`); `view` picks a
+ * nested tab such as the awards' MVP / Team of the Week.
+ */
+const sectionTab = (section: Section, tab: string, view?: string) =>
+  ({ queryParams }: { queryParams: Params }) =>
+    inject(Router).createUrlTree(['/admin', section], {
+      queryParams: { ...queryParams, tab, ...(view ? { view } : {}) },
+    });
+
+// The old awards page used ?tab=mvp|totw for its own tabs: carry that over as the view.
+const awardsRedirect = ({ queryParams }: { queryParams: Params }) => {
+  const { tab, ...rest } = queryParams;
+  return inject(Router).createUrlTree(['/admin/superliga'], {
+    queryParams: { ...rest, tab: 'awards', ...(tab === 'mvp' || tab === 'totw' ? { view: tab } : {}) },
+  });
+};
 
 export const routes: Routes = [
   // ---------------------------------------------------------------------------
@@ -129,15 +147,40 @@ export const routes: Routes = [
   {
     path: 'admin/dashboard',
     canMatch: [authGuard],
+    title: 'Overview | RYVL Admin',
     loadComponent: () =>
       import('./features/dashboard/dashboard.component').then((m) => m.DashboardComponent),
   },
+  // Five tabbed sections; every tab is lazy-loaded by its section (see admin-sections/).
   {
-    path: 'admin/events',
+    path: 'admin/club',
     canMatch: [authGuard],
+    title: 'Club | RYVL Admin',
     loadComponent: () =>
-      import('./features/events/event-list.component').then((m) => m.EventListComponent),
+      import('./features/admin-sections/club-section.component').then((m) => m.ClubSectionComponent),
   },
+  {
+    path: 'admin/superliga',
+    canMatch: [authGuard],
+    title: 'Superliga | RYVL Admin',
+    loadComponent: () =>
+      import('./features/admin-sections/superliga-section.component').then((m) => m.SuperligaSectionComponent),
+  },
+  {
+    path: 'admin/community',
+    canMatch: [authGuard],
+    title: 'Community | RYVL Admin',
+    loadComponent: () =>
+      import('./features/admin-sections/community-section.component').then((m) => m.CommunitySectionComponent),
+  },
+  {
+    path: 'admin/server',
+    canMatch: [authGuard],
+    title: 'Server | RYVL Admin',
+    loadComponent: () =>
+      import('./features/admin-sections/server-section.component').then((m) => m.ServerSectionComponent),
+  },
+  // Creating and viewing one event keep their own pages.
   {
     path: 'admin/events/new',
     canMatch: [authGuard],
@@ -150,100 +193,31 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/events/event-detail.component').then((m) => m.EventDetailComponent),
   },
-  {
-    path: 'admin/lineup',
-    canMatch: [authGuard],
-    loadComponent: () =>
-      import('./features/lineup/lineup.component').then((m) => m.LineupComponent),
-  },
-  {
-    path: 'admin/lineup/drafts',
-    canMatch: [authGuard],
-    loadComponent: () =>
-      import('./features/lineup/lineup-drafts.component').then((m) => m.LineupDraftsComponent),
-  },
-  {
-    path: 'admin/club',
-    canMatch: [authGuard],
-    loadComponent: () =>
-      import('./features/ea-tracker/ea-tracker.component').then((m) => m.EaTrackerComponent),
-  },
-  {
-    path: 'admin/transfers',
-    canMatch: [authGuard],
-    loadComponent: () =>
-      import('./features/vpg-transfers/vpg-transfers.component').then((m) => m.VpgTransfersComponent),
-  },
-  {
-    path: 'admin/superliga-awards',
-    canMatch: [authGuard],
-    title: 'Superliga Awards | RYVL',
-    loadComponent: () =>
-      import('./features/superliga-awards/admin-superliga-awards.component').then((m) => m.AdminSuperligaAwardsComponent),
-  },
-  // Team of the Week and Superliga MVP now live together on Superliga Awards.
-  { path: 'admin/totw', redirectTo: awardsTab('totw') },
-  { path: 'admin/superliga-mvp', redirectTo: awardsTab('mvp') },
-  {
-    path: 'admin/tournaments',
-    canMatch: [authGuard],
-    loadComponent: () =>
-      import('./features/tournaments/admin-tournaments.component').then((m) => m.AdminTournamentsComponent),
-  },
-  {
-    path: 'admin/performance',
-    canMatch: [authGuard],
-    loadComponent: () =>
-      import('./features/performance/admin-performance.component').then(
-        (m) => m.AdminPerformanceComponent,
-      ),
-  },
-  {
-    path: 'admin/settings',
-    canMatch: [authGuard],
-    loadComponent: () =>
-      import('./features/settings/settings.component').then((m) => m.SettingsComponent),
-  },
+
+  // Pages that became section tabs.
+  { path: 'admin/events', pathMatch: 'full', redirectTo: sectionTab('community', 'events') },
+  { path: 'admin/tournaments', pathMatch: 'full', redirectTo: sectionTab('community', 'tournaments') },
+  { path: 'admin/lineup', pathMatch: 'full', redirectTo: sectionTab('club', 'lineup') },
+  { path: 'admin/lineup/drafts', pathMatch: 'full', redirectTo: sectionTab('club', 'drafts') },
+  { path: 'admin/performance', pathMatch: 'full', redirectTo: sectionTab('club', 'performance') },
+  { path: 'admin/transfers', pathMatch: 'full', redirectTo: sectionTab('superliga', 'transfers') },
+  { path: 'admin/superliga-awards', pathMatch: 'full', redirectTo: awardsRedirect },
+  { path: 'admin/totw', pathMatch: 'full', redirectTo: sectionTab('superliga', 'awards', 'totw') },
+  { path: 'admin/superliga-mvp', pathMatch: 'full', redirectTo: sectionTab('superliga', 'awards', 'mvp') },
+  { path: 'admin/settings', pathMatch: 'full', redirectTo: sectionTab('server', 'general') },
 
   // ---------------------------------------------------------------------------
   // Legacy Direct Redirects (for backwards compatibility)
   // ---------------------------------------------------------------------------
-  {
-    path: 'dashboard',
-    redirectTo: 'admin/dashboard',
-  },
-  {
-    path: 'events',
-    redirectTo: 'admin/events',
-  },
-  {
-    path: 'events/new',
-    redirectTo: 'admin/events/new',
-  },
-  {
-    path: 'events/:eventId',
-    redirectTo: 'admin/events/:eventId',
-  },
-  {
-    path: 'lineup',
-    redirectTo: 'admin/lineup',
-  },
-  {
-    path: 'lineup/drafts',
-    redirectTo: 'admin/lineup/drafts',
-  },
-  {
-    path: 'totw',
-    redirectTo: awardsTab('totw'),
-  },
-  {
-    path: 'tournaments',
-    redirectTo: 'admin/tournaments',
-  },
-  {
-    path: 'settings',
-    redirectTo: 'admin/settings',
-  },
+  { path: 'dashboard', redirectTo: 'admin/dashboard' },
+  { path: 'events', pathMatch: 'full', redirectTo: sectionTab('community', 'events') },
+  { path: 'events/new', redirectTo: 'admin/events/new' },
+  { path: 'events/:eventId', redirectTo: 'admin/events/:eventId' },
+  { path: 'lineup', pathMatch: 'full', redirectTo: sectionTab('club', 'lineup') },
+  { path: 'lineup/drafts', pathMatch: 'full', redirectTo: sectionTab('club', 'drafts') },
+  { path: 'totw', pathMatch: 'full', redirectTo: sectionTab('superliga', 'awards', 'totw') },
+  { path: 'tournaments', pathMatch: 'full', redirectTo: sectionTab('community', 'tournaments') },
+  { path: 'settings', pathMatch: 'full', redirectTo: sectionTab('server', 'general') },
 
   {
     path: '**',

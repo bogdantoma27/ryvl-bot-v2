@@ -33,7 +33,7 @@ import {
     <div class="space-y-6 max-w-7xl w-full mx-auto animate-fadeIn">
       <!-- Breadcrumb Navigation -->
       <nav class="flex items-center gap-2 text-xs text-slate-400">
-        <a routerLink="/admin/events" class="hover:text-slate-200">Guild Events</a>
+        <a routerLink="/admin/community" [queryParams]="{ tab: 'events' }" class="hover:text-slate-200">Guild Events</a>
         <span>/</span>
         <span class="text-white font-medium truncate max-w-xs">{{ event()?.title || 'Event Details' }}</span>
       </nav>
@@ -48,7 +48,7 @@ import {
           <div class="text-4xl">⚠️</div>
           <h2 class="text-lg font-bold text-white">Event Not Found</h2>
           <p class="text-xs text-slate-400">The event could not be found or was deleted.</p>
-          <a routerLink="/admin/events" class="inline-block px-4 py-2 rounded-lg bg-[#5865F2] text-white text-xs font-semibold">
+          <a routerLink="/admin/community" [queryParams]="{ tab: 'events' }" class="inline-block px-4 py-2 rounded-lg bg-[#5865F2] text-white text-xs font-semibold">
             Return to Events
           </a>
         </div>
@@ -529,7 +529,7 @@ export class EventDetailComponent implements OnInit {
       console.error('Delete event failed:', err);
     } finally {
       this.isDeleting.set(false);
-      this.router.navigate(['/admin/events']);
+      this.router.navigate(['/admin/community'], { queryParams: { tab: 'events' } });
     }
   }
 

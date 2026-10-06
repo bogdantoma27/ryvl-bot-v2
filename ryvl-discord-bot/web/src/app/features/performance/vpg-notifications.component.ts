@@ -10,7 +10,7 @@ type FeedKey = Exclude<keyof VpgNotificationSettings, 'pollIntervalSec' | 'fixtu
   imports: [FormsModule, RouterLink],
   template: `
     <section class="rounded-2xl bg-[#16213e] border border-slate-700/60 p-5 sm:p-6 space-y-5" aria-labelledby="vpg-automation-title">
-      <div class="flex flex-col sm:flex-row justify-between gap-3"><div><h2 id="vpg-automation-title" class="text-lg font-semibold text-white">VPG automatic posting</h2><p class="mt-1 text-sm text-slate-400">League-wide and RYVL-only feeds run independently. All schedules use Europe/Bucharest.</p></div><a routerLink="/admin/settings" class="text-sm text-[#EAE905] shrink-0">Configure Discord channels →</a></div>
+      <div class="flex flex-col sm:flex-row justify-between gap-3"><div><h2 id="vpg-automation-title" class="text-lg font-semibold text-white">VPG automatic posting</h2><p class="mt-1 text-sm text-slate-400">League-wide and RYVL-only feeds run independently. All schedules use Europe/Bucharest.</p></div><a routerLink="/admin/server" [queryParams]="{ tab: 'channels' }" class="text-sm text-[#EAE905] shrink-0">Configure Discord channels →</a></div>
       @if(message()) { <p role="status" class="rounded-lg bg-emerald-500/10 border border-emerald-500/25 p-3 text-sm text-emerald-300">{{ message() }}</p> }
       @if(error()) { <div role="alert" class="rounded-lg bg-rose-500/10 border border-rose-500/25 p-3 text-sm text-rose-300">{{ error() }} <button type="button" class="underline ml-2" (click)="load()">Retry</button></div> }
       @if(loading()) { <p class="text-sm text-slate-400" role="status">Loading notification settings…</p> } @else if(form(); as cfg) {

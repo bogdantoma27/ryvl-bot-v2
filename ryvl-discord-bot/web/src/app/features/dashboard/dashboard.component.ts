@@ -12,13 +12,14 @@ import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 import { EventItem } from '../../core/models';
 import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component';
+import { DashboardHealthComponent } from './dashboard-health.component';
 import { eventStatusLabel, formatEventDate, isUpcomingEvent } from '../events/event-display';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, RsvpBadgeComponent],
+  imports: [RouterLink, RsvpBadgeComponent, DashboardHealthComponent],
   template: `
     <div class="max-w-7xl w-full mx-auto space-y-8 animate-fadeIn">
       <!-- Welcome Header -->
@@ -46,7 +47,7 @@ import { eventStatusLabel, formatEventDate, isUpcomingEvent } from '../events/ev
             <span class="text-white">Create Event</span>
           </a>
           <a
-            routerLink="/admin/events"
+            routerLink="/admin/community" [queryParams]="{ tab: 'events' }"
             class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-600 hover:border-slate-500 text-white text-sm font-semibold transition active:scale-95 cursor-pointer"
           >
             <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,11 +109,13 @@ import { eventStatusLabel, formatEventDate, isUpcomingEvent } from '../events/ev
         </div>
       </div>
 
+      <app-dashboard-health />
+
       <!-- Quick Highlights / Recent Activity -->
       <div class="space-y-4">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold text-white">Upcoming Highlights</h2>
-          <a routerLink="/admin/events" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold hover:underline cursor-pointer">
+          <a routerLink="/admin/community" [queryParams]="{ tab: 'events' }" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold hover:underline cursor-pointer">
             View all →
           </a>
         </div>
