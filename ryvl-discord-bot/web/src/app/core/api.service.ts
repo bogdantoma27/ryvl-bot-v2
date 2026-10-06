@@ -27,6 +27,7 @@ import {
   PlayerRegistrationAudit,
   TotwConfig,
   TournamentInstance,
+  TournamentMatch,
   SuperligaMvpLeaderboard,
   SuperligaMvpMatches,
   SuperligaMvpSyncResult,
@@ -946,10 +947,18 @@ export class ApiService {
   recordTournamentResult(
     guildId: string,
     tournamentId: string,
-    body: { matchId?: string; homeTeam?: string; awayTeam?: string; homeScore: number; awayScore: number },
-  ): Promise<{ tournament: TournamentInstance; completed: boolean }> {
+    body: {
+      matchId?: string;
+      homeTeam?: string;
+      awayTeam?: string;
+      homeScore: number;
+      awayScore: number;
+      homePens?: number | null;
+      awayPens?: number | null;
+    },
+  ): Promise<{ tournament: TournamentInstance; completed: boolean; newStage?: TournamentMatch[] }> {
     return firstValueFrom(
-      this.http.post<{ tournament: TournamentInstance; completed: boolean }>(
+      this.http.post<{ tournament: TournamentInstance; completed: boolean; newStage?: TournamentMatch[] }>(
         `${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/results`,
         body,
         { headers: this.headers() },

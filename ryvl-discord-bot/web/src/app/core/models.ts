@@ -430,6 +430,7 @@ export interface TournamentTeam {
   name: string;
   managerId?: string;
   managerName?: string;
+  group?: string;
   picks: Array<{ userId: string; displayName: string; gamertag?: string; position: string; isManager?: boolean }>;
 }
 
@@ -441,6 +442,10 @@ export interface TournamentMatch {
   homeScore: number;
   awayScore: number;
   completed: boolean;
+  stage?: 'GROUP' | 'KNOCKOUT';
+  group?: string;
+  homePens?: number;
+  awayPens?: number;
   date?: string;
 }
 
@@ -492,6 +497,10 @@ export interface TournamentInstance {
   teams: TournamentTeam[];
   matches: TournamentMatch[];
   standings: TournamentStandingsRow[];
+  /** Standard tournaments play groups then knockouts; drafts (and older ones) are a league. */
+  format: 'GROUPS_KNOCKOUT' | 'LEAGUE';
+  groups: Array<{ group: string; rows: TournamentStandingsRow[] }>;
+  champion: string | null;
   draft: TournamentDraftState | null;
 }
 

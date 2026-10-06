@@ -49,7 +49,7 @@ const STATUS_LABELS: Record<string, string> = {
               <h1 class="text-2xl font-black text-white tracking-tight">Tournaments & FC Draft</h1>
             </div>
             <p class="text-sm text-slate-400 mt-1">
-              Standard tournaments (teams sign up, auto 8/16/32 bracket, round-robin fixtures) and FC Draft tournaments
+              Standard tournaments (teams sign up, auto 8/16/32 bracket, groups of 4 then knockouts) and FC Draft tournaments
               (players and managers sign up, managers draft on the Discord wheel). Everything here mirrors the bot's channels.
             </p>
           </div>
@@ -307,15 +307,23 @@ const STATUS_LABELS: Record<string, string> = {
               <div class="divide-y divide-slate-800/80">
                 @for (m of t.matches; track m.id) {
                   <div class="p-3 flex items-center gap-3 hover:bg-slate-800/30 transition text-xs">
-                    <span class="w-14 text-[10px] text-slate-500 shrink-0">{{ m.round ? 'Round ' + m.round : '' }}</span>
+                    <span class="w-24 text-[10px] text-slate-500 shrink-0">{{ stageLabel(m) }}</span>
                     <span class="font-bold text-white flex-1 text-right truncate">{{ m.homeTeam }}</span>
                     @if (editingMatchId() === m.id) {
                       <input type="number" min="0" max="99" [(ngModel)]="editHome" class="w-12 bg-[#11192e] border border-slate-700 rounded-lg px-1 py-1 text-center text-white font-bold" />
                       <span class="text-slate-500">-</span>
                       <input type="number" min="0" max="99" [(ngModel)]="editAway" class="w-12 bg-[#11192e] border border-slate-700 rounded-lg px-1 py-1 text-center text-white font-bold" />
+                      @if (m.stage === 'KNOCKOUT' && editHome === editAway) {
+                        <span class="text-[10px] text-amber-300">pens</span>
+                        <input type="number" min="0" max="99" [(ngModel)]="editHomePens" class="w-10 bg-[#11192e] border border-amber-700 rounded-lg px-1 py-1 text-center text-white" />
+                        <input type="number" min="0" max="99" [(ngModel)]="editAwayPens" class="w-10 bg-[#11192e] border border-amber-700 rounded-lg px-1 py-1 text-center text-white" />
+                      }
                     } @else {
                       <span class="px-3 py-1 rounded-lg bg-[#11192e] border border-slate-700 font-extrabold text-center min-w-[60px]" [ngClass]="m.completed ? 'text-white' : 'text-slate-500'">
                         {{ m.completed ? m.homeScore + ' - ' + m.awayScore : 'vs' }}
+                        @if (m.completed && m.homePens != null) {
+                          <span class="text-[10px] text-amber-300 font-semibold">({{ m.homePens }}-{{ m.awayPens }} p)</span>
+                        }
                       </span>
                     }
                     <span class="font-bold text-white flex-1 text-left truncate">{{ m.awayTeam }}</span>
@@ -337,35 +345,48 @@ const STATUS_LABELS: Record<string, string> = {
         <!-- Standings -->
         @if (activeTab() === 'standings') {
           <div class="space-y-6">
-            <div class="bg-[#16213e] border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
-              <table class="w-full text-left text-xs">
-                <thead class="bg-[#11192e] text-slate-400 text-[10px] uppercase font-bold border-b border-slate-800">
-                  <tr>
-                    <th class="py-3 px-4">#</th><th class="py-3 px-4">Team</th>
-                    <th class="py-3 px-2 text-center">P</th><th class="py-3 px-2 text-center">W</th>
-                    <th class="py-3 px-2 text-center">D</th><th class="py-3 px-2 text-center">L</th>
-                    <th class="py-3 px-2 text-center">GD</th><th class="py-3 px-4 text-center">Pts</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-800/80">
-                  @for (r of t.standings; track r.team) {
-                    <tr>
-                      <td class="py-2.5 px-4 text-slate-400">{{ r.rank }}</td>
-                      <td class="py-2.5 px-4 font-bold text-white">{{ r.team }}</td>
-                      <td class="py-2.5 px-2 text-center text-slate-300">{{ r.played }}</td>
-                      <td class="py-2.5 px-2 text-center text-slate-300">{{ r.wins }}</td>
-                      <td class="py-2.5 px-2 text-center text-slate-300">{{ r.draws }}</td>
-                      <td class="py-2.5 px-2 text-center text-slate-300">{{ r.losses }}</td>
-                      <td class="py-2.5 px-2 text-center text-slate-300">{{ r.goalDifference }}</td>
-                      <td class="py-2.5 px-4 text-center font-extrabold text-emerald-400">{{ r.points }}</td>
-                    </tr>
-                  } @empty {
-                    <tr><td colspan="8" class="p-8 text-center text-slate-400">The table fills in once the tournament starts.</td></tr>
+            @if (t.champion) {
+              <div class="bg-amber-500/10 border border-amber-500/40 rounded-2xl p-4 text-sm font-bold text-amber-300">🏆 Champion: {{ t.champion }}</div>
+            }
+            @if (t.format === 'GROUPS_KNOCKOUT') {
+              <p class="text-xs text-slate-400">The top 2 of each group go through to the knockouts, which are drawn automatically after the last group match.</p>
+            }
+            <div class="grid gap-6" [ngClass]="t.groups.length > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'">
+              @for (table of standingsTables(); track table.title) {
+                <div class="bg-[#16213e] border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+                  @if (table.title) {
+                    <div class="px-4 py-2.5 bg-[#11192e] border-b border-slate-800 text-xs font-bold text-white">{{ table.title }}</div>
                   }
-                </tbody>
-              </table>
+                  <table class="w-full text-left text-xs">
+                    <thead class="bg-[#11192e] text-slate-400 text-[10px] uppercase font-bold border-b border-slate-800">
+                      <tr>
+                        <th class="py-3 px-4">#</th><th class="py-3 px-4">Team</th>
+                        <th class="py-3 px-2 text-center">P</th><th class="py-3 px-2 text-center">W</th>
+                        <th class="py-3 px-2 text-center">D</th><th class="py-3 px-2 text-center">L</th>
+                        <th class="py-3 px-2 text-center">GD</th><th class="py-3 px-4 text-center">Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/80">
+                      @for (r of table.rows; track r.team) {
+                        <tr [ngClass]="r.rank <= table.qualify ? 'bg-emerald-500/5' : ''">
+                          <td class="py-2.5 px-4" [ngClass]="r.rank <= table.qualify ? 'text-emerald-400 font-bold' : 'text-slate-400'">{{ r.rank }}</td>
+                          <td class="py-2.5 px-4 font-bold text-white">{{ r.team }}</td>
+                          <td class="py-2.5 px-2 text-center text-slate-300">{{ r.played }}</td>
+                          <td class="py-2.5 px-2 text-center text-slate-300">{{ r.wins }}</td>
+                          <td class="py-2.5 px-2 text-center text-slate-300">{{ r.draws }}</td>
+                          <td class="py-2.5 px-2 text-center text-slate-300">{{ r.losses }}</td>
+                          <td class="py-2.5 px-2 text-center text-slate-300">{{ r.goalDifference }}</td>
+                          <td class="py-2.5 px-4 text-center font-extrabold text-emerald-400">{{ r.points }}</td>
+                        </tr>
+                      } @empty {
+                        <tr><td colspan="8" class="p-8 text-center text-slate-400">The table fills in once the tournament starts.</td></tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
             </div>
-            @if (t.standings.length > 0) {
+            @if (t.format === 'LEAGUE' && t.standings.length > 0) {
               <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-5 shadow-lg space-y-4">
                 <div class="flex items-center justify-between">
                   <h3 class="text-sm font-bold text-white">🖼️ Standings graphic (as posted in Discord)</h3>
@@ -459,6 +480,8 @@ export class AdminTournamentsComponent {
   provisionOnCreate = true;
   editHome = 0;
   editAway = 0;
+  editHomePens: number | null = null;
+  editAwayPens: number | null = null;
 
   readonly activeTournament = computed(() => {
     const id = this.selectedTournamentId();
@@ -527,6 +550,25 @@ export class AdminTournamentsComponent {
         return 'This tournament is finished.';
     }
   });
+
+  readonly standingsTables = computed(() => {
+    const t = this.activeTournament();
+    if (!t) return [];
+    if (t.groups.length > 0) {
+      return t.groups.map((g) => ({ title: `Group ${g.group}`, rows: g.rows, qualify: 2 }));
+    }
+    return [{ title: '', rows: t.standings, qualify: 0 }];
+  });
+
+  /** Knockout rounds are named by how many matches they have (1 = final). */
+  stageLabel(m: TournamentMatch): string {
+    if (m.stage === 'GROUP') return `Group ${m.group}`;
+    if (m.stage === 'KNOCKOUT') {
+      const count = this.activeTournament()?.matches.filter((x) => x.stage === 'KNOCKOUT' && x.round === m.round).length ?? 0;
+      return { 1: 'Final', 2: 'Semi-final', 4: 'Quarter-final', 8: 'Round of 16', 16: 'Round of 32' }[count] ?? 'Knockout';
+    }
+    return m.round ? `Round ${m.round}` : '';
+  }
 
   readonly standingsImageUrl = computed(() => {
     const gId = this.guildStore.activeGuildId();
@@ -669,6 +711,8 @@ export class AdminTournamentsComponent {
   startEdit(m: TournamentMatch): void {
     this.editHome = m.completed ? m.homeScore : 0;
     this.editAway = m.completed ? m.awayScore : 0;
+    this.editHomePens = m.homePens ?? null;
+    this.editAwayPens = m.awayPens ?? null;
     this.editingMatchId.set(m.id);
   }
 
@@ -678,10 +722,20 @@ export class AdminTournamentsComponent {
         matchId: m.id,
         homeScore: Number(this.editHome),
         awayScore: Number(this.editAway),
+        ...(m.stage === 'KNOCKOUT' && Number(this.editHome) === Number(this.editAway)
+          ? { homePens: this.editHomePens, awayPens: this.editAwayPens }
+          : {}),
       });
       this.replaceTournament(res.tournament);
       this.editingMatchId.set(null);
-      this.showToast(res.completed ? 'Score saved. Every fixture is played: tournament complete!' : 'Score saved.', 'success');
+      this.showToast(
+        res.completed
+          ? 'Score saved. The tournament is complete!'
+          : res.newStage?.length
+            ? `Score saved. The next round is drawn (${res.newStage.length} matches).`
+            : 'Score saved.',
+        'success',
+      );
     });
   }
 
