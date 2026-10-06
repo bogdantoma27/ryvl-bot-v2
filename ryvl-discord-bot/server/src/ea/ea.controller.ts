@@ -1,5 +1,3 @@
-import { mergeEaRawMatch } from './ea-match-type';
-import { EaRawMatch } from './ea.types';
 import {
   Controller,
   Get,
@@ -11,7 +9,7 @@ import {
   Query,
   UseGuards,
   Logger,
-  ServiceUnavailableException,
+  NotFoundException,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { GuildAdminGuard } from '../auth/guild-admin.guard';
@@ -19,6 +17,7 @@ import { CurrentUser } from '../auth/user.decorator';
 import { JwtPayload } from '../auth/auth.service';
 import { EaService } from './ea.service';
 import { EaPollerService } from './ea-poller.service';
+import { DiscordService } from '../discord/discord.service';
 
 @Controller()
 export class EaController {
@@ -27,7 +26,12 @@ export class EaController {
   constructor(
     private readonly eaService: EaService,
     private readonly eaPollerService: EaPollerService,
+    private readonly discordService: DiscordService,
   ) {}
+
+  private async checkChannel(guildId: string, channelId: unknown): Promise<void> {
+    if (channelId) await this.discordService.assertChannelInGuild(guildId, channelId);
+  }
 
   // ----------------------------------------------------
   // Public Endpoints (Accessible by all users on web)
@@ -51,12 +55,11 @@ export class EaController {
     return this.getMembers(config.guildId);
   }
 
+  // Always the website's own club: an anonymous caller must not be able to make the
+  // server spawn an EA bridge process for any club ID it likes.
   @Get('api/public/roster')
-  async getPublicRoster(
-    @Query('clubId') clubId?: string,
-    @Query('platform') platform = 'common-gen5',
-  ) {
-    return this.eaService.getPublicRoster(platform, clubId);
+  async getPublicRoster() {
+    return this.eaService.getPublicRoster();
   }
 
   @Get('api/guilds/:guildId/ea/config')
@@ -64,7 +67,7 @@ export class EaController {
     const config =
       guildId === 'default'
         ? await this.eaService.getDefaultTrackerConfig()
-        : await this.eaService.getOrCreateTrackerConfig(guildId);
+        : await this.eaService.findTrackerConfigOrDefault(guildId);
 
     let clubInfo = null;
     let overallStats = null;
@@ -102,46 +105,12 @@ export class EaController {
     const config =
       guildId === 'default'
         ? await this.eaService.getDefaultTrackerConfig()
-        : await this.eaService.getOrCreateTrackerConfig(guildId);
+        : await this.eaService.findTrackerConfigOrDefault(guildId);
 
     const limit = Math.min(Math.max(parseInt(count, 10) || 10, 1), 20);
 
-    const matchTypes =
-      config.matchTypes && config.matchTypes.length > 0
-        ? config.matchTypes
-        : ['leagueMatch', 'friendlyMatch', 'playoffMatch'];
-
-    const rawMatchesMap = new Map<string, EaRawMatch>();
-    let successfulRequests = 0;
-    for (const mType of matchTypes) {
-      try {
-        const matches = await this.eaService.fetchMatchesRaw(
-          config.clubId,
-          mType,
-          limit,
-          config.platform || 'common-gen5',
-        );
-        if (!Array.isArray(matches)) throw new Error('Invalid upstream match response');
-        successfulRequests++;
-        if (Array.isArray(matches)) {
-          for (const m of matches) {
-            if (m && m.matchId) {
-              mergeEaRawMatch(rawMatchesMap, m);
-            }
-          }
-        }
-      } catch (err: any) {
-        this.logger.warn(`Failed to fetch ${mType}: ${err.message}`);
-      }
-    }
-
-    if (successfulRequests === 0) {
-      throw new ServiceUnavailableException('Match data is temporarily unavailable. Please try again.');
-    }
-
-    const allMatches = Array.from(rawMatchesMap.values())
-      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-      .slice(0, limit);
+    // Throws 503 when every match-type request failed (outage != empty feed).
+    const allMatches = await this.eaService.fetchRecentMatches(config, config.matchTypes, limit);
 
     return allMatches.map((raw) => this.eaService.parseMatch(raw, config.clubId));
   }
@@ -151,7 +120,7 @@ export class EaController {
     const config =
       guildId === 'default'
         ? await this.eaService.getDefaultTrackerConfig()
-        : await this.eaService.getOrCreateTrackerConfig(guildId);
+        : await this.eaService.findTrackerConfigOrDefault(guildId);
 
     return this.eaService.fetchMemberStats(
       config.clubId,
@@ -178,6 +147,7 @@ export class EaController {
       pollIntervalSec?: number;
     },
   ) {
+    await this.checkChannel(guildId, body?.channelId);
     return this.eaService.updateTrackerConfig(guildId, body);
   }
 
@@ -197,7 +167,8 @@ export class EaController {
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string },
   ) {
-    return this.eaPollerService.postLatestMatch(guildId, body.channelId);
+    await this.checkChannel(guildId, body?.channelId);
+    return this.eaPollerService.postLatestMatch(guildId, body?.channelId);
   }
 
   @Post('api/guilds/:guildId/ea/poll-now')
@@ -219,6 +190,7 @@ export class EaController {
     @Param('guildId') guildId: string,
     @Body() body: { clubId: string; clubName: string; channelId?: string; platform?: string },
   ) {
+    await this.checkChannel(guildId, body?.channelId);
     return this.eaService.addTrackedClub(
       guildId,
       body.clubId,
@@ -228,6 +200,17 @@ export class EaController {
     );
   }
 
+  @Get('api/guilds/:guildId/ea/tracked-clubs/:clubId/stats')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async getTrackedClubStats(
+    @Param('guildId') guildId: string,
+    @Param('clubId') clubId: string,
+  ) {
+    const stats = await this.eaService.getClubStats(guildId, clubId, { exact: true });
+    if (!stats) throw new NotFoundException('This club is not tracked in this server.');
+    return stats;
+  }
+
   @Patch('api/guilds/:guildId/ea/tracked-clubs/:clubId')
   @UseGuards(AuthGuard, GuildAdminGuard)
   async updateTrackedClub(
@@ -235,6 +218,7 @@ export class EaController {
     @Param('clubId') clubId: string,
     @Body() body: { enabled?: boolean; channelId?: string; platform?: string; clubName?: string },
   ) {
+    await this.checkChannel(guildId, body?.channelId);
     return this.eaService.updateTrackedClub(guildId, clubId, body);
   }
 
@@ -284,12 +268,19 @@ export class EaController {
   }
 
   @Get('api/guilds/:guildId/ea/players/:identifier/stats')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async getPlayerStats(
     @Param('guildId') guildId: string,
     @Param('identifier') identifier: string,
   ) {
     return this.eaService.getPlayerStats(guildId, identifier);
+  }
+
+  /** Minimal Discord ↔ EA gamertag links, consumed by other features (lineups). */
+  @Get('api/guilds/:guildId/ea/registrations')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async getRegistrations(@Param('guildId') guildId: string) {
+    return this.eaService.getRegistrationsForGuild(guildId);
   }
 
   @Get('api/guilds/:guildId/ea/players-audit')

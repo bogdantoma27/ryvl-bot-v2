@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ChannelType, ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
+import { ChannelType, ChatInputCommandInteraction, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { SuperligaMvpService } from '../../superliga-mvp/superliga-mvp.service';
 import { buildSuperligaMvpEmbed } from '../embeds/superliga-mvp-embed.builder';
 
@@ -12,12 +12,12 @@ export class SuperligaMvpCommands {
   async handle(interaction: ChatInputCommandInteraction): Promise<void> {
     // Admin-only whatever the server's command permission overrides say.
     if (!interaction.inGuild() || !interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
-      await interaction.reply({ content: '❌ Superliga MVP is available to server admins only (Manage Server).', ephemeral: true });
+      await interaction.reply({ content: '❌ Superliga MVP is available to server admins only (Manage Server).', flags: MessageFlags.Ephemeral });
       return;
     }
 
     const sub = interaction.options.getSubcommand();
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
       if (sub === 'sync') {
         const r = await this.mvp.sync();

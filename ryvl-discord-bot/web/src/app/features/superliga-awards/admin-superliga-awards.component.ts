@@ -9,6 +9,7 @@ type AwardsTab = 'mvp' | 'totw';
 
 // Superliga Awards: the weekly Team of the Week and the season MVP race on one page.
 // They are linked: Team of the Week picks break ties between equal MVP scores.
+// Shown as the Superliga section's Awards tab; the sub-tab is `?view=mvp|totw`.
 @Component({
   selector: 'app-admin-superliga-awards',
   standalone: true,
@@ -48,11 +49,11 @@ type AwardsTab = 'mvp' | 'totw';
 export class AdminSuperligaAwardsComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly tabParam = toSignal(this.route.queryParamMap.pipe(map((p) => p.get('tab'))), { initialValue: null });
+  private readonly tabParam = toSignal(this.route.queryParamMap.pipe(map((p) => p.get('view'))), { initialValue: null });
 
   readonly tab = computed<AwardsTab>(() => (this.tabParam() === 'totw' ? 'totw' : 'mvp'));
 
   select(tab: AwardsTab): void {
-    void this.router.navigate([], { relativeTo: this.route, queryParams: { tab }, replaceUrl: true });
+    void this.router.navigate([], { relativeTo: this.route, queryParams: { view: tab }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 }

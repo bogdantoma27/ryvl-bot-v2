@@ -1,6 +1,5 @@
-import { Controller, Injectable, Param, Sse, MessageEvent } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Observable, Subject } from 'rxjs';
-import { filter, map } from 'rxjs/operators';
 
 export type EventStreamAction =
   | 'EVENT_CREATED'
@@ -16,8 +15,12 @@ export interface EventStreamMessage {
   timestamp: string;
 }
 
+/**
+ * In-process feed of event changes. It used to be exposed as an unauthenticated SSE
+ * route that no client used (and that the guarded `GET :eventId` route shadowed), so it
+ * is now internal only; subscribe through `changes` to build a guarded stream later.
+ */
 @Injectable()
-@Controller('api/guilds/:guildId/events')
 export class EventsGateway {
   private readonly streamSubject = new Subject<EventStreamMessage>();
 
@@ -30,19 +33,5 @@ export class EventsGateway {
     });
   }
 
-  @Sse('stream')
-  streamEvents(@Param('guildId') guildId: string): Observable<MessageEvent> {
-    return this.streamSubject.asObservable().pipe(
-      filter((msg) => msg.guildId === guildId),
-      map(
-        (msg): MessageEvent => ({
-          data: {
-            type: msg.type,
-            data: msg.data,
-            timestamp: msg.timestamp,
-          },
-        }),
-      ),
-    );
-  }
+  readonly changes: Observable<EventStreamMessage> = this.streamSubject.asObservable();
 }

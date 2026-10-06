@@ -1,6 +1,6 @@
 import { VpgNotificationSettings, VpgNotificationResponse } from './models';
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, isDevMode } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
   AuthState,
@@ -8,6 +8,7 @@ import {
   EventItem,
   EventRsvp,
   GuildBootstrap,
+  GuildHealth,
   GuildMemberOption,
   GuildSettings,
   GuildSummary,
@@ -15,6 +16,13 @@ import {
   LineupDraft,
   LineupRenderPayload,
   LineupPostPayload,
+  LineupPostResult,
+  LineupDraftPayload,
+  LineupMemberOption,
+  LineupMatchOccurrence,
+  LineupAssignments,
+  UpcomingFixture,
+  CreateFixtureEventsResult,
   VpgStandingsRow,
   VpgMatchItem,
   VpgLeaderboardEntry,
@@ -22,6 +30,8 @@ import {
   RyvlCompetition,
   ContactSubmission,
   RecruitmentSubmission,
+  WebsiteSubmissionItem,
+  BotCommandDoc,
   RosterPlayer,
   RegisteredDiscordPlayer,
   PlayerRegistrationAudit,
@@ -44,9 +54,12 @@ export class ApiService {
     if (typeof window !== 'undefined' && window.location) {
       const { hostname, port } = window.location;
 
-      const customApi =
-        (window as unknown as { __RYVL_API_URL__?: string }).__RYVL_API_URL__ ||
-        localStorage.getItem('ryvl_api_url');
+      // Development builds only: a production build must never send the session token
+      // to an API origin taken from page globals or localStorage.
+      const customApi = isDevMode()
+        ? (window as unknown as { __RYVL_API_URL__?: string }).__RYVL_API_URL__ ||
+          localStorage.getItem('ryvl_api_url')
+        : null;
       if (customApi) {
         return customApi.replace(/\/+$/, '');
       }
@@ -130,8 +143,10 @@ export class ApiService {
     );
   }
 
-  getEvents(guildId: string, status?: string): Promise<EventItem[]> {
-    const params = status ? { status } : undefined;
+  /** The server pages events (20 by default); ask for its maximum so lists and counts are complete. */
+  getEvents(guildId: string, status?: string, limit = 100): Promise<EventItem[]> {
+    const params: Record<string, string> = { limit: String(limit) };
+    if (status) params['status'] = status;
     return firstValueFrom(
       this.http.get<EventItem[]>(`${this.baseUrl}/api/guilds/${guildId}/events`, {
         headers: this.headers(),
@@ -185,9 +200,36 @@ export class ApiService {
     );
   }
 
+  getUpcomingFixtures(guildId: string): Promise<UpcomingFixture[]> {
+    return firstValueFrom(
+      this.http.get<UpcomingFixture[]>(`${this.baseUrl}/api/guilds/${guildId}/events/fixtures/upcoming`, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  createEventsFromFixtures(
+    guildId: string,
+    payload: { channelId: string; matchIds?: number[]; durationMinutes?: number; mentionRoleIds?: string[] }
+  ): Promise<CreateFixtureEventsResult> {
+    return firstValueFrom(
+      this.http.post<CreateFixtureEventsResult>(`${this.baseUrl}/api/guilds/${guildId}/events/fixtures/create`, payload, {
+        headers: this.headers(),
+      })
+    );
+  }
+
   getSettings(guildId: string): Promise<GuildSettings> {
     return firstValueFrom(
       this.http.get<GuildSettings>(`${this.baseUrl}/api/guilds/${guildId}/settings`, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  getGuildHealth(guildId: string): Promise<GuildHealth> {
+    return firstValueFrom(
+      this.http.get<GuildHealth>(`${this.baseUrl}/api/guilds/${guildId}/health`, {
         headers: this.headers(),
       })
     );
@@ -201,9 +243,9 @@ export class ApiService {
     );
   }
 
-  cancelOccurrence(guildId: string, eventId: string, occurrenceId: string): Promise<void> {
+  cancelOccurrence(guildId: string, eventId: string, occurrenceId: string): Promise<{ status: string; discordSync?: { updated: number; failed: number } }> {
     return firstValueFrom(
-      this.http.post<void>(
+      this.http.post<{ status: string; discordSync?: { updated: number; failed: number } }>(
         `${this.baseUrl}/api/guilds/${guildId}/events/${eventId}/occurrences/${occurrenceId}/cancel`,
         {},
         { headers: this.headers() }
@@ -235,12 +277,9 @@ export class ApiService {
     );
   }
 
-  postLineup(
-    guildId: string,
-    payload: LineupPostPayload,
-  ): Promise<{ ok: boolean; channel_id: string; message_id: string }> {
+  postLineup(guildId: string, payload: LineupPostPayload): Promise<LineupPostResult> {
     return firstValueFrom(
-      this.http.post<{ ok: boolean; channel_id: string; message_id: string }>(
+      this.http.post<LineupPostResult>(
         `${this.baseUrl}/api/guilds/${guildId}/lineup/post`,
         payload,
         { headers: this.headers() },
@@ -259,7 +298,7 @@ export class ApiService {
 
   createLineupDraft(
     guildId: string,
-    payload: Partial<LineupDraft>,
+    payload: LineupDraftPayload,
   ): Promise<LineupDraft> {
     return firstValueFrom(
       this.http.post<LineupDraft>(
@@ -273,11 +312,42 @@ export class ApiService {
   updateLineupDraft(
     guildId: string,
     draftId: string,
-    payload: Partial<LineupDraft>,
+    payload: LineupDraftPayload,
   ): Promise<LineupDraft> {
     return firstValueFrom(
       this.http.patch<LineupDraft>(
         `${this.baseUrl}/api/guilds/${guildId}/lineup/drafts/${draftId}`,
+        payload,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  /** Members with their RSVP status for the occurrence, EA name and preferred position. */
+  getLineupMembers(guildId: string, occurrenceId?: string | null): Promise<LineupMemberOption[]> {
+    return firstValueFrom(
+      this.http.get<LineupMemberOption[]>(`${this.baseUrl}/api/guilds/${guildId}/lineup/members`, {
+        headers: this.headers(),
+        params: occurrenceId ? { occurrence_id: occurrenceId } : {},
+      }),
+    );
+  }
+
+  getLineupOccurrences(guildId: string): Promise<LineupMatchOccurrence[]> {
+    return firstValueFrom(
+      this.http.get<LineupMatchOccurrence[]>(`${this.baseUrl}/api/guilds/${guildId}/lineup/occurrences`, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  autoFillLineup(
+    guildId: string,
+    payload: { formation: string; occurrence_id: string; assignments: LineupAssignments },
+  ): Promise<{ assignments: LineupAssignments; unplaced: string[] }> {
+    return firstValueFrom(
+      this.http.post<{ assignments: LineupAssignments; unplaced: string[] }>(
+        `${this.baseUrl}/api/guilds/${guildId}/lineup/auto-fill`,
         payload,
         { headers: this.headers() },
       ),
@@ -405,7 +475,7 @@ export class ApiService {
   updateTrackedClub(
     guildId: string,
     clubId: string,
-    data: { clubName?: string; platform?: string; channelId?: string; enabled?: boolean },
+    data: { clubName?: string; platform?: string; channelId?: string | null; enabled?: boolean },
   ): Promise<any> {
     return firstValueFrom(
       this.http.patch<any>(
@@ -579,58 +649,6 @@ export class ApiService {
     );
   }
 
-  pollSuperligaNow(guildId: string): Promise<{ success: boolean; postedCount: number }> {
-    return firstValueFrom(
-      this.http.post<{ success: boolean; postedCount: number }>(
-        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/poll-now`,
-        {},
-        { headers: this.headers() },
-      ),
-    );
-  }
-
-  postSuperligaStandings(
-    guildId: string,
-    channelId?: string,
-    season?: number,
-  ): Promise<{ success: boolean; messageId?: string }> {
-    return firstValueFrom(
-      this.http.post<{ success: boolean; messageId?: string }>(
-        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/post-standings`,
-        { channelId, season },
-        { headers: this.headers() },
-      ),
-    );
-  }
-
-  postSuperligaFixtures(
-    guildId: string,
-    channelId?: string,
-    season?: number,
-  ): Promise<{ success: boolean; messageId?: string }> {
-    return firstValueFrom(
-      this.http.post<{ success: boolean; messageId?: string }>(
-        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/post-fixtures`,
-        { channelId, season },
-        { headers: this.headers() },
-      ),
-    );
-  }
-
-  postSuperligaResults(
-    guildId: string,
-    channelId?: string,
-    season?: number,
-  ): Promise<{ success: boolean; messageId?: string }> {
-    return firstValueFrom(
-      this.http.post<{ success: boolean; messageId?: string }>(
-        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/post-results`,
-        { channelId, season },
-        { headers: this.headers() },
-      ),
-    );
-  }
-
   // ----------------------------------------------------
   // RYVL Team Performance & Multi-Competition Methods
   // ----------------------------------------------------
@@ -739,6 +757,19 @@ export class ApiService {
     );
   }
 
+  getWebsiteSubmissions(guildId: string, limit = 50): Promise<WebsiteSubmissionItem[]> {
+    return firstValueFrom(
+      this.http.get<WebsiteSubmissionItem[]>(`${this.baseUrl}/api/guilds/${guildId}/website-submissions`, {
+        headers: this.headers(),
+        params: { limit: String(limit) },
+      }),
+    );
+  }
+
+  getBotCommands(): Promise<BotCommandDoc[]> {
+    return firstValueFrom(this.http.get<BotCommandDoc[]>(`${this.baseUrl}/api/public/bot-commands`));
+  }
+
   getPublicRoster(): Promise<RosterPlayer[]> {
     return firstValueFrom(
       this.http.get<RosterPlayer[]>(`${this.baseUrl}/api/public/roster?t=${Date.now()}`),
@@ -802,7 +833,7 @@ export class ApiService {
 
   getPlayerStats(guildId: string, identifier: string): Promise<any> {
     return firstValueFrom(
-      this.http.get<any>(`${this.baseUrl}/api/guilds/${guildId}/ea/players/${identifier}/stats`, {
+      this.http.get<any>(`${this.baseUrl}/api/guilds/${guildId}/ea/players/${encodeURIComponent(identifier)}/stats`, {
         headers: this.headers(),
       }),
     );
@@ -824,7 +855,7 @@ export class ApiService {
   updateTotwConfig(
     guildId: string,
     leagueSlug: string,
-    body: { channelId?: string | null; formation?: string; enabled?: boolean; cronSchedule?: string },
+    body: { channelId?: string | null; enabled?: boolean; cronSchedule?: string | null },
   ): Promise<TotwConfig> {
     return firstValueFrom(
       this.http.patch<TotwConfig>(`${this.baseUrl}/api/guilds/${guildId}/vpg/totw/config`, body, {
@@ -843,7 +874,7 @@ export class ApiService {
     );
   }
 
-  postTotw(guildId: string, body: { channelId?: string; isTots?: boolean }): Promise<{ success: boolean; messageId?: string }> {
+  postTotw(guildId: string, body: { channelId?: string; isTots?: boolean; leagueSlug?: string }): Promise<{ success: boolean; messageId?: string }> {
     return firstValueFrom(
       this.http.post<{ success: boolean; messageId?: string }>(`${this.baseUrl}/api/guilds/${guildId}/vpg/totw/post`, body, {
         headers: this.headers(),

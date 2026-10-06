@@ -53,9 +53,10 @@ export function buildEventEmbed(data: EventEmbedData): {
     return list.map((r) => `> ${r.displayName}`).join('\n');
   };
 
+  const cancelled = occurrence.status === 'CANCELLED';
   const embed = new EmbedBuilder()
-    .setTitle(event.title)
-    .setColor(colorNumber);
+    .setTitle(cancelled ? `❌ CANCELLED: ${event.title}`.slice(0, 256) : event.title)
+    .setColor(cancelled ? 0x80848e : colorNumber);
 
   if (event.description && event.description.trim() !== '') {
     embed.setDescription(event.description);
@@ -113,11 +114,17 @@ export function buildEventEmbed(data: EventEmbedData): {
     },
   );
 
+  if (cancelled) {
+    embed.addFields({ name: 'Status', value: 'This event was cancelled. RSVPs are closed.', inline: false });
+  } else if (occurrence.status === 'CLOSED') {
+    embed.addFields({ name: 'Status', value: 'This event has ended. RSVPs are closed.', inline: false });
+  }
+
   // Footer: "Created by <name>"
   const footerText = creatorName ? `Created by ${creatorName}` : 'RYVL Events';
   embed.setFooter({ text: footerText });
 
-  const isInteractive = occurrence.status === 'PUBLISHED' || occurrence.status === 'SCHEDULED';
+  const isInteractive = isOccurrenceInteractive(occurrence.status);
 
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
@@ -148,4 +155,9 @@ export function buildEventEmbed(data: EventEmbedData): {
   );
 
   return { embed, row };
+}
+
+/** Only announced, still-open occurrences accept RSVPs and show buttons. */
+export function isOccurrenceInteractive(status: string): boolean {
+  return status === 'PUBLISHED' || status === 'SCHEDULED';
 }

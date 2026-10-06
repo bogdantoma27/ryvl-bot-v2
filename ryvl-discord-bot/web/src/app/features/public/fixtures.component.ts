@@ -84,6 +84,11 @@ import { VpgMatchItem } from '../../core/models';
             <div class="h-28 rounded-2xl bg-white/5 border border-white/10 animate-pulse"></div>
           }
         </div>
+      } @else if (loadError()) {
+        <div class="public-error" role="alert">
+          <p>{{ loadError() }}</p>
+          <button type="button" class="public-button mt-3" (click)="loadFixtures()">Try again</button>
+        </div>
       } @else if (filteredFixtures().length === 0) {
         <div class="p-16 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-3">
           <div class="text-3xl">📅</div>
@@ -176,6 +181,8 @@ export class FixturesComponent implements OnInit {
   readonly onlyRyvl = signal<boolean>(false);
   readonly fixtures = signal<VpgMatchItem[]>([]);
   readonly isLoading = signal<boolean>(true);
+  readonly loadError = signal<string | null>(null);
+  private request = 0;
 
   readonly filteredFixtures = computed(() => {
     const list = this.fixtures();
@@ -201,14 +208,17 @@ export class FixturesComponent implements OnInit {
   }
 
   async loadFixtures(): Promise<void> {
+    const request = ++this.request;
     this.isLoading.set(true);
+    this.loadError.set(null);
     try {
       const data = await this.api.getSuperligaFixtures(this.selectedSeason(), 40);
+      if (request !== this.request) return;
       this.fixtures.set(data?.fixtures || []);
-    } catch (err) {
-      console.error('Failed to load Superliga fixtures:', err);
+    } catch {
+      if (request === this.request) this.loadError.set('Fixtures could not be loaded from VPG. Please try again.');
     } finally {
-      this.isLoading.set(false);
+      if (request === this.request) this.isLoading.set(false);
     }
   }
 

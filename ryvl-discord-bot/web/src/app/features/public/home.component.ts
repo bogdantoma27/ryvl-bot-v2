@@ -107,6 +107,10 @@ import { VpgMatchItem } from '../../core/models';
               <div class="h-32 rounded-2xl bg-white/5 animate-pulse border border-white/10"></div>
             }
           </div>
+        } @else if (resultsUnavailable()) {
+          <div class="p-8 rounded-2xl bg-[#0d0d0e] border border-white/10 text-center text-slate-400 text-sm" role="status">
+            Recent results are temporarily unavailable. Please check back shortly.
+          </div>
         } @else if (recentMatches().length === 0) {
           <div class="p-8 rounded-2xl bg-[#0d0d0e] border border-white/10 text-center text-slate-400 text-sm">
             No completed RYVL matches have been published for this competition yet.
@@ -238,13 +242,16 @@ export class HomeComponent implements OnInit {
   private readonly api = inject(ApiService);
   readonly recentMatches = signal<VpgMatchItem[]>([]);
   readonly isLoadingResults = signal<boolean>(true);
+  /** The API failed, or answered without its completed-match list: not the same as "no matches yet". */
+  readonly resultsUnavailable = signal<boolean>(false);
 
   async ngOnInit(): Promise<void> {
     try {
       const res = await this.api.getRyvlPerformance();
       this.recentMatches.set((res?.recentResults || []).slice(0, 3));
-    } catch (err) {
-      console.warn('Could not load recent results for home hero:', err);
+      this.resultsUnavailable.set(Boolean(res?.warnings?.some(w => w.startsWith('Completed matches'))));
+    } catch {
+      this.resultsUnavailable.set(true);
     } finally {
       this.isLoadingResults.set(false);
     }

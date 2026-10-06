@@ -6,7 +6,7 @@ import {
   MessageFlags,
   PermissionFlagsBits,
 } from 'discord.js';
-import { EaService } from '../../ea/ea.service';
+import { EaService, normalizeEaPlatform, EA_PLATFORMS } from '../../ea/ea.service';
 import { EaPollerService } from '../../ea/ea-poller.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -35,9 +35,18 @@ export class EaCommands {
     }
 
     const teamName = interaction.options.getString('name', true).trim();
-    const channel = interaction.options.getChannel('channel', true);
+    // The channel option is optional; without it the guild's default
+    // live-results channel is used (see EaService.addTrackedClub).
+    const channel = interaction.options.getChannel('channel', false);
+    const platformInput = interaction.options.getString('platform')?.trim();
+    if (platformInput && !(EA_PLATFORMS as readonly string[]).includes(platformInput)) {
+      await interaction.editReply(`Unknown platform \`${platformInput}\`. Use one of: ${EA_PLATFORMS.join(', ')}.`);
+      return;
+    }
+    const platform = normalizeEaPlatform(platformInput);
 
     if (
+      channel &&
       channel.type !== ChannelType.GuildText &&
       channel.type !== ChannelType.GuildAnnouncement
     ) {
@@ -46,7 +55,7 @@ export class EaCommands {
     }
 
     try {
-      const searchResults = await this.eaService.searchClubs(teamName);
+      const searchResults = await this.eaService.searchClubs(teamName, platform);
       if (!searchResults || searchResults.length === 0) {
         await interaction.editReply(
           `⚠️ Could not find any EA Pro Clubs matching **"${teamName}"** on EA servers. Please verify the exact spelling.`,
@@ -59,8 +68,8 @@ export class EaCommands {
         guildId,
         String(match.clubId),
         match.name || teamName,
-        channel.id,
-        'common-gen5',
+        channel?.id ?? null,
+        platform,
         match.crestUrl,
       );
 
@@ -74,7 +83,8 @@ export class EaCommands {
           { name: 'Club Name', value: `**${tracked.clubName}**`, inline: true },
           { name: 'Club ID', value: `\`${tracked.clubId}\``, inline: true },
           { name: 'Initial ELO', value: `⭐ **${tracked.elo}**`, inline: true },
-          { name: 'Channel', value: `<#${tracked.channelId}>`, inline: true },
+          { name: 'Channel', value: tracked.channelId ? `<#${tracked.channelId}>` : 'Not set (configure a default live results channel)', inline: true },
+          { name: 'Platform', value: `\`${tracked.platform}\``, inline: true },
           { name: 'Division', value: match.currentDivision ? `Div ${match.currentDivision}` : 'Pro Clubs', inline: true },
           { name: 'Record', value: `${match.wins || 0}W - ${match.ties || 0}D - ${match.losses || 0}L`, inline: true },
         )
@@ -104,6 +114,16 @@ export class EaCommands {
 
     try {
       const stats = await this.eaService.getClubStats(guildId, clubName);
+      // getClubStats falls back to the default club when the name matches nothing;
+      // answering with another club's stats would be misleading here.
+      const matchesQuery =
+        !clubName ||
+        stats?.clubId === clubName ||
+        !!stats?.clubName.toLowerCase().includes(clubName.toLowerCase());
+      if (!stats || !matchesQuery) {
+        await interaction.editReply(`⚠️ ${clubName ? `**${clubName}** is` : 'No club is'} not tracked in this server. Admins can add one with \`/track_team\`.`);
+        return;
+      }
 
       const diff = stats.goalDifference;
       const diffStr = diff >= 0 ? `+${diff}` : `${diff}`;
@@ -184,7 +204,10 @@ export class EaCommands {
           return;
         }
       } catch (err: any) {
+        // Saving the default club instead would silently track the wrong team.
         this.logger.error(`Error searching clubs for setup: ${err.message}`);
+        await interaction.editReply(`❌ Could not search EA for **"${customClubName}"**: ${err.message}. Setup cancelled; try again later.`);
+        return;
       }
     }
 
@@ -206,7 +229,7 @@ export class EaCommands {
         { name: 'Club Name', value: `**${updatedConfig.clubName}**`, inline: true },
         { name: 'Club ID', value: `\`${updatedConfig.clubId}\``, inline: true },
         { name: 'Notification Channel', value: `<#${updatedConfig.channelId}>`, inline: true },
-        { name: 'Check Interval', value: 'Every 90 seconds', inline: true },
+        { name: 'Check Interval', value: `Every ${updatedConfig.pollIntervalSec} seconds`, inline: true },
         { name: 'Tracked Match Types', value: 'League, Friendly, Playoff', inline: true },
         { name: 'Status', value: '🟢 **Active**', inline: true },
       )
@@ -224,7 +247,7 @@ export class EaCommands {
       return;
     }
 
-    const config = await this.eaService.getOrCreateTrackerConfig(guildId);
+    const config = await this.eaService.findTrackerConfigOrDefault(guildId);
     const customClubName = interaction.options.getString('club_name')?.trim();
 
     let targetClubId = config.clubId;
@@ -314,7 +337,8 @@ export class EaCommands {
   }
 
   async handleLatest(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply();
+    // The match itself is posted to the channel; the confirmation is only for the admin.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const guildId = interaction.guildId;
     if (!guildId) {
@@ -448,7 +472,7 @@ export class EaCommands {
       await interaction.editReply(
         `✅ Successfully linked your Discord account to EA Pro Clubs gamertag **${gamertag}**` +
         (position ? ` (Preferred: **${position}**)` : '') +
-        `!\n\nYour match statistics are tracked continuously. You and other members can now check your stats anytime with \`/stats me\` or \`/stats user:@${interaction.user.username}\`.`,
+        `!\n\nYour match statistics are tracked continuously. You and other members can now check your stats anytime with \`/stats\` or \`/stats user:@${interaction.user.username}\`.`,
       );
     } catch (err: any) {
       this.logger.error(`Error registering player: ${err?.message || err}`);

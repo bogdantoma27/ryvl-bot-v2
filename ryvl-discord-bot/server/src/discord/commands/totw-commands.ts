@@ -7,6 +7,7 @@ import {
   AttachmentBuilder,
 } from 'discord.js';
 import { TotwService } from '../../vpg/totw.service';
+import { SUPERLIGA_LEAGUE_SLUG } from '../../vpg/league.constants';
 
 @Injectable()
 export class TotwCommands {
@@ -29,9 +30,10 @@ export class TotwCommands {
     }
 
     if (subcommand === 'post') {
-      await interaction.deferReply();
+      // The image goes to the TOTW channel; the confirmation is only for the admin.
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const channel = interaction.options.getChannel('channel');
-      const leagueSlug = interaction.options.getString('league') || 'Superliga-Romania';
+      const leagueSlug = interaction.options.getString('league')?.trim() || SUPERLIGA_LEAGUE_SLUG;
       const isTots = interaction.options.getBoolean('is_tots') || false;
 
       try {
@@ -39,6 +41,7 @@ export class TotwCommands {
           guildId,
           channel?.id,
           isTots,
+          leagueSlug,
         );
         await interaction.editReply(
           `✅ **${isTots ? 'Team of the Season' : 'Team of the Week'}** successfully posted to <#${result.channelId}>!`,
@@ -49,7 +52,7 @@ export class TotwCommands {
       }
     } else if (subcommand === 'preview') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const leagueSlug = interaction.options.getString('league') || 'Superliga-Romania';
+      const leagueSlug = interaction.options.getString('league')?.trim() || SUPERLIGA_LEAGUE_SLUG;
       const isTots = interaction.options.getBoolean('is_tots') || false;
 
       try {
@@ -69,7 +72,7 @@ export class TotwCommands {
     } else if (subcommand === 'setup') {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const channel = interaction.options.getChannel('channel', true);
-      const leagueSlug = interaction.options.getString('league') || 'Superliga-Romania';
+      const leagueSlug = interaction.options.getString('league')?.trim() || SUPERLIGA_LEAGUE_SLUG;
 
       if (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement) {
         await interaction.editReply('Please select a valid text channel for announcements.');
@@ -77,7 +80,8 @@ export class TotwCommands {
       }
 
       try {
-        await this.totwService.updateConfig(guildId, leagueSlug, { channelId: channel.id });
+        // Setting a channel is the admin's intent to publish there: enable the weekly post.
+        await this.totwService.updateConfig(guildId, leagueSlug, { channelId: channel.id, enabled: true });
         await interaction.editReply(`✅ Configured **<#${channel.id}>** as the announcement channel for **${leagueSlug}** Team of the Week!`);
       } catch (err: any) {
         await interaction.editReply(`❌ Failed to update TOTW config: ${err?.message || err}`);

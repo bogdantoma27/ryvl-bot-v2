@@ -21,6 +21,8 @@ import {
   Message,
   AttachmentBuilder,
   PermissionFlagsBits,
+  MessageFlags,
+  Interaction,
 } from 'discord.js';
 import { ConfigService } from '../config/config.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -42,6 +44,13 @@ import { RyvlCommands } from './commands/ryvl-commands';
 import { TotwCommands } from './commands/totw-commands';
 import { TournamentCommands } from './commands/tournament-commands';
 import { RsvpButtonHandler } from './interactions/rsvp-button.handler';
+import { assertChannelInGuild, GuildPostableChannel } from './channel-guard';
+import { ensureManageGuild, isAdminSubcommand } from './commands/command-permissions';
+import {
+  SlashCommandHandlers,
+  resolveAutocompleteRoute,
+  resolveSlashRoute,
+} from './commands/command-routes';
 
 
 export interface DiscordChannelInfo {
@@ -134,19 +143,25 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       try {
         const guilds = await this.client.guilds.fetch();
         for (const [id, oAuthGuild] of guilds) {
-          const fetchedGuild = await oAuthGuild.fetch();
-          await this.prisma.guild.upsert({
-            where: { id },
-            update: {
-              name: fetchedGuild.name,
-              iconUrl: fetchedGuild.iconURL(),
-            },
-            create: {
-              id,
-              name: fetchedGuild.name,
-              iconUrl: fetchedGuild.iconURL(),
-            },
-          });
+          // One unavailable guild must not stop the others from syncing, nor skip the
+          // slash command registration below.
+          try {
+            const fetchedGuild = await oAuthGuild.fetch();
+            await this.prisma.guild.upsert({
+              where: { id },
+              update: {
+                name: fetchedGuild.name,
+                iconUrl: fetchedGuild.iconURL(),
+              },
+              create: {
+                id,
+                name: fetchedGuild.name,
+                iconUrl: fetchedGuild.iconURL(),
+              },
+            });
+          } catch (guildErr) {
+            this.logger.warn(`Could not sync guild ${id} on startup: ${guildErr}`);
+          }
         }
         this.logger.log(`Synchronized ${guilds.size} guilds with database.`);
         await this.registerGuildSlashCommands();
@@ -187,66 +202,31 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     this.client.on(Events.InteractionCreate, async (interaction) => {
       try {
         if (interaction.isChatInputCommand()) {
-          if (interaction.commandName === 'event') {
-            const subcommand = interaction.options.getSubcommand();
-            if (subcommand === 'create') {
-              await this.eventCreateCommand.showModal(interaction);
-            } else if (subcommand === 'list') {
-              await this.eventListCommand.execute(interaction);
-            } else if (subcommand === 'delete') {
-              await this.eventDeleteCommand.execute(interaction);
-            }
-          } else if (interaction.commandName === 'lineup_post') {
-            await this.lineupPostCommand.execute(interaction);
-          } else if (interaction.commandName === 'ea_setup') {
-            await this.eaCommands.handleSetup(interaction);
-          } else if (interaction.commandName === 'ea_stats') {
-            await this.eaCommands.handleStats(interaction);
-          } else if (interaction.commandName === 'ea_latest') {
-            await this.eaCommands.handleLatest(interaction);
-          } else if (interaction.commandName === 'stats') {
-            await this.eaCommands.handlePlayerStats(interaction);
-          } else if (interaction.commandName === 'register-player') {
-            await this.eaCommands.handleRegisterPlayer(interaction);
-          } else if (interaction.commandName === 'unregister-player') {
-            await this.eaCommands.handleUnregisterPlayer(interaction);
-          } else if (interaction.commandName === 'vpg_transfers') {
-            const subcommand = interaction.options.getSubcommand();
-            if (subcommand === 'setup') {
-              await this.vpgCommands.handleSetup(interaction);
-            } else if (subcommand === 'latest') {
-              await this.vpgCommands.handleLatest(interaction);
-            } else if (subcommand === 'check') {
-              await this.vpgCommands.handleCheck(interaction);
-            }
-          } else if (interaction.commandName === 'superliga') {
-            await this.superligaCommands.handleSuperliga(interaction);
-          } else if (interaction.commandName === 'superliga_mvp') {
-            await this.superligaMvpCommands.handle(interaction);
-          } else if (interaction.commandName === 'live_results') {
-            await this.superligaCommands.handleLiveResults(interaction);
-          } else if (interaction.commandName === 'ryvl') {
-            await this.ryvlCommands.handleRyvl(interaction);
-          } else if (interaction.commandName === 'totw') {
-            await this.totwCommands.handleTotw(interaction);
-          } else if (interaction.commandName === 'tournament') {
-            await this.tournamentCommands.handleTournament(interaction);
-          } else if (interaction.commandName === 'create_tournament') {
-            await this.tournamentCommands.handleCreateTournament(interaction);
-          } else if (interaction.commandName === 'track_team') {
-            await this.eaCommands.handleTrackTeam(interaction);
-          } else if (interaction.commandName === 'team_stats') {
-            await this.eaCommands.handleTeamStats(interaction);
+          const sub = interaction.options.getSubcommand(false);
+          if (isAdminSubcommand(interaction.commandName, sub) && !(await ensureManageGuild(interaction))) {
+            return;
           }
+          const run = resolveSlashRoute(interaction.commandName, sub);
+          if (!run) {
+            // A command Discord still lists after it was removed or renamed.
+            await interaction.reply({
+              content: '⚠️ This command is no longer available. Type / to see the current commands.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
+          }
+          await run(this.commandHandlers(), interaction);
         } else if (interaction.isAutocomplete()) {
-
-          if (interaction.commandName === 'event') {
-            const subcommand = interaction.options.getSubcommand();
-            if (subcommand === 'delete') {
-              await this.eventDeleteCommand.handleAutocomplete(interaction);
-            }
-          } else if (interaction.commandName === 'lineup_post') {
-            await this.lineupPostCommand.handleAutocomplete(interaction);
+          const focused = interaction.options.getFocused(true);
+          const complete = resolveAutocompleteRoute(
+            interaction.commandName,
+            interaction.options.getSubcommand(false),
+            focused.name,
+          );
+          if (complete) {
+            await complete(this.commandHandlers(), interaction);
+          } else {
+            await interaction.respond([]);
           }
         } else if (interaction.isModalSubmit()) {
           if (interaction.customId === EVENT_CREATE_MODAL_ID) {
@@ -291,8 +271,47 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
         }
       } catch (error) {
         this.logger.error(`Error handling interaction: ${error}`);
+        await this.reportInteractionError(interaction).catch(() => undefined);
       }
     });
+  }
+
+  private commandHandlers(): SlashCommandHandlers {
+    return {
+      eventCreate: this.eventCreateCommand,
+      eventList: this.eventListCommand,
+      eventDelete: this.eventDeleteCommand,
+      lineupPost: this.lineupPostCommand,
+      ea: this.eaCommands,
+      vpg: this.vpgCommands,
+      superliga: this.superligaCommands,
+      superligaMvp: this.superligaMvpCommands,
+      ryvl: this.ryvlCommands,
+      totw: this.totwCommands,
+      tournament: this.tournamentCommands,
+    };
+  }
+
+  /**
+   * Last resort when a handler throws: without an answer Discord shows "The application
+   * did not respond" or leaves "is thinking..." forever. A deferred slash command gets
+   * its reply replaced; components get a private follow-up so a public message (an event
+   * announcement, a lineup) is never overwritten with the error.
+   */
+  private async reportInteractionError(interaction: Interaction): Promise<void> {
+    const content = '❌ Something went wrong while handling this. Please try again in a moment.';
+    if (interaction.isAutocomplete()) {
+      if (!interaction.responded) await interaction.respond([]);
+      return;
+    }
+    if (!interaction.isRepliable()) return;
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+    } else if (interaction.isChatInputCommand()) {
+      await interaction.editReply({ content, embeds: [], components: [] });
+    } else {
+      await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+    }
   }
 
   private async clearGlobalSlashCommands(): Promise<void> {
@@ -529,6 +548,31 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** Replaces the image (and mention line) of a message the bot posted earlier. */
+  async editImageMessage(
+    channelId: string,
+    messageId: string,
+    imageBuffer: Buffer,
+    fileName: string,
+    content?: string,
+  ): Promise<Message> {
+    const channel = await this.client.channels.fetch(channelId).catch(() => null);
+    if (!channel || !('messages' in channel)) {
+      throw new NotFoundException(`Channel with ID "${channelId}" not found`);
+    }
+    const message = await (channel as TextChannel).messages.fetch(messageId).catch(() => null);
+    if (!message) {
+      throw new NotFoundException(`Message with ID "${messageId}" not found in channel "${channelId}"`);
+    }
+    return message.edit({
+      content: content && content.trim() ? content : null,
+      files: [new AttachmentBuilder(imageBuffer, { name: fileName })],
+      attachments: [],
+      // Editing must not ping the roles again.
+      allowedMentions: { parse: [] },
+    });
+  }
+
   async editMessage(
     channelId: string,
     messageId: string,
@@ -563,6 +607,21 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     if (message) {
       await message.delete();
     }
+  }
+
+  /**
+   * False when the bot is connected but no longer a member of the guild (it was kicked
+   * or the server was deleted). Pollers skip such guilds instead of calling EA/VPG and
+   * failing to post on every tick. Before the gateway is ready, every guild counts.
+   */
+  isInGuild(guildId: string): boolean {
+    if (!this.client.isReady()) return true;
+    return this.client.guilds.cache.has(guildId);
+  }
+
+  /** Resolves a postable channel only if it belongs to guildId; throws 400 otherwise. */
+  assertChannelInGuild(guildId: string, channelId: unknown): Promise<GuildPostableChannel> {
+    return assertChannelInGuild(this.client, guildId, channelId);
   }
 
   async checkUserIsAdmin(guildId: string, userId: string): Promise<boolean> {

@@ -40,6 +40,7 @@ model Guild {
   tournamentConfig      TournamentConfig?
   tournamentInstances   TournamentInstance[]
   trackedClubs          TrackedClub[]
+  websiteSubmissions    WebsiteSubmission[]
 
   @@map("guilds")
 }
@@ -71,7 +72,13 @@ model LineupDraft {
   kickoffAt          DateTime? @map("kickoff_at")
   timezone           String    @default("Europe/Bucharest")
   mentionRoleIds     String[]  @default([]) @map("mention_role_ids")
+  // { [slot]: { discordUserId?: string, name: string } }; legacy rows hold { [slot]: name }.
   assignments        Json      @default("{}")
+  occurrenceId       String?   @map("occurrence_id")
+  showEaNames        Boolean   @default(false) @map("show_ea_names")
+  lastPostedMessageId String?  @map("last_posted_message_id")
+  lastPostedChannelId String?  @map("last_posted_channel_id")
+  lastPostedAt       DateTime? @map("last_posted_at")
   createdByDiscordId String    @map("created_by_discord_id")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
@@ -95,10 +102,16 @@ model Event {
   rrule          String?     // RFC 5545 RRULE string, null = one-off
   duration       Int         @default(60) // Duration in minutes
   status         EventStatus @default(ACTIVE)
+  // Minutes before kickoff at which later occurrences are announced.
+  publishLeadMinutes Int     @default(2880) @map("publish_lead_minutes")
+  vpgMatchId     Int?        @map("vpg_match_id")
+  archivedAt     DateTime?   @map("archived_at")
   createdAt      DateTime    @default(now()) @map("created_at")
   updatedAt      DateTime    @updatedAt @map("updated_at")
   occurrences    EventOccurrence[]
 
+  @@unique([guildId, vpgMatchId])
+  @@index([status, archivedAt])
   @@map("events")
 }
 
@@ -114,11 +127,15 @@ model EventOccurrence {
   channelId   String?          @map("channel_id")
   publishedAt DateTime?        @map("published_at")
   closedAt    DateTime?        @map("closed_at")
+  // Publishing lease: set atomically before sending so only one worker posts.
+  publishClaimToken String?    @map("publish_claim_token")
+  publishClaimedAt  DateTime?  @map("publish_claimed_at")
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
   rsvps       Rsvp[]
 
   @@unique([eventId, index])
+  @@index([status, startsAt])
   @@map("event_occurrences")
 }
 
@@ -164,17 +181,23 @@ model ClubTrackerConfig {
   clubName        String    @default("RYVL Esports") @map("club_name")
   platform        String    @default("common-gen5")
   channelId       String?   @map("channel_id")
-  enabled         Boolean   @default(true)
+  enabled         Boolean   @default(false)
   matchTypes      String[]  @default(["leagueMatch", "friendlyMatch", "playoffMatch"]) @map("match_types")
   pollIntervalSec Int       @default(90) @map("poll_interval_sec")
   lastPolledAt    DateTime? @map("last_polled_at")
   lastMatchId     String?   @map("last_match_id")
+  elo             Int       @default(1200)
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@map("club_tracker_configs")
 }
 
+/// One row per (guild, tracked club, EA match).
+/// Column meaning (names kept for compatibility; they are NOT EA's home/away):
+/// home* = the tracked club `clubId` this row belongs to, away* = its opponent.
+/// A match between two clubs tracked in the same guild therefore has two rows,
+/// one from each club's perspective.
 model ProcessedEaMatch {
   id               String   @id @default(uuid())
   eaMatchId        String   @map("ea_match_id")
@@ -182,17 +205,22 @@ model ProcessedEaMatch {
   guild            Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
   clubId           String   @map("club_id")
   matchType        String   @map("match_type")
-  homeClubName     String   @map("home_club_name")
-  awayClubName     String   @map("away_club_name")
-  homeScore        Int      @map("home_score")
-  awayScore        Int      @map("away_score")
+  homeClubName     String   @map("home_club_name") // tracked club
+  awayClubName     String   @map("away_club_name") // opponent
+  homeScore        Int      @map("home_score") // tracked club goals
+  awayScore        Int      @map("away_score") // opponent goals
   timestamp        DateTime
   discordMessageId String?  @map("discord_message_id")
   channelId        String?  @map("channel_id")
+  /// Nulled by the daily retention job 30 days after the row was created.
   rawPayload       Json?    @map("raw_payload")
+  /// true while the Discord post has not succeeded yet; the poller retries it.
+  postPending      Boolean  @default(false) @map("post_pending")
+  postAttempts     Int      @default(0) @map("post_attempts")
+  postError        String?  @map("post_error")
   createdAt        DateTime @default(now()) @map("created_at")
 
-  @@unique([guildId, eaMatchId])
+  @@unique([guildId, clubId, eaMatchId])
   @@map("processed_ea_matches")
 }
 
@@ -382,6 +410,7 @@ model PlayerRegistrationAudit {
   performedById    String   @map("performed_by_id")
   createdAt        DateTime @default(now()) @map("created_at")
 
+  @@index([guildId, createdAt])
   @@map("player_registration_audits")
 }
 
@@ -393,8 +422,11 @@ model TotwConfig {
   communitySlug  String    @default("VPGRoPS5") @map("community_slug")
   leagueSlug     String    @default("Superliga-Romania") @map("league_slug")
   formation      String    @default("3-5-2")
-  cronSchedule   String?   @default("0 18 * * 1") @map("cron_schedule")
-  enabled        Boolean   @default(true)
+  // 5-field cron, evaluated in the guild's time zone (default Saturdays 20:00).
+  cronSchedule   String?   @default("0 20 * * 6") @map("cron_schedule")
+  enabled        Boolean   @default(false)
+  // When the scheduler last posted this TOTW; stops a week from being posted twice.
+  lastPostedAt   DateTime? @map("last_posted_at")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
@@ -552,4 +584,19 @@ model SuperligaMvpTotwSelection {
   @@unique([leagueSlug, season, week, vpgUsername])
   @@index([leagueSlug, season])
   @@map("superliga_mvp_totw_selections")
+}
+
+// Public website contact / trial forms. Stored before the Discord post so a submission
+// is never lost when the channel is missing or Discord is down.
+model WebsiteSubmission {
+  id                 String   @id @default(uuid())
+  guildId            String   @map("guild_id")
+  guild              Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  kind               String
+  payload            Json
+  deliveredMessageId String?  @map("delivered_message_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([guildId, createdAt])
+  @@map("website_submissions")
 }

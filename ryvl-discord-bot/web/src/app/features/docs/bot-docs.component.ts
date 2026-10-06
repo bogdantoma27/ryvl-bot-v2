@@ -1,12 +1,16 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  OnInit,
   computed,
+  inject,
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { ApiService } from '../../core/api.service';
+import { BotCommandDoc as RegisteredCommand } from '../../core/models';
 
 interface BotCommandDoc {
   name: string;
@@ -20,7 +24,62 @@ interface BotCommandDoc {
   responsePreview?: string;
 }
 
-const BOT_COMMANDS: BotCommandDoc[] = [
+const CATEGORY_BY_COMMAND: Record<string, BotCommandDoc['category']> = {
+  tournament: 'tournaments',
+  create_tournament: 'tournaments',
+  ea_setup: 'ea',
+  ea_stats: 'ea',
+  ea_latest: 'ea',
+  stats: 'ea',
+  'register-player': 'ea',
+  'unregister-player': 'ea',
+  track_team: 'ea',
+  team_stats: 'ea',
+  vpg_transfers: 'vpg',
+  superliga: 'vpg',
+  live_results: 'vpg',
+  totw: 'vpg',
+  superliga_mvp: 'vpg',
+  ryvl: 'vpg',
+  lineup_post: 'lineups',
+  event: 'events',
+};
+
+const CATEGORY_LABELS: Record<BotCommandDoc['category'], string> = {
+  tournaments: '🏆 Tournaments & Draft',
+  ea: '⚽ EA Pro Clubs Tracker',
+  vpg: '🔄 VPG Superliga & Feeds',
+  lineups: '📋 Lineup Builder & Tactics',
+  events: '📅 Events & Attendance',
+  admin: '⚙️ Administration & Configuration',
+};
+
+/** Turns one registered slash command into a docs entry. */
+export function toCommandDoc(cmd: RegisteredCommand): BotCommandDoc {
+  const category = CATEGORY_BY_COMMAND[cmd.command] || 'admin';
+  const syntax = [
+    cmd.name,
+    ...cmd.options.map((o) => (o.required ? `<${o.name}>` : `[${o.name}]`)),
+  ].join(' ');
+  return {
+    name: cmd.name,
+    category,
+    categoryLabel: CATEGORY_LABELS[category],
+    syntax,
+    description: cmd.description,
+    permission: cmd.adminOnly ? 'Admin' : 'Everyone',
+    parameters: cmd.options.map((o) => ({
+      name: o.name,
+      required: o.required,
+      description: o.choices?.length ? `${o.description} (${o.choices.join(', ')})` : `${o.description} (${o.type})`,
+    })),
+    example: syntax,
+  };
+}
+
+// Hand-written guides for the tournament flow (buttons and richer descriptions). Every
+// other entry on this page is generated from the slash commands the bot registers.
+const TOURNAMENT_GUIDES: BotCommandDoc[] = [
   // Tournaments
   {
     name: '/tournament create',
@@ -104,152 +163,6 @@ const BOT_COMMANDS: BotCommandDoc[] = [
     example: '/tournament toggle-signups',
     responsePreview: '⚡ Înscrierile pentru Cupa Draft sunt acum SIGNUPS_CLOSED.',
   },
-
-  // EA SPORTS FC 27 Pro Clubs
-  {
-    name: '/club-stats',
-    category: 'ea',
-    categoryLabel: '⚽ EA Pro Clubs Tracker',
-    syntax: '/club-stats [club_id]',
-    description: 'View real-time EA SPORTS FC 27 Pro Clubs club record, skill rating, current division, and goals.',
-    permission: 'Everyone',
-    parameters: [
-      { name: 'club_id', required: false, description: 'EA Club ID (defaults to active tracked club)' },
-    ],
-    example: '/club-stats club_id:128199',
-    responsePreview: '📊 Club: RYVL Esports | Record: 142W - 18D - 35L | Win Rate: 72.8% | Division: 1 | Skill: 2,450',
-  },
-  {
-    name: '/club-matches',
-    category: 'ea',
-    categoryLabel: '⚽ EA Pro Clubs Tracker',
-    syntax: '/club-matches [count]',
-    description: 'Display recent match scorecards, opponent details, match timestamps, and MOTM stats.',
-    permission: 'Everyone',
-    parameters: [
-      { name: 'count', required: false, description: 'Number of recent matches (default: 5, max: 10)' },
-    ],
-    example: '/club-matches count:5',
-    responsePreview: '⚽ Recent Match: RYVL Esports 4 - 1 Primetime FC | Goals: Mihai (2), Denis (2) | MOTM: Denis (9.4 rating)',
-  },
-  {
-    name: '/register-player',
-    category: 'ea',
-    categoryLabel: '⚽ EA Pro Clubs Tracker',
-    syntax: '/register-player <user> <ea_gamertag> [position]',
-    description: 'Map a Discord server member to their exact EA SPORTS FC Pro Clubs gamertag for individual statistics.',
-    permission: 'Admin',
-    parameters: [
-      { name: 'user', required: true, description: '@mention or Discord User ID' },
-      { name: 'ea_gamertag', required: true, description: 'Exact EA FC Gamertag' },
-      { name: 'position', required: false, description: 'Primary preferred position (ST, CAM, CM, CDM, CB, GK)' },
-    ],
-    example: '/register-player user:@Alex ea_gamertag:AlexRO_9 position:ST',
-    responsePreview: '🛡️ Linked @Alex to EA Gamertag "AlexRO_9" (Position: ST). Security audit log created.',
-  },
-  {
-    name: '/player-stats',
-    category: 'ea',
-    categoryLabel: '⚽ EA Pro Clubs Tracker',
-    syntax: '/player-stats <gamertag_or_user>',
-    description: 'Display personal statistics, matches played, goals, assists, average match rating, pass accuracy, and tackle rates.',
-    permission: 'Everyone',
-    parameters: [
-      { name: 'gamertag_or_user', required: true, description: 'EA Gamertag or @user mention' },
-    ],
-    example: '/player-stats gamertag:AlexRO_9',
-    responsePreview: '⭐ AlexRO_9 (ST): 54 Matches | 62 Goals | 21 Assists | Rating: 8.7 | Pass Rate: 84% | MOTM Awards: 14',
-  },
-
-  // VPG Competitions & Transfers
-  {
-    name: '/vpg-transfers',
-    category: 'vpg',
-    categoryLabel: '🔄 VPG Transfers & Leaks',
-    syntax: '/vpg-transfers [league] [limit]',
-    description: 'Fetch the latest verified VPG transfer announcements with fees, dates, and club badges.',
-    permission: 'Everyone',
-    parameters: [
-      { name: 'league', required: false, description: 'League slug (searchable in dashboard or VPG API)' },
-      { name: 'limit', required: false, description: 'Number of transfers (default: 5, max: 20)' },
-    ],
-    example: '/vpg-transfers league:Superliga-Romania limit:5',
-    responsePreview: '⚽ HERE WE GO: Mihai -> RYVL Esports (Fee: Free Agent) • Official VPG Verification',
-  },
-  {
-    name: '/vpg-totw',
-    category: 'vpg',
-    categoryLabel: '🔄 VPG Transfers & Leaks',
-    syntax: '/vpg-totw [league] [formation]',
-    description: 'Render and post the high-resolution Team of the Week pitch graphic featuring 12 top players, avatars, and nameplates.',
-    permission: 'Admin',
-    parameters: [
-      { name: 'league', required: false, description: 'League slug' },
-      { name: 'formation', required: false, description: 'Pitch formation: 3-5-2 or 3-1-4-2' },
-    ],
-    example: '/vpg-totw league:Superliga-Romania formation:3-5-2',
-    responsePreview: '⭐ Generated and posted official Team of the Week graphic to configured announcement channel!',
-  },
-  {
-    name: '/vpg-standings',
-    category: 'vpg',
-    categoryLabel: '🔄 VPG Transfers & Leaks',
-    syntax: '/vpg-standings [league] [season]',
-    description: 'Display the latest official VPG league table, points, goal difference, and match records.',
-    permission: 'Everyone',
-    parameters: [
-      { name: 'league', required: false, description: 'League slug' },
-      { name: 'season', required: false, description: 'Season number' },
-    ],
-    example: '/vpg-standings league:Superliga-Romania',
-    responsePreview: '🏆 VPG Superliga Standings: 1. RYVL Esports (36 pts) | 2. Primetime (31 pts) | 3. FC Bucharest (28 pts)',
-  },
-
-  // Lineup Builder
-  {
-    name: '/lineup create',
-    category: 'lineups',
-    categoryLabel: '📋 Lineup Builder & Tactics',
-    syntax: '/lineup create <opponent> <formation>',
-    description: 'Open the interactive 11v11 pitch lineup builder with tactical positions, starters, and bench reserves.',
-    permission: 'Captain / Manager',
-    parameters: [
-      { name: 'opponent', required: true, description: 'Opposing club name' },
-      { name: 'formation', required: true, description: 'Formation (e.g. 3-5-2, 3-1-4-2, 4-2-3-1)' },
-    ],
-    example: '/lineup create opponent:"Primetime FC" formation:"3-5-2"',
-    responsePreview: '📋 Starting Lineup Builder: Click positions on the graphic to assign registered Discord players.',
-  },
-
-  // Events & Scheduling
-  {
-    name: '/event create',
-    category: 'events',
-    categoryLabel: '📅 Events & Attendance',
-    syntax: '/event create <title> <date_time> [type] [channel]',
-    description: 'Schedule team training, trials, or tournament matches with interactive Attend / Tentative / Decline buttons.',
-    permission: 'Admin',
-    parameters: [
-      { name: 'title', required: true, description: 'Event title' },
-      { name: 'date_time', required: true, description: 'Date and time (e.g. 2026-10-05 21:00)' },
-      { name: 'type', required: false, description: 'MATCH, TRAINING, or TRIAL' },
-      { name: 'channel', required: false, description: 'Announcement channel' },
-    ],
-    example: '/event create title:"Official League Match vs Primetime" date_time:"2026-10-01 22:00"',
-    responsePreview: '📅 Event Created: Official League Match vs Primetime. Voting chips active: [✅ Attend] [❔ Tentative] [❌ Absent]',
-  },
-
-  // Configuration
-  {
-    name: '/config channels',
-    category: 'admin',
-    categoryLabel: '⚙️ Administration & Configuration',
-    syntax: '/config channels',
-    description: 'Inspect and configure default notification channels for transfers, fixtures, standings, lineups, and results.',
-    permission: 'Admin',
-    example: '/config channels',
-    responsePreview: '⚙️ Channel Config: Lineups: #lineups | Transfers: #transfers | Fixtures: #fixtures | Standings: #standings',
-  },
 ];
 
 @Component({
@@ -296,7 +209,7 @@ const BOT_COMMANDS: BotCommandDoc[] = [
           <div class="text-2xl">🏆</div>
           <div class="text-sm font-bold text-white">Tournaments & FC Draft</div>
           <p class="text-xs text-slate-400">
-            MultiBots-style automated category and channels, interactive draft wheel with jokers, 3-5-2 and 3-1-4-2 formations.
+            Standard (groups + knockouts) or FC Draft tournaments with their own channels, sign-up buttons, a draft wheel with jokers and score reporting.
           </p>
         </div>
 
@@ -304,7 +217,7 @@ const BOT_COMMANDS: BotCommandDoc[] = [
           <div class="text-2xl">⚽</div>
           <div class="text-sm font-bold text-white">Multi-Club EA FC Tracker</div>
           <p class="text-xs text-slate-400">
-            Auto-polls EA FC 27 Pro Clubs servers every 90s, posts match stats and MOTM cards to dedicated Discord channels.
+            Polls EA Pro Clubs for every tracked club (every 90s by default) and posts match results and player stats; members link gamertags with /register-player.
           </p>
         </div>
 
@@ -312,7 +225,7 @@ const BOT_COMMANDS: BotCommandDoc[] = [
           <div class="text-2xl">⭐</div>
           <div class="text-sm font-bold text-white">Team of the Week (TOTW)</div>
           <p class="text-xs text-slate-400">
-            Automated weekly cron generates high-resolution 12-player pitch cards with Discord player avatars and nameplates.
+            Builds the Superliga Team of the Week image from VPG stats and posts it on the schedule set in the admin panel, or on demand with /totw post.
           </p>
         </div>
 
@@ -320,7 +233,7 @@ const BOT_COMMANDS: BotCommandDoc[] = [
           <div class="text-2xl">🔄</div>
           <div class="text-sm font-bold text-white">VPG Transfers & Feeds</div>
           <p class="text-xs text-slate-400">
-            Instant transfer announcements with "HERE WE GO" cards, transfer fees, club badges, and player history.
+            Posts new VPG Superliga România transfers, results, fixtures and standings to the channels configured in the admin panel.
           </p>
         </div>
       </div>
@@ -357,7 +270,7 @@ const BOT_COMMANDS: BotCommandDoc[] = [
             class="px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap"
             [ngClass]="selectedCategory() === 'all' ? 'bg-[#5865F2] text-white shadow-sm' : 'bg-slate-800 text-slate-400 hover:text-white'"
           >
-            All Commands ({{ allCommands.length }})
+            All Commands ({{ allCommands().length }})
           </button>
           <button
             type="button"
@@ -412,6 +325,18 @@ const BOT_COMMANDS: BotCommandDoc[] = [
 
       <!-- Commands Directory -->
       <div class="space-y-4">
+        <p class="text-xs text-slate-400">
+          <strong class="text-rose-400">Admin</strong> means the Manage Server permission (Administrator includes it).
+          Tournament admin commands also accept the tournament admin roles set in the dashboard.
+          Every other command can be used by all members.
+        </p>
+        @if (loading()) {
+          <p class="text-xs text-slate-400" role="status">Loading the bot's registered commands…</p>
+        } @else if (loadError()) {
+          <p class="text-xs text-amber-300" role="status">
+            The live command list could not be loaded; only the tournament guides are shown. Type / in Discord to see every command.
+          </p>
+        }
         @if (filteredCommands().length === 0) {
           <div class="bg-[#16213e] border border-slate-800 rounded-2xl p-12 text-center text-slate-400 space-y-2">
             <div class="text-3xl">🔍</div>
@@ -471,7 +396,7 @@ const BOT_COMMANDS: BotCommandDoc[] = [
               <!-- Example and Response Preview -->
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                 <div class="p-3 rounded-xl bg-[#11192e] border border-slate-800 space-y-1">
-                  <div class="text-[10px] uppercase font-bold text-slate-500">Command Usage Example:</div>
+                  <div class="text-[10px] uppercase font-bold text-slate-500">Usage:</div>
                   <code class="text-xs font-mono text-indigo-300 block select-all break-all">{{ cmd.example }}</code>
                 </div>
 
@@ -498,8 +423,28 @@ const BOT_COMMANDS: BotCommandDoc[] = [
     }
   `],
 })
-export class BotDocsComponent {
-  readonly allCommands = BOT_COMMANDS;
+export class BotDocsComponent implements OnInit {
+  private readonly api = inject(ApiService);
+  private readonly registered = signal<BotCommandDoc[]>([]);
+  readonly loadError = signal<boolean>(false);
+  readonly loading = signal<boolean>(true);
+
+  readonly allCommands = computed(() => {
+    const guides = new Set(TOURNAMENT_GUIDES.map((g) => g.name));
+    return [...TOURNAMENT_GUIDES, ...this.registered().filter((cmd) => !guides.has(cmd.name))];
+  });
+
+  async ngOnInit(): Promise<void> {
+    try {
+      const commands = await this.api.getBotCommands();
+      this.registered.set(commands.map(toCommandDoc));
+    } catch {
+      this.loadError.set(true);
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
   readonly searchQuery = signal<string>('');
   readonly selectedCategory = signal<string>('all');
 
@@ -507,8 +452,9 @@ export class BotDocsComponent {
     const q = this.searchQuery().trim().toLowerCase();
     const cat = this.selectedCategory();
 
-    return this.allCommands.filter((cmd) => {
-      const matchCat = cat === 'all' || cmd.category === cat;
+    return this.allCommands().filter((cmd) => {
+      // "Admin" lists every command that needs Manage Server, whatever its feature area.
+      const matchCat = cat === 'all' || cmd.category === cat || (cat === 'admin' && cmd.permission === 'Admin');
       if (!matchCat) return false;
 
       if (!q) return true;

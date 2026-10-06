@@ -39,10 +39,19 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
+  // Run module cleanup hooks (Discord logout, cron stop) when pm2 restarts the process.
+  app.enableShutdownHooks();
+
   const port = configService.port || 3000;
   await app.listen(port);
   logger.log(`RYVL backend listening on port ${port}; public website: ${frontendOrigin}`);
 }
+
+// A stray rejected promise (for example a Discord or VPG call nobody awaited) must not
+// take the bot offline: since Node 15 an unhandled rejection exits the process.
+process.on('unhandledRejection', (reason) => {
+  new Logger('Process').error(`Unhandled promise rejection: ${reason instanceof Error ? reason.stack || reason.message : String(reason)}`);
+});
 
 bootstrap().catch((err) => {
   const logger = new Logger('Bootstrap');

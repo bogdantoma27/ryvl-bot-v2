@@ -22,7 +22,10 @@ import {
   LineupDraftPayload,
 } from './lineup.service';
 
+// Admin dashboard API: rendering is CPU-heavy and posting speaks for the server, so
+// every route needs a signed-in admin of :guildId.
 @Controller('api/guilds/:guildId/lineup')
+@UseGuards(AuthGuard, GuildAdminGuard)
 export class LineupController {
   constructor(private readonly lineupService: LineupService) {}
 
@@ -55,7 +58,6 @@ export class LineupController {
   }
 
   @Post('post')
-  @UseGuards(AuthGuard, GuildAdminGuard)
   async postLineup(
     @Param('guildId') guildId: string,
     @Body() dto: LineupPostDto,
@@ -63,14 +65,36 @@ export class LineupController {
     return this.lineupService.postLineup(guildId, dto);
   }
 
-  @Get('drafts')
+  @Get('members')
   @UseGuards(AuthGuard, GuildAdminGuard)
+  async listMembers(
+    @Param('guildId') guildId: string,
+    @Query('occurrence_id') occurrenceId?: string,
+  ) {
+    return this.lineupService.getLineupMembers(guildId, occurrenceId || null);
+  }
+
+  @Get('occurrences')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async listOccurrences(@Param('guildId') guildId: string) {
+    return this.lineupService.listMatchOccurrences(guildId);
+  }
+
+  @Post('auto-fill')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async autoFill(
+    @Param('guildId') guildId: string,
+    @Body() body: { formation: string; occurrence_id: string; assignments?: unknown },
+  ) {
+    return this.lineupService.autoFill(guildId, body);
+  }
+
+  @Get('drafts')
   async listDrafts(@Param('guildId') guildId: string) {
     return this.lineupService.listDrafts(guildId);
   }
 
   @Get('drafts/:draftId')
-  @UseGuards(AuthGuard, GuildAdminGuard)
   async getDraft(
     @Param('guildId') guildId: string,
     @Param('draftId') draftId: string,
@@ -79,7 +103,6 @@ export class LineupController {
   }
 
   @Post('drafts')
-  @UseGuards(AuthGuard, GuildAdminGuard)
   async createDraft(
     @Param('guildId') guildId: string,
     @CurrentUser() user: JwtPayload,
@@ -89,7 +112,6 @@ export class LineupController {
   }
 
   @Patch('drafts/:draftId')
-  @UseGuards(AuthGuard, GuildAdminGuard)
   async updateDraft(
     @Param('guildId') guildId: string,
     @Param('draftId') draftId: string,
@@ -99,7 +121,6 @@ export class LineupController {
   }
 
   @Delete('drafts/:draftId')
-  @UseGuards(AuthGuard, GuildAdminGuard)
   async deleteDraft(
     @Param('guildId') guildId: string,
     @Param('draftId') draftId: string,

@@ -8,7 +8,9 @@ import { mergeEaRawMatch } from '../ea/ea-match-type';
 import { pickEaMatch } from './mvp-matching';
 import { buildMvpLeaderboard, totwCounter, MVP_FORMULA_DESCRIPTION, MvpLeaderboardEntry } from './mvp-score';
 
-export const SUPERLIGA_LEAGUE_SLUG = 'Superliga-Romania';
+import { SUPERLIGA_LEAGUE_SLUG } from '../vpg/league.constants';
+
+export { SUPERLIGA_LEAGUE_SLUG };
 // EA only keeps each club's last few games per category, so a VPG result is only
 // linkable for a while after it is played. We look for this long after the later of
 // kickoff and the moment the result appeared on VPG (a rescheduled game can be
@@ -16,6 +18,9 @@ export const SUPERLIGA_LEAGUE_SLUG = 'Superliga-Romania';
 export const LINK_GIVE_UP_MS = 72 * 60 * 60 * 1000;
 // A fixture still not reported this long after kickoff is shown as not played yet.
 export const OVERDUE_AFTER_MS = 4 * 60 * 60 * 1000;
+// After the season changes, an earlier season's fixture that is still unplayed this long
+// after kickoff is closed as cancelled, so the sync stops looking at that season.
+export const PREVIOUS_SEASON_CLOSE_MS = 30 * 24 * 60 * 60 * 1000;
 // VPG Superliga games are played as private club friendlies, but check every feed.
 const EA_MATCH_TYPES = ['friendlyMatch', 'leagueMatch', 'playoffMatch'];
 const EA_PLATFORM = 'common-gen5';
@@ -103,28 +108,78 @@ export class SuperligaMvpService {
     }
     const newMatches = await this.syncFixtures(leagueSlug, season, completed, scheduled);
 
+    const eaCache = new Map<string, EaRawMatch[]>();
+    const counts = { linked: 0, expired: 0 };
+    await this.linkPending(leagueSlug, season, teamsById, eaCache, counts, errors);
+    await this.syncPreviousSeasons(leagueSlug, season, teamsById, eaCache, counts, errors);
+    const { linked, expired } = counts;
+
+    const stillPending = await this.prisma.superligaMvpMatch.count({ where: { leagueSlug, season, status: 'PENDING' } });
+    const linkedTeams = [...teamsById.values()].filter((t) => t.eaClubId).length;
+    return { leagueSlug, season, teamsLinkedToEa: linkedTeams, teamsTotal: teamsById.size, newMatches, linked, stillPending, expired, errors };
+  }
+
+  private async linkPending(
+    leagueSlug: string,
+    season: number,
+    teamsById: Map<number, { name: string; eaClubId: string | null }>,
+    eaCache: Map<string, EaRawMatch[]>,
+    counts: { linked: number; expired: number },
+    errors: string[],
+  ): Promise<void> {
     const pending = await this.prisma.superligaMvpMatch.findMany({
       where: { leagueSlug, season, status: 'PENDING' },
       orderBy: { kickoffAt: 'asc' },
     });
-
-    const eaCache = new Map<string, EaRawMatch[]>();
-    let linked = 0;
-    let expired = 0;
     for (const match of pending) {
       try {
         const outcome = await this.tryLink(match, teamsById, eaCache);
-        if (outcome === 'LINKED') linked++;
-        if (outcome === 'EXPIRED') expired++;
+        if (outcome === 'LINKED') counts.linked++;
+        if (outcome === 'EXPIRED') counts.expired++;
       } catch (err: any) {
         errors.push(`Match ${match.vpgMatchId}: ${err.message}`);
         this.logger.warn(`Superliga MVP link failed for VPG match ${match.vpgMatchId}: ${err.message}`);
       }
     }
+  }
 
-    const stillPending = await this.prisma.superligaMvpMatch.count({ where: { leagueSlug, season, status: 'PENDING' } });
-    const linkedTeams = [...teamsById.values()].filter((t) => t.eaClubId).length;
-    return { leagueSlug, season, teamsLinkedToEa: linkedTeams, teamsTotal: teamsById.size, newMatches, linked, stillPending, expired, errors };
+  /**
+   * When VPG moves to a new season, the last games of the previous one can still be
+   * waiting for their EA match or be reported late. Keep syncing an earlier season while
+   * it has open fixtures: its late results are picked up, pending ones are linked or
+   * expire as usual, and fixtures never played are eventually closed as cancelled.
+   */
+  private async syncPreviousSeasons(
+    leagueSlug: string,
+    currentSeason: number,
+    teamsById: Map<number, { name: string; eaClubId: string | null }>,
+    eaCache: Map<string, EaRawMatch[]>,
+    counts: { linked: number; expired: number },
+    errors: string[],
+  ): Promise<void> {
+    const closeBefore = new Date(Date.now() - PREVIOUS_SEASON_CLOSE_MS);
+    const open = await this.prisma.superligaMvpMatch.groupBy({
+      by: ['season'],
+      where: {
+        leagueSlug,
+        season: { lt: currentSeason },
+        OR: [{ status: 'PENDING' }, { status: 'SCHEDULED', kickoffAt: { gte: closeBefore } }],
+      },
+    });
+    for (const { season } of open) {
+      try {
+        const completed = await this.vpg.fetchAllMatches('complete', season, leagueSlug);
+        const scheduled = await this.vpg.fetchAllMatches('scheduled', season, leagueSlug);
+        await this.syncFixtures(leagueSlug, season, completed, scheduled);
+      } catch (err: any) {
+        errors.push(`Season ${season}: ${err.message}`);
+      }
+      await this.linkPending(leagueSlug, season, teamsById, eaCache, counts, errors);
+    }
+    await this.prisma.superligaMvpMatch.updateMany({
+      where: { leagueSlug, season: { lt: currentSeason }, status: 'SCHEDULED', kickoffAt: { lt: closeBefore } },
+      data: { status: 'CANCELLED', lastError: 'The season ended without a result for this fixture' },
+    });
   }
 
   private async refreshTeams(leagueSlug: string, errors: string[]) {

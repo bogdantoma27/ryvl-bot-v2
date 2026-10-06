@@ -24,12 +24,22 @@ function fixture(feeds) {
   const saved = [], sent = [], processed = new Map();
   const config = { guildId: 'fixture-guild', clubId, clubName: 'RYVL Esports', channelId: 'fixture-channel', platform: 'common-gen5', matchTypes: Object.keys(feeds), lastMatchId: 'previous-match' };
   const prisma = {
-    clubTrackerConfig: { findUnique: async () => config, update: async ({ data }) => ({ ...config, ...data }) },
-    processedEaMatch: {
-      findUnique: async ({ where }) => processed.get(where.guildId_eaMatchId.eaMatchId) || null,
-      create: async ({ data }) => { saved.push(data); processed.set(data.eaMatchId, data); return data; },
-      upsert: async ({ create }) => { saved.push(create); processed.set(create.eaMatchId, create); return create; },
+    clubTrackerConfig: {
+      findUnique: async () => config, findFirst: async () => null, findMany: async () => [config],
+      update: async ({ data }) => ({ ...config, ...data }), updateMany: async () => ({ count: 1 }),
     },
+    trackedClub: { findMany: async () => [], findFirst: async () => null, updateMany: async () => ({ count: 0 }) },
+    processedEaMatch: {
+      findMany: async () => [],
+      findUnique: async ({ where }) => processed.get(where.guildId_clubId_eaMatchId.eaMatchId) || null,
+      create: async ({ data }) => {
+        if (processed.has(data.eaMatchId)) throw Object.assign(new Error('duplicate'), { code: 'P2002' });
+        const row = { id: 'row-' + data.eaMatchId, ...data };
+        saved.push(data); processed.set(data.eaMatchId, row); return row;
+      },
+      update: async ({ where, data }) => data,
+    },
+    eaPlayerMatchStat: { upsert: async () => ({}) },
   };
   const ea = new EaService(prisma);
   ea.runBridge = async (command, args) => {

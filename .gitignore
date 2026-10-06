@@ -8,3 +8,4 @@ pgdata/
 !.env.example
 node_modules/
 dist/
+.angular/

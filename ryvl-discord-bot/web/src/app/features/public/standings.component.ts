@@ -54,6 +54,11 @@ import { VpgStandingsRow, VpgLeaderboardEntry } from '../../core/models';
 
         @if(isLoadingStandings()) {
           <div class="h-96 rounded-2xl bg-white/5 border border-white/10 animate-pulse"></div>
+        } @else if (loadError()) {
+          <div class="public-error" role="alert">
+            <p>{{ loadError() }}</p>
+            <button type="button" class="public-button mt-3" (click)="loadStandings()">Try again</button>
+          </div>
         } @else if (standings().length === 0) {
           <div class="p-12 rounded-2xl bg-[#0c0c0e] border border-white/10 text-center text-slate-400 text-sm">
             No standings data available for this season.
@@ -224,6 +229,9 @@ export class StandingsComponent implements OnInit {
 
   readonly isLoadingStandings = signal<boolean>(true);
   readonly isLoadingLeaderboard = signal<boolean>(true);
+  readonly loadError = signal<string | null>(null);
+  private standingsRequest = 0;
+  private leaderboardRequest = 0;
 
   readonly categories = [
     { key: 'strikers', label: 'Top Scorers (ST)' },
@@ -252,26 +260,32 @@ export class StandingsComponent implements OnInit {
   }
 
   async loadStandings(): Promise<void> {
+    const request = ++this.standingsRequest;
     this.isLoadingStandings.set(true);
+    this.loadError.set(null);
     try {
       const res = await this.api.getSuperligaStandings(this.selectedSeason());
+      if (request !== this.standingsRequest) return;
       this.standings.set(res?.standings || []);
-    } catch (err) {
-      console.error('Failed to load Superliga standings:', err);
+    } catch {
+      if (request === this.standingsRequest) this.loadError.set('The league table could not be loaded from VPG. Please try again.');
     } finally {
-      this.isLoadingStandings.set(false);
+      if (request === this.standingsRequest) this.isLoadingStandings.set(false);
     }
   }
 
   async loadLeaderboard(): Promise<void> {
+    // Quick category or season changes: only the latest request may fill the list.
+    const request = ++this.leaderboardRequest;
     this.isLoadingLeaderboard.set(true);
     try {
       const res = await this.api.getSuperligaLeaderboard(this.selectedCategory() as any, this.selectedSeason());
+      if (request !== this.leaderboardRequest) return;
       this.leaderboard.set(res?.leaderboard || []);
-    } catch (err) {
-      console.error('Failed to load Superliga leaderboard:', err);
+    } catch {
+      if (request === this.leaderboardRequest) this.leaderboard.set([]);
     } finally {
-      this.isLoadingLeaderboard.set(false);
+      if (request === this.leaderboardRequest) this.isLoadingLeaderboard.set(false);
     }
   }
 

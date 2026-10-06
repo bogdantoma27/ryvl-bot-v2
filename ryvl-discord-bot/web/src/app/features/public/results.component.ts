@@ -84,6 +84,11 @@ import { VpgMatchItem } from '../../core/models';
             <div class="h-28 rounded-2xl bg-white/5 border border-white/10 animate-pulse"></div>
           }
         </div>
+      } @else if (loadError()) {
+        <div class="public-error" role="alert">
+          <p>{{ loadError() }}</p>
+          <button type="button" class="public-button mt-3" (click)="loadResults()">Try again</button>
+        </div>
       } @else if (filteredMatches().length === 0) {
         <div class="p-16 rounded-3xl bg-[#0c0c0e] border border-white/10 text-center space-y-3">
           <div class="text-3xl">⚽</div>
@@ -198,6 +203,8 @@ export class ResultsComponent implements OnInit {
   readonly onlyRyvl = signal<boolean>(false);
   readonly matches = signal<VpgMatchItem[]>([]);
   readonly isLoading = signal<boolean>(true);
+  readonly loadError = signal<string | null>(null);
+  private request = 0;
 
   readonly filteredMatches = computed(() => {
     const list = this.matches();
@@ -223,14 +230,19 @@ export class ResultsComponent implements OnInit {
   }
 
   async loadResults(): Promise<void> {
+    // A slower reply for a previously selected season must not overwrite this one.
+    const request = ++this.request;
     this.isLoading.set(true);
+    this.loadError.set(null);
     try {
       const data = await this.api.getSuperligaResults(this.selectedSeason(), 40);
+      if (request !== this.request) return;
       this.matches.set(data?.results || []);
-    } catch (err) {
-      console.error('Failed to load Superliga results:', err);
+    } catch {
+      // An outage is not "no results": say so and offer a retry.
+      if (request === this.request) this.loadError.set('Match results could not be loaded from VPG. Please try again.');
     } finally {
-      this.isLoading.set(false);
+      if (request === this.request) this.isLoading.set(false);
     }
   }
 

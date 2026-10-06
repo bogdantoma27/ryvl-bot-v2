@@ -11,6 +11,7 @@ import { DatePipe } from '@angular/common';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 import { LineupDraft } from '../../core/models';
+import { normalizeAssignments } from './lineup-assignments';
 
 @Component({
   selector: 'app-lineup-drafts',
@@ -22,11 +23,6 @@ import { LineupDraft } from '../../core/models';
       <!-- Breadcrumb & Top Bar -->
       <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-700/60 pb-4">
         <div>
-          <nav class="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
-            <a routerLink="/admin/lineup" class="hover:text-slate-200">Lineup</a>
-            <span>/</span>
-            <span class="text-[#EAE905] font-bold">Saved Drafts</span>
-          </nav>
           <h1 class="text-2xl font-bold text-white tracking-tight flex items-center gap-2.5">
             <svg class="w-6 h-6 text-[#EAE905]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -37,7 +33,7 @@ import { LineupDraft } from '../../core/models';
         </div>
 
         <a
-          routerLink="/admin/lineup"
+          routerLink="/admin/club" [queryParams]="{ tab: 'lineup' }"
           class="btn-yellow text-xs font-bold px-3.5 py-2 rounded-xl shadow-sm transition flex items-center gap-1.5 self-start sm:self-center"
           style="background-color: #EAE905 !important; color: #111111 !important;"
         >
@@ -70,7 +66,7 @@ import { LineupDraft } from '../../core/models';
               Build a custom formation on the visual pitch and click "Save Draft" to keep it here for later.
             </p>
             <a
-              routerLink="/admin/lineup"
+              routerLink="/admin/club" [queryParams]="{ tab: 'lineup' }"
               class="inline-block mt-2 text-xs font-bold text-[#EAE905] hover:underline"
             >
               Start a new lineup &rarr;
@@ -94,6 +90,9 @@ import { LineupDraft } from '../../core/models';
                   <tr class="hover:bg-[#1f2e54]/50 transition">
                     <td class="py-3.5 px-4 font-bold text-white">
                       {{ draft.title }}
+                      @if (draft.lastPostedMessageId) {
+                        <span class="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-800">Posted</span>
+                      }
                     </td>
                     <td class="py-3.5 px-4">
                       <span class="px-2.5 py-1 rounded-md bg-slate-800 text-[#EAE905] font-bold border border-slate-700">
@@ -111,8 +110,8 @@ import { LineupDraft } from '../../core/models';
                     </td>
                     <td class="py-3.5 px-4 text-right space-x-2">
                       <a
-                        [routerLink]="['/admin/lineup']"
-                        [queryParams]="{ draftId: draft.id }"
+                        routerLink="/admin/club"
+                        [queryParams]="{ tab: 'lineup', draftId: draft.id }"
                         class="text-xs font-bold text-[#EAE905] hover:underline px-2.5 py-1 rounded hover:bg-slate-800 transition"
                       >
                         Edit
@@ -176,12 +175,7 @@ export class LineupDraftsComponent implements OnInit {
   }
 
   getFilledSlotsCount(draft: LineupDraft): number {
-    if (!draft.assignments) return 0;
-    const map =
-      typeof draft.assignments === 'string'
-        ? JSON.parse(draft.assignments)
-        : draft.assignments;
-    return Object.values(map || {}).filter((v) => Boolean(String(v || '').trim())).length;
+    return Object.keys(normalizeAssignments(draft.assignments)).length;
   }
 
   async deleteDraft(draftId: string): Promise<void> {

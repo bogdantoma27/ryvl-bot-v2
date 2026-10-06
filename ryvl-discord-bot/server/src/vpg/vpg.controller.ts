@@ -1,4 +1,4 @@
-import { fixturesOnDay, romaniaClock } from './notification-policy';
+import { fixturesOnDay } from './notification-policy';
 import {
   Controller,
   Get,
@@ -9,23 +9,36 @@ import {
   Query,
   UseGuards,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import { GuildAdminGuard } from '../auth/guild-admin.guard';
+import { DiscordService } from '../discord/discord.service';
 import { VpgService } from './vpg.service';
 import { VpgPollerService } from './vpg-poller.service';
 import { VpgSuperligaPollerService } from './vpg-superliga-poller.service';
 import { UpdateVpgConfigDto } from './vpg.types';
 import { RyvlCommands } from '../discord/commands/ryvl-commands';
+import { COMMUNITY_NAME, COMMUNITY_SLUG, SUPERLIGA_NAME } from './league.constants';
 
 @Controller()
 export class VpgController {
   private readonly logger = new Logger(VpgController.name);
+
+  /** A `season` query must be a positive whole number; absent means the latest season. */
+  private async seasonOrLatest(season?: string): Promise<number> {
+    if (season === undefined || season === '') return this.vpgService.fetchLatestSeason();
+    const parsed = Number(season);
+    if (!Number.isInteger(parsed) || parsed < 1) throw new BadRequestException('season must be a positive whole number');
+    return parsed;
+  }
 
   constructor(
     private readonly vpgService: VpgService,
     private readonly vpgPollerService: VpgPollerService,
     private readonly vpgSuperligaPollerService: VpgSuperligaPollerService,
     private readonly ryvlCommands: RyvlCommands,
+    private readonly discordService: DiscordService,
   ) {}
 
   // ----------------------------------------------------
@@ -56,9 +69,9 @@ export class VpgController {
     return {
       config,
       community: {
-        slug: config.communitySlug || 'VPGRoPS5',
-        name: config.leagueName || 'VPG Romania',
-        league: config.leagueName || 'Superliga România',
+        slug: config.communitySlug || COMMUNITY_SLUG,
+        name: config.leagueName || COMMUNITY_NAME,
+        league: config.leagueName || SUPERLIGA_NAME,
       },
     };
   }
@@ -74,38 +87,32 @@ export class VpgController {
     };
   }
 
+  // Admin reads: the dashboard's transfer settings and the processed-transfer history.
   @Get('api/guilds/:guildId/vpg/config')
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async getConfig(@Param('guildId') guildId: string) {
-    const config =
-      guildId === 'default'
-        ? await this.vpgService.getDefaultConfig()
-        : await this.vpgService.getOrCreateConfig(guildId);
+    const config = await this.vpgService.findConfigOrDefault(guildId);
 
     return {
       config,
       community: {
-        slug: config.communitySlug || 'VPGRoPS5',
-        name: config.leagueName || 'VPG Romania',
-        league: config.leagueName || 'Superliga România',
+        slug: config.communitySlug || COMMUNITY_SLUG,
+        name: config.leagueName || COMMUNITY_NAME,
+        league: config.leagueName || SUPERLIGA_NAME,
       },
     };
   }
 
   @Get('api/guilds/:guildId/vpg/transfers')
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async getGuildTransfers(
     @Param('guildId') guildId: string,
     @Query('limit') limit = '20',
   ) {
-    const config =
-      guildId === 'default'
-        ? await this.vpgService.getDefaultConfig()
-        : await this.vpgService.getOrCreateConfig(guildId);
+    const config = await this.vpgService.findConfigOrDefault(guildId);
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
     const transfers = await this.vpgService.fetchTransfers(parsedLimit, 0, config.communitySlug);
-    const processed =
-      guildId !== 'default'
-        ? await this.vpgService.getRecentProcessedTransfers(guildId, 25)
-        : [];
+    const processed = await this.vpgService.getRecentProcessedTransfers(guildId, 25);
 
     return {
       transfers,
@@ -121,16 +128,15 @@ export class VpgController {
   @Get('api/vpg/superliga/seasons')
   async getSuperligaSeasons() {
     const seasons = await this.vpgService.fetchSeasons();
-    const latest = await this.vpgService.fetchLatestSeason();
-    return { seasons, latest };
+    return { seasons, latest: seasons[0] };
   }
 
   @Get('api/vpg/superliga/standings')
   async getSuperligaStandings(@Query('season') season?: string) {
-    const parsedSeason = season ? parseInt(season, 10) : undefined;
+    const parsedSeason = await this.seasonOrLatest(season);
     const standings = await this.vpgService.fetchStandings(parsedSeason);
     return {
-      season: parsedSeason || (await this.vpgService.fetchLatestSeason()),
+      season: parsedSeason,
       standings,
       total: standings.length,
     };
@@ -141,11 +147,11 @@ export class VpgController {
     @Query('season') season?: string,
     @Query('limit') limit = '20',
   ) {
-    const parsedSeason = season ? parseInt(season, 10) : undefined;
+    const parsedSeason = await this.seasonOrLatest(season);
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
     const fixtures = await this.vpgService.fetchMatches('scheduled', parsedSeason, parsedLimit);
     return {
-      season: parsedSeason || (await this.vpgService.fetchLatestSeason()),
+      season: parsedSeason,
       fixtures,
       total: fixtures.length,
     };
@@ -156,11 +162,11 @@ export class VpgController {
     @Query('season') season?: string,
     @Query('limit') limit = '20',
   ) {
-    const parsedSeason = season ? parseInt(season, 10) : undefined;
+    const parsedSeason = await this.seasonOrLatest(season);
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
-    const results = await this.vpgService.fetchMatches('complete', parsedSeason, parsedLimit);
+    const { results } = await this.vpgService.getResults({ season: parsedSeason, limit: parsedLimit });
     return {
-      season: parsedSeason || (await this.vpgService.fetchLatestSeason()),
+      season: parsedSeason,
       results,
       total: results.length,
     };
@@ -169,12 +175,14 @@ export class VpgController {
   @Get('api/vpg/superliga/today')
   async getTodayMatches() {
     const season = await this.vpgService.fetchLatestSeason();
-    const [results, fixtures] = await Promise.all([
-      this.vpgService.fetchAllMatches('complete', season),
+    const date = this.vpgService.leagueToday();
+    const [today, fixtures] = await Promise.all([
+      this.vpgService.getResults({ season, day: date }),
       this.vpgService.fetchAllMatches('scheduled', season),
     ]);
-    const date = romaniaClock(new Date()).date;
-    return { date, season, results: fixturesOnDay(results, date), fixtures: fixturesOnDay(fixtures, date), updatedAt: new Date().toISOString() };
+    // Oldest first, as the day's schedule reads.
+    const results = today.results.reverse();
+    return { date, season, results, fixtures: fixturesOnDay(fixtures, date), updatedAt: new Date().toISOString() };
   }
 
   @Get('api/vpg/superliga/leaderboard')
@@ -182,26 +190,27 @@ export class VpgController {
     @Query('category') category: 'strikers' | 'cam' | 'gk' | 'cb' | 'cdm' | 'wingers' = 'strikers',
     @Query('season') season?: string,
   ) {
-    const parsedSeason = season ? parseInt(season, 10) : undefined;
+    const parsedSeason = await this.seasonOrLatest(season);
     const entries = await this.vpgService.fetchLeaderboard(category, parsedSeason);
     return {
       category,
-      season: parsedSeason || (await this.vpgService.fetchLatestSeason()),
+      season: parsedSeason,
       leaderboard: entries,
       total: entries.length,
     };
   }
 
   // ----------------------------------------------------
-  // Protected Admin Endpoints (Require AuthGuard)
+  // Protected Admin Endpoints (signed in + admin of :guildId)
   // ----------------------------------------------------
 
   @Patch('api/guilds/:guildId/vpg/config')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async updateConfig(
     @Param('guildId') guildId: string,
     @Body() dto: UpdateVpgConfigDto,
   ) {
+    if (dto.channelId) await this.discordService.assertChannelInGuild(guildId, dto.channelId);
     const updated = await this.vpgService.updateConfig(guildId, dto);
     this.logger.log(`Updated VPG transfer config for guild ${guildId}`);
     return {
@@ -211,7 +220,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/poll-now')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async triggerPollNow(@Param('guildId') guildId: string) {
     const result = await this.vpgPollerService.checkGuildNow(guildId);
     return {
@@ -221,7 +230,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/post-latest')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postLatestNow(@Param('guildId') guildId: string) {
     const result = await this.vpgPollerService.postLatestToDiscord(guildId);
     return {
@@ -231,7 +240,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/superliga/poll-now')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async triggerSuperligaPollNow(@Param('guildId') guildId: string) {
     const result = await this.vpgSuperligaPollerService.checkGuildNow(guildId);
     return {
@@ -241,7 +250,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/superliga/post-standings')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postSuperligaStandings(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string; season?: number },
@@ -255,7 +264,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/superliga/post-fixtures')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postSuperligaFixtures(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string; season?: number },
@@ -269,7 +278,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/superliga/post-results')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postSuperligaResults(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string; season?: number },
@@ -295,13 +304,14 @@ export class VpgController {
   }
 
   @Get('api/guilds/:guildId/vpg/competitions')
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async getGuildCompetitions(@Param('guildId') guildId: string) {
     const competitions = await this.vpgService.getCompetitions(guildId);
     return { competitions };
   }
 
   @Patch('api/guilds/:guildId/vpg/competitions/:id')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async updateGuildCompetition(
     @Param('guildId') guildId: string,
     @Param('id') compId: string,
@@ -312,7 +322,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/performance/post-results')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postRyvlResults(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string },
@@ -321,7 +331,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/performance/post-fixtures')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postRyvlFixtures(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string },
@@ -330,48 +340,11 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/performance/post-leaderboard')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postRyvlLeaderboard(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string },
   ) {
     return this.ryvlCommands.postRyvlLeaderboardToChannel(guildId, body.channelId);
-  }
-
-  // ----------------------------------------------------
-  // Public Form Submissions (Dispatches to Discord)
-  // ----------------------------------------------------
-
-  @Post('api/public/contact')
-  async submitContactForm(@Body() body: { name: string; contact: string; topic: string; message: string; guildId?: string }) {
-    if (!body.name || !body.contact || !body.message) {
-      return { success: false, error: 'Please provide name, contact information, and message.' };
-    }
-    const result = await this.ryvlCommands.dispatchContactNotification(body);
-    return {
-      success: result.success,
-      message: result.success ? 'Message delivered to RYVL management.' : (result.message || 'Failed to deliver notification.'),
-    };
-  }
-
-  @Post('api/public/recruitment')
-  async submitRecruitmentForm(@Body() body: {
-    gamertag: string;
-    discordTag: string;
-    primaryPosition: string;
-    secondaryPosition?: string;
-    platform: string;
-    age: number;
-    experience?: string;
-    guildId?: string;
-  }) {
-    if (!body.gamertag || !body.discordTag || !body.primaryPosition) {
-      return { success: false, error: 'Gamertag, Discord tag, and primary position are required.' };
-    }
-    const result = await this.ryvlCommands.dispatchRecruitmentNotification(body);
-    return {
-      success: result.success,
-      message: result.success ? 'Trial application submitted to RYVL recruitment staff.' : (result.message || 'Failed to deliver application.'),
-    };
   }
 }

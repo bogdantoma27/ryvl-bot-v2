@@ -8,17 +8,28 @@ RYVL's public team website and Discord management application. A NestJS backend 
 
 | Area | What it does |
 |---|---|
-| Public website | Team information, recruitment/contact forms, club tracker, VPG Romania transfers, Match Center and in-page Performance tabs |
-| RYVL Performance | Competition selector, form/statistics, RYVL-only results/fixtures and the full league table with RYVL highlighted |
-| VPG Romania transfers | Configurable transfer polling and Discord notifications, independent of competition-result polling |
-| General Superliga feeds | Standings, daily fixtures and newly confirmed results in configured Discord channels |
-| RYVL-only feeds | Results, fixtures and weekly league position in active configured competitions/seasons |
-| Events | Discord/web creation, recurrence, RSVP buttons and attendance management |
-| Lineups | Formation editor, player assignments, saved drafts and server-rendered PNG images |
-| EA club tracker | Match information and Discord posts with a public website button |
-| Administration | Channels, competition slots, polling controls, immediate checks and repair of old club links |
+| Public website | Team pages, Match Center, Performance tabs, club tracker, VPG transfers and the contact / trial forms |
+| Website forms | Validated and rate-limited; every submission is stored (Admin → Server → Website forms) and posted to the contact or recruitment channel of the server in `RYVL_GUILD_ID` (else the oldest server with that channel set) |
+| VPG Superliga feeds | Standings, daily fixtures and new results in general and RYVL-only channels (see below); `/superliga`, `/live_results`, `/ryvl` |
+| VPG transfers | Per-server polling (60–3600 s, default 120 s); each new Superliga România transfer is posted once and failed sends are retried; `/vpg_transfers` |
+| EA Pro Clubs tracking | The primary club (`/ea_setup`) and any number of extra clubs (`/track_team`) are polled every 90 s by default. Results are posted with player stats, every tracked club keeps an Elo rating, and members link their gamertag with `/register-player` |
+| Superliga Awards | Links every Superliga result to the EA match that was played and ranks players by MVP score; recorded Team of the Week picks break ties. Admin → Superliga → Awards, `/superliga_mvp` |
+| Team of the Week | Per-league image built from VPG stats, posted on each config's cron schedule (default Saturday 20:00 in the server time zone) or with `/totw post`. Superliga picks are recorded weekly for the Awards |
+| Events | Created in Discord (`/event create`) or the web, one-off or recurring, with RSVP buttons. A new event is announced immediately; later occurrences of a series are announced their publish lead time before kickoff (default 2 days). Match events can be created from RYVL's upcoming VPG fixtures. Finished events are archived and removed after 180 days |
+| Lineups | Formation editor and drafts linked to an event: members show their RSVP status, EA name and preferred position, accepted RSVPs can be auto-filled, and a posted lineup image can be updated in place. `/lineup_post` is the Discord wizard |
+| Tournaments | Standard (groups of 4, top two to single-match knockouts, bracket of 8/16/32 teams) or FC Draft (draft wheel, 4 jokers per team, snake order). Each gets its own Discord category with sign-up and score-report buttons; `/tournament` |
+| Administration | Channels, competitions, polling controls, immediate checks and repair of old club links |
 
-### Strict RYVL identity
+The full, always current list of slash commands is on the website at **/docs**, generated from the commands the bot registers.
+
+## Permissions
+
+- **Website admin.** Discord login. Every admin route under `/api/guilds/:guildId` requires the server owner, Administrator or **Manage Server** in that server. The public site's reads stay open.
+- **Slash commands.** Commands that only configure or post (`/ea_setup`, `/ea_latest`, `/track_team`, `/lineup_post`, `/totw`, `/superliga_mvp`, `/create_tournament`) default to Manage Server; a server admin can widen that in Server Settings → Integrations. Commands that mix public and admin parts stay visible, and the bot checks Manage Server for their admin subcommands (`/event create|delete`, `/ryvl setup`, `/live_results setup|check`, `/vpg_transfers setup|check`). `/track_team` and `/superliga_mvp` always check Manage Server themselves.
+- **Tournaments.** Admin subcommands and buttons accept Manage Server or a tournament admin role set in the dashboard.
+- **Event buttons.** Edit and Delete on an announcement work for the event's creator and for members with Manage Events or Manage Server.
+
+## Strict RYVL identity
 
 Only normalized **RYVL** and **RYVL Esports** names are accepted. `Rival United`, `NotRYVL` and `RYVL Academy` are different teams. Where VPG supplies a stable team slug, the correct league-table entry is resolved and that slug is preferred; the public match API currently supplies team names.
 
@@ -26,7 +37,7 @@ General Superliga channels include all clubs. Team-only feeds and performance ca
 
 ## Automatic Discord posting
 
-Configure destinations in **Admin → Settings**, then open **Admin → RYVL Performance → VPG automatic posting**.
+Configure destinations in **Admin → Server → Channels**, then open **Admin → Superliga → Notifications**.
 
 | Feed | Default schedule | Destination |
 |---|---|---|
@@ -61,6 +72,8 @@ FRONTEND_URL=https://ryvl.top
 DISCORD_OAUTH_REDIRECT_URI=https://ryvl.top/api/auth/discord/callback
 PORT=3000
 ```
+
+Optional: `RYVL_GUILD_ID=<server id>` pins the Discord server whose competitions and club the public site shows and which receives the website forms. Unset, the oldest server the bot is in is used (for forms: the oldest one with that form channel set).
 
 Register the exact callback in Discord Developer Portal → OAuth2 → Redirects. `FRONTEND_URL` is also used for CORS and Discord website buttons; `WEB_BASE_URL` is obsolete. The Angular production API uses the browser's current origin. Localhost values belong only to local development.
 
@@ -105,10 +118,12 @@ npm ci
 cp -n .env.example .env
 nano .env
 npx prisma generate
-# Only after verifying DATABASE_URL points to the intended NEW database:
+# Only on a NEW, empty database (after checking DATABASE_URL):
 npx prisma db push
 npm run build
 ```
+
+Existing databases are upgraded only with `bash ryvl-discord-bot/deploy/apply-schema.sh`, which the deploy runs; see Database safety below.
 
 Local development: configure the actual Angular origin in `FRONTEND_URL` and register `http://localhost:3000/api/auth/discord/callback`. Run `npm run start:dev` in `server` and `npm ci && npm start` in `web`, from separate terminals. `.env.example` is a template, not live configuration.
 
@@ -120,7 +135,7 @@ The old `update/vpg-automation-public-ux` branch retains the earlier development
 
 ### Database safety
 
-`server/prisma/deploy/vpg-notifications.sql` is the reviewed transactional, additive notification upgrade. It creates tables/indexes and is safe to repeat; it does not reset guilds, channels, events or match history. The workflow applies this specific script, not arbitrary future schema changes. Never use `prisma db push --force-reset` on valuable data. Back up production PostgreSQL regularly.
+`server/prisma/deploy/*.sql` are the reviewed transactional, additive upgrades, applied in order by `deploy/apply-schema.sh` (run it with `DATABASE_URL` set). Each is safe to repeat and never resets guilds, channels, events or match history. To change the schema: edit `schema.prisma`, add a new idempotent `prisma/deploy/<area>-fixes.sql` (`BEGIN; SELECT pg_advisory_xact_lock(739201630); … COMMIT;` with `IF NOT EXISTS` guards) and append it to the `FILES` list in `apply-schema.sh`. CI applies the list to a database built from the previous schema and fails if the result differs from `schema.prisma`. Never use `prisma db push` or `--force-reset` on production data. Back up production PostgreSQL regularly.
 
 ## Tests
 
@@ -132,10 +147,11 @@ npm test
 cd ../web
 npm ci
 npm run build
+npm test -- --watch=false
 cd ../..
 python3 -m unittest discover -s ryvl-discord-bot/deploy/test -v
 ```
 
-CI covers strict team identity, Romanian scheduling/DST, pagination, independent deliveries/retries/corrections, public URLs/CORS, additive database upgrades and desktop/mobile browser smoke scenarios. Integration database tests require `RUN_DATABASE_TESTS=1` and a disposable local `ryvl_ci` database; production deployment does not enable them. Environment tests use fake credentials in temporary directories.
+CI covers strict team identity, Romanian scheduling/DST, pagination, independent deliveries/retries/corrections, public URLs/CORS, slash-command routing and permissions, additive database upgrades and desktop/mobile browser smoke scenarios. Integration database tests require `RUN_DATABASE_TESTS=1` and a disposable local database whose name starts with `ryvl_` (for example `ryvl_ci`); production deployment does not enable them. Environment tests use fake credentials in temporary directories.
 
 After deployment, `deploy/verify-public-site.mjs` checks real public DNS/TLS, redirects, pages, API, OAuth callback and `/release.json`. It does not sign in as a user or post to Discord. Test a real Discord admin login after the domain transition; browser storage does not transfer between origins.

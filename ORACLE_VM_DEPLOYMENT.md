@@ -20,7 +20,7 @@ Spaceship DNS: ryvl.top / www.ryvl.top
                   +-- other paths -> /var/www/ryvl -> Angular release directory
 ```
 
-`www` and HTTP are redirected to https://ryvl.top with their URI preserved. Caddy manages both certificates and renewal. There is no separate public API subdomain or public port 3000.
+`www` and HTTP are redirected to https://ryvl.top with their URI preserved. Caddy manages the certificates and renewal. The Caddyfile also serves the same release on `bot.ryvl.top`, where the app opens the admin console; it only works once that name has a DNS record pointing at the VM. There is no separate public API subdomain or public port 3000.
 
 **Deploy `main`.** The old `update/vpg-automation-public-ux` branch is development history. Its full application directory and README/deployment documentation were incorporated into main release `0fbdb979`. A different branch commit count after that squash-style release does not mean the features are missing. Never deploy the old preparation workflow to production.
 
@@ -133,6 +133,7 @@ Fill real values in **server/.env**, never in the tracked template:
 | FRONTEND_URL | `https://ryvl.top` |
 | DISCORD_OAUTH_REDIRECT_URI | `https://ryvl.top/api/auth/discord/callback` |
 | PORT | `3000` |
+| RYVL_GUILD_ID | Optional. Discord server id the public site belongs to (its competitions, EA club and the website contact/trial forms). Empty: the oldest server the bot is in |
 
 The exact HTTPS callback must also be saved in Discord Developer Portal → OAuth2 → Redirects. Once domain login is verified, remove the old production IP callback; retain localhost only for intentional development.
 
@@ -150,13 +151,13 @@ npx prisma db push
 npm run build
 ```
 
-If required columns cannot be added to existing rows, review and backfill a migration. **Do not use --force-reset on valuable data.** The current notification feature has the reviewed additive script:
+If required columns cannot be added to existing rows, review and backfill a migration. **Do not use --force-reset on valuable data.** Reviewed additive upgrades live in `server/prisma/deploy/*.sql` and are applied in order by:
 
 ```bash
-npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
+bash ryvl-discord-bot/deploy/apply-schema.sh
 ```
 
-It creates new tables/indexes transactionally and can be repeated. Other schema changes still require review. Schedule backups for the actual PostgreSQL service independently of application deployment.
+Each file runs in a transaction and can be repeated. To change the schema, add a new idempotent SQL file and append it to the list in `apply-schema.sh`; CI fails if the upgraded database does not match `schema.prisma`. Schedule backups for the actual PostgreSQL service independently of application deployment.
 
 ## 9. Font rendering and EA Python bridge
 
@@ -282,7 +283,7 @@ The remote workflow calls `ryvl-discord-bot/deploy/oracle.sh`. It:
 
 1. Ensures Node 22, required fonts and the EA virtual environment.
 2. Builds/tests the backend and builds Angular before restarting production.
-3. Validates the Caddyfile and applies only the existing additive notification SQL.
+3. Validates the Caddyfile and applies the ordered, additive schema upgrades with `deploy/apply-schema.sh`.
 4. Stages a frontend release, writes release.json and switches /var/www/ryvl to that release. The initial physical directory is retained as a legacy backup.
 5. Loads the domain Caddyfile and waits for both trusted TLS certificates.
 6. Updates only FRONTEND_URL and DISCORD_OAUTH_REDIRECT_URI in server/.env; an already-present obsolete WEB_BASE_URL is aligned as well. Other settings are preserved.
@@ -342,9 +343,11 @@ Local loopback HTTP bypasses Caddy and is intentionally retained. A 301/308 alon
 
 Missing server host in Actions means the repository secrets are missing/empty. A failed health check after npm build is not solved by blindly resetting Prisma. CORS is a browser policy, not authorization: the application still requires authenticated/authorized endpoints.
 
-## 17. VPG notifications and existing Discord links
+## 17. Bot features after deployment
 
-Channels remain in Admin → Settings; schedules, intervals and repair controls are in Admin → RYVL Performance → VPG automatic posting. Sunday standings are 10:00 Europe/Bucharest; daily fixtures default to 10:00; results default to two minutes. General and RYVL destinations are independent. The historical baseline prevents old-result floods, failures remain retryable and empty fixture days remain silent. See README for full feed behaviour.
+Nothing has to be re-run in Discord after a deploy: the bot re-registers its slash commands in every server on start-up. Settings live in the database and survive deployments. The command list and who may use each command are on https://ryvl.top/docs; the permission model is summarised in the README.
+
+Channels are in Admin → Server → Channels; schedules, intervals and repair controls are in Admin → Superliga → Notifications. Sunday standings are 10:00 Europe/Bucharest; daily fixtures default to 10:00; results default to two minutes. General and RYVL destinations are independent. The historical baseline prevents old-result floods, failures remain retryable and empty fixture days remain silent. See README for full feed behaviour.
 
 New club buttons use FRONTEND_URL. Existing Discord messages keep their old stored URLs: use **Repair old club links** after migration. This asks for confirmation, edits at most 200 recent recorded bot-owned messages, and does not delete or replay history.
 

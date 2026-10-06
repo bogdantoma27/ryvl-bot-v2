@@ -44,4 +44,8 @@ export class ConfigService {
   get port(): number {
     return this.envConfig.PORT;
   }
+
+  get ryvlGuildId(): string | undefined {
+    return this.envConfig.RYVL_GUILD_ID || undefined;
+  }
 }

@@ -12,12 +12,14 @@ import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 import { EventItem } from '../../core/models';
 import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component';
+import { DashboardHealthComponent } from './dashboard-health.component';
+import { eventStatusLabel, formatEventDate, isUpcomingEvent } from '../events/event-display';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, RsvpBadgeComponent],
+  imports: [RouterLink, RsvpBadgeComponent, DashboardHealthComponent],
   template: `
     <div class="max-w-7xl w-full mx-auto space-y-8 animate-fadeIn">
       <!-- Welcome Header -->
@@ -45,7 +47,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
             <span class="text-white">Create Event</span>
           </a>
           <a
-            routerLink="/admin/events"
+            routerLink="/admin/community" [queryParams]="{ tab: 'events' }"
             class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 hover:text-white border border-slate-600 hover:border-slate-500 text-white text-sm font-semibold transition active:scale-95 cursor-pointer"
           >
             <svg class="w-4 h-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,11 +109,13 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
         </div>
       </div>
 
+      <app-dashboard-health />
+
       <!-- Quick Highlights / Recent Activity -->
       <div class="space-y-4">
         <div class="flex items-center justify-between">
           <h2 class="text-lg font-semibold text-white">Upcoming Highlights</h2>
-          <a routerLink="/admin/events" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold hover:underline cursor-pointer">
+          <a routerLink="/admin/community" [queryParams]="{ tab: 'events' }" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold hover:underline cursor-pointer">
             View all →
           </a>
         </div>
@@ -146,14 +150,12 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
                   <div class="flex items-center justify-between">
                     <span
                       class="px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider"
-                      [class.bg-emerald-500/20]="event.status === 'active'"
-                      [class.text-emerald-400]="event.status === 'active'"
-                      [class.bg-amber-500/20]="event.status === 'draft'"
-                      [class.text-amber-400]="event.status === 'draft'"
-                      [class.bg-slate-700]="event.status === 'archived'"
-                      [class.text-slate-400]="event.status === 'archived'"
+                      [class.bg-emerald-500/20]="event.status === 'ACTIVE'"
+                      [class.text-emerald-400]="event.status === 'ACTIVE'"
+                      [class.bg-slate-700]="event.status !== 'ACTIVE'"
+                      [class.text-slate-400]="event.status !== 'ACTIVE'"
                     >
-                      {{ event.status }}
+                      {{ statusLabel(event.status) }}
                     </span>
                     @if (event.isRecurring) {
                       <span class="text-xs text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-500/20">
@@ -175,7 +177,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
                     <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    <span>{{ event.nextOccurrence || event.startsAt }}</span>
+                    <span>{{ event.nextOccurrence ? formatDate(event.nextOccurrence.startsAt, event.timezone) : 'No upcoming date' }}</span>
                   </div>
 
                   <app-rsvp-badge [counts]="event.rsvpsCount" />
@@ -198,6 +200,9 @@ export class DashboardComponent implements OnInit {
   readonly upcomingEvents = signal<number>(0);
   readonly totalRsvps = signal<number>(0);
   readonly recentEvents = signal<EventItem[]>([]);
+
+  readonly statusLabel = eventStatusLabel;
+  readonly formatDate = formatEventDate;
 
   readonly guildName = computed(() => this.guildStore.activeGuild()?.name || 'Discord Community');
 
@@ -235,17 +240,16 @@ export class DashboardComponent implements OnInit {
   private populateStats(events: EventItem[]): void {
     this.totalEvents.set(events.length);
 
-    const upcoming = events.filter((e) => e.status === 'active');
+    const upcoming = events.filter(isUpcomingEvent);
     this.upcomingEvents.set(upcoming.length);
 
     let rsvpsCount = 0;
     for (const e of events) {
-      rsvpsCount +=
-        (e.rsvpsCount?.accepted ?? 0) +
-        (e.rsvpsCount?.tentative ?? 0) +
-        (e.rsvpsCount?.declined ?? 0);
+      rsvpsCount += e.rsvpsCount?.total ?? 0;
     }
     this.totalRsvps.set(rsvpsCount);
-    this.recentEvents.set(events.slice(0, 6));
+    // Soonest upcoming first, then the rest (most recently created first, as returned).
+    const soonest = [...upcoming].sort((a, b) => a.nextOccurrence!.startsAt.localeCompare(b.nextOccurrence!.startsAt));
+    this.recentEvents.set([...soonest, ...events.filter((e) => !isUpcomingEvent(e))].slice(0, 6));
   }
 }

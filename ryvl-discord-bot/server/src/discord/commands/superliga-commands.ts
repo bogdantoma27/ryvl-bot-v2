@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   ChannelType,
   EmbedBuilder,
+  MessageFlags,
 } from 'discord.js';
 import { VpgService } from '../../vpg/vpg.service';
 import { VpgSuperligaPollerService } from '../../vpg/vpg-superliga-poller.service';
@@ -13,6 +14,7 @@ import {
   buildSuperligaResultsEmbed,
   buildSuperligaLeaderboardEmbed,
 } from '../embeds/superliga-embed.builder';
+import { SUPERLIGA_NAME } from '../../vpg/league.constants';
 
 @Injectable()
 export class SuperligaCommands {
@@ -48,9 +50,7 @@ export class SuperligaCommands {
         await interaction.editReply({ embeds: [embed] });
       } else if (subcommand === 'results') {
         const count = interaction.options.getInteger('count') || 10;
-        const results = await this.vpgService.fetchMatches('complete', targetSeason, count);
-        const embed = buildSuperligaResultsEmbed(results, targetSeason, count);
-        await interaction.editReply({ embeds: [embed] });
+        await interaction.editReply({ embeds: [await this.resultsEmbed({ season: targetSeason, count })] });
       } else if (subcommand === 'leaderboard') {
         const category = (interaction.options.getString('category') || 'strikers') as any;
         const entries = await this.vpgService.fetchLeaderboard(category, targetSeason);
@@ -63,6 +63,30 @@ export class SuperligaCommands {
     }
   }
 
+  /**
+   * Superliga results embed shared by `/superliga results` (latest `count` results) and
+   * `/live_results today` (today's results, else the latest five).
+   */
+  async resultsEmbed(opts: { season?: number; count?: number; today?: boolean }) {
+    if (opts.today) {
+      const day = this.vpgService.leagueToday();
+      const today = await this.vpgService.getResults({ season: opts.season, day });
+      if (today.results.length) {
+        return buildSuperligaResultsEmbed(today.results, today.season, 12)
+          .setTitle(`⚽ VPG ${SUPERLIGA_NAME} — Rezultatele de Astăzi`);
+      }
+      const recent = await this.vpgService.getResults({ season: today.season, limit: 5 });
+      const embed = buildSuperligaResultsEmbed(recent.results, recent.season, 5)
+        .setTitle(`🏁 VPG ${SUPERLIGA_NAME} — Ultimele Rezultate`);
+      // Prepend the note: the builder puts the result list itself in the description.
+      const note = `*Nu s-au găsit meciuri jucate astăzi (${day}). Iată ultimele meciuri încheiate:*`;
+      return embed.setDescription(recent.results.length ? `${note}\n\n${embed.data.description ?? ''}` : note);
+    }
+    const count = opts.count || 10;
+    const { season, results } = await this.vpgService.getResults({ season: opts.season, limit: count });
+    return buildSuperligaResultsEmbed(results, season, count);
+  }
+
   // ---------------------------------------------------------------------------
   // /live_results command handler
   // ---------------------------------------------------------------------------
@@ -71,7 +95,7 @@ export class SuperligaCommands {
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommand === 'setup') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const guildId = interaction.guildId;
       if (!guildId) {
         await interaction.editReply('This command can only be run inside a Discord server.');
@@ -115,7 +139,7 @@ export class SuperligaCommands {
     }
 
     if (subcommand === 'check') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const guildId = interaction.guildId;
       if (!guildId) {
         await interaction.editReply('This command can only be run inside a Discord server.');
@@ -143,44 +167,7 @@ export class SuperligaCommands {
     if (subcommand === 'today') {
       await interaction.deferReply();
       try {
-        const season = await this.vpgService.fetchLatestSeason();
-        const matches = await this.vpgService.fetchMatches('complete', season, 20);
-
-        // Filter to matches from today in Bucharest timezone
-        const todayStr = new Intl.DateTimeFormat('en-CA', {
-          timeZone: 'Europe/Bucharest',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        }).format(new Date()); // YYYY-MM-DD
-
-        const todayMatches = matches.filter((m) => {
-          try {
-            const mDateStr = new Intl.DateTimeFormat('en-CA', {
-              timeZone: 'Europe/Bucharest',
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-            }).format(new Date(m.datetime));
-            return mDateStr === todayStr;
-          } catch {
-            return false;
-          }
-        });
-
-        if (todayMatches.length === 0) {
-          // Show recent results as fallback
-          const embed = buildSuperligaResultsEmbed(matches, season, 5);
-          embed.setTitle(`🏁 VPG Superliga România — Ultimele Rezultate`);
-          embed.setDescription(
-            `*Nu s-au găsit meciuri jucate astăzi (${todayStr}). Iată ultimele meciuri încheiate:*`,
-          );
-          await interaction.editReply({ embeds: [embed] });
-        } else {
-          const embed = buildSuperligaResultsEmbed(todayMatches, season, 12);
-          embed.setTitle(`⚽ VPG Superliga România — Rezultatele de Astăzi`);
-          await interaction.editReply({ embeds: [embed] });
-        }
+        await interaction.editReply({ embeds: [await this.resultsEmbed({ today: true })] });
       } catch (err: any) {
         this.logger.error(`Error fetching today's results: ${err.message}`);
         await interaction.editReply(`❌ Error fetching today's results: ${err.message}`);

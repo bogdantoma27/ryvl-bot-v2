@@ -12,11 +12,17 @@ import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 import {
   EventItem,
-  EventOccurrence,
   EventRsvp,
   VoteStatus,
 } from '../../core/models';
 import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component';
+import {
+  PUBLISH_LEAD_OPTIONS,
+  describeLeadMinutes,
+  eventStatusLabel,
+  formatEventDate,
+  occurrenceStatusLabel,
+} from './event-display';
 
 @Component({
   selector: 'app-event-detail',
@@ -27,7 +33,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
     <div class="space-y-6 max-w-7xl w-full mx-auto animate-fadeIn">
       <!-- Breadcrumb Navigation -->
       <nav class="flex items-center gap-2 text-xs text-slate-400">
-        <a routerLink="/admin/events" class="hover:text-slate-200">Guild Events</a>
+        <a routerLink="/admin/community" [queryParams]="{ tab: 'events' }" class="hover:text-slate-200">Guild Events</a>
         <span>/</span>
         <span class="text-white font-medium truncate max-w-xs">{{ event()?.title || 'Event Details' }}</span>
       </nav>
@@ -42,7 +48,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
           <div class="text-4xl">⚠️</div>
           <h2 class="text-lg font-bold text-white">Event Not Found</h2>
           <p class="text-xs text-slate-400">The event could not be found or was deleted.</p>
-          <a routerLink="/admin/events" class="inline-block px-4 py-2 rounded-lg bg-[#5865F2] text-white text-xs font-semibold">
+          <a routerLink="/admin/community" [queryParams]="{ tab: 'events' }" class="inline-block px-4 py-2 rounded-lg bg-[#5865F2] text-white text-xs font-semibold">
             Return to Events
           </a>
         </div>
@@ -59,17 +65,14 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
               <div class="flex flex-wrap items-center gap-2">
                 <span
                   class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider border"
-                  [class.bg-emerald-500/20]="event()!.status === 'active'"
-                  [class.text-emerald-400]="event()!.status === 'active'"
-                  [class.border-emerald-500/30]="event()!.status === 'active'"
-                  [class.bg-amber-500/20]="event()!.status === 'draft'"
-                  [class.text-amber-400]="event()!.status === 'draft'"
-                  [class.border-amber-500/30]="event()!.status === 'draft'"
-                  [class.bg-slate-700/50]="event()!.status === 'archived'"
-                  [class.text-slate-400]="event()!.status === 'archived'"
-                  [class.border-slate-600]="event()!.status === 'archived'"
+                  [class.bg-emerald-500/20]="event()!.status === 'ACTIVE'"
+                  [class.text-emerald-400]="event()!.status === 'ACTIVE'"
+                  [class.border-emerald-500/30]="event()!.status === 'ACTIVE'"
+                  [class.bg-slate-700/50]="event()!.status !== 'ACTIVE'"
+                  [class.text-slate-400]="event()!.status !== 'ACTIVE'"
+                  [class.border-slate-600]="event()!.status !== 'ACTIVE'"
                 >
-                  {{ event()!.status }}
+                  {{ statusLabel(event()!.status) }}
                 </span>
 
                 @if (event()!.isRecurring) {
@@ -172,6 +175,23 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
                     class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#5865F2]"
                   />
                 </div>
+                @if (event()!.isRecurring) {
+                  <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">Announce later dates</label>
+                    <select
+                      [ngModel]="editLeadMinutes()"
+                      (ngModelChange)="editLeadMinutes.set(+$event)"
+                      class="w-full bg-[#16213e] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#5865F2]"
+                    >
+                      @for (option of leadOptions(); track option.minutes) {
+                        <option [value]="option.minutes">{{ option.label }}</option>
+                      }
+                    </select>
+                  </div>
+                }
+                @if (saveError()) {
+                  <p class="text-xs text-rose-300">{{ saveError() }}</p>
+                }
               </div>
             }
 
@@ -181,7 +201,7 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
                 <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Next Kickoff</span>
                 <div class="mt-1 flex items-center gap-1.5 text-xs text-white font-medium">
                   <span>📅</span>
-                  <span>{{ event()!.nextOccurrence || event()!.startsAt }}</span>
+                  <span>{{ event()!.nextOccurrence ? formatDate(event()!.nextOccurrence!.startsAt, event()!.timezone) : 'No upcoming date' }}</span>
                 </div>
               </div>
 
@@ -208,10 +228,15 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
           <div class="flex items-center justify-between">
             <div>
               <h2 class="text-lg font-bold text-white">Event Occurrences</h2>
-              <p class="text-xs text-slate-400">Track attendances, inspect respondent lists, and manage single dates.</p>
+              <p class="text-xs text-slate-400">
+                Track attendances, inspect respondent lists, and manage single dates.
+                @if (event()!.isRecurring) {
+                  Later dates are announced {{ leadLabel(event()!.publishLeadMinutes) }} kickoff.
+                }
+              </p>
             </div>
             <span class="text-xs font-semibold px-2.5 py-1 rounded-md bg-slate-800 text-slate-300 border border-slate-700">
-              {{ occurrences().length }} Scheduled
+              {{ openOccurrenceCount() }} open · {{ occurrences().length }} total
             </span>
           </div>
 
@@ -233,34 +258,34 @@ import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component
 
                       <div>
                         <div class="flex items-center gap-2">
-                          <span class="text-sm font-bold text-white">{{ occ.startsAt }}</span>
+                          <span class="text-sm font-bold text-white">{{ formatDate(occ.startsAt, event()!.timezone) }}</span>
                           <!-- Status Badge -->
                           <span
                             class="px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border"
-                            [class.bg-emerald-500/20]="occ.status === 'open' || occ.status === 'scheduled'"
-                            [class.text-emerald-400]="occ.status === 'open' || occ.status === 'scheduled'"
-                            [class.border-emerald-500/30]="occ.status === 'open' || occ.status === 'scheduled'"
-                            [class.bg-rose-500/20]="occ.status === 'cancelled'"
-                            [class.text-rose-400]="occ.status === 'cancelled'"
-                            [class.border-rose-500/30]="occ.status === 'cancelled'"
-                            [class.bg-slate-700]="occ.status === 'closed'"
-                            [class.text-slate-300]="occ.status === 'closed'"
-                            [class.border-slate-600]="occ.status === 'closed'"
+                            [class.bg-emerald-500/20]="occ.status === 'PUBLISHED' || occ.status === 'SCHEDULED'"
+                            [class.text-emerald-400]="occ.status === 'PUBLISHED' || occ.status === 'SCHEDULED'"
+                            [class.border-emerald-500/30]="occ.status === 'PUBLISHED' || occ.status === 'SCHEDULED'"
+                            [class.bg-rose-500/20]="occ.status === 'CANCELLED'"
+                            [class.text-rose-400]="occ.status === 'CANCELLED'"
+                            [class.border-rose-500/30]="occ.status === 'CANCELLED'"
+                            [class.bg-slate-700]="occ.status === 'CLOSED'"
+                            [class.text-slate-300]="occ.status === 'CLOSED'"
+                            [class.border-slate-600]="occ.status === 'CLOSED'"
                           >
-                            {{ occ.status }}
+                            {{ occurrenceLabel(occ.status) }}
                           </span>
                         </div>
                         <div class="text-xs text-slate-400 mt-0.5">
-                          Closes: {{ occ.closesAt || 'At kickoff' }}
+                          Ends: {{ occ.endsAt ? formatDate(occ.endsAt, event()!.timezone) : formatDate(occ.startsAt, event()!.timezone) }}
                         </div>
                       </div>
                     </div>
 
                     <!-- Actions & RSVP Badge -->
                     <div class="flex items-center gap-3 self-end md:self-center">
-                      <app-rsvp-badge [counts]="occ.counts" />
+                      <app-rsvp-badge [counts]="occ.rsvpCounts" />
 
-                      @if (occ.status !== 'cancelled') {
+                      @if (occ.status === 'SCHEDULED' || occ.status === 'PUBLISHED') {
                         <button
                           type="button"
                           (click)="cancelSingleOccurrence(occ.id)"
@@ -396,6 +421,13 @@ export class EventDetailComponent implements OnInit {
   readonly editTitle = signal<string>('');
   readonly editDescription = signal<string>('');
   readonly editLocation = signal<string>('');
+  readonly editLeadMinutes = signal<number>(2880);
+  readonly saveError = signal<string | null>(null);
+
+  readonly statusLabel = eventStatusLabel;
+  readonly occurrenceLabel = occurrenceStatusLabel;
+  readonly formatDate = formatEventDate;
+  readonly leadLabel = describeLeadMinutes;
 
   // RSVPs expansion state
   readonly expandedOccurrenceId = signal<string | null>(null);
@@ -403,6 +435,18 @@ export class EventDetailComponent implements OnInit {
   readonly loadingRsvps = signal<Record<string, boolean>>({});
 
   readonly occurrences = computed(() => this.event()?.occurrences ?? []);
+  readonly openOccurrenceCount = computed(
+    () => this.occurrences().filter((o) => o.status === 'SCHEDULED' || o.status === 'PUBLISHED').length,
+  );
+  /** Preset lead times plus the event's current value if it is not one of them. */
+  readonly leadOptions = computed(() => {
+    const current = this.event()?.publishLeadMinutes;
+    const options = [...PUBLISH_LEAD_OPTIONS];
+    if (current !== undefined && !options.some((o) => o.minutes === current)) {
+      options.push({ minutes: current, label: describeLeadMinutes(current) });
+    }
+    return options;
+  });
 
   ngOnInit(): void {
     const eventId = this.route.snapshot.paramMap.get('eventId');
@@ -431,6 +475,8 @@ export class EventDetailComponent implements OnInit {
     this.editTitle.set(item.title);
     this.editDescription.set(item.description || '');
     this.editLocation.set(item.location || '');
+    this.editLeadMinutes.set(item.publishLeadMinutes ?? 2880);
+    this.saveError.set(null);
   }
 
   startEdit(): void {
@@ -449,19 +495,21 @@ export class EventDetailComponent implements OnInit {
     const guildId = this.guildStore.activeGuildId();
     if (!current || !guildId) return;
 
-    const updatedData: Partial<EventItem> = {
+    const updatedData: Record<string, unknown> = {
       title: this.editTitle(),
       description: this.editDescription(),
       location: this.editLocation(),
     };
+    if (current.isRecurring) updatedData['publishLeadMinutes'] = this.editLeadMinutes();
 
     try {
       const result = await this.api.updateEvent(guildId, current.id, updatedData);
       this.event.set(result);
-    } catch (err) {
-      console.error('Save edit failed:', err);
-    } finally {
+      this.initEditForm(result);
       this.isEditing.set(false);
+    } catch (err: any) {
+      console.error('Save edit failed:', err);
+      this.saveError.set(err?.error?.message || 'Could not save the event.');
     }
   }
 
@@ -481,7 +529,7 @@ export class EventDetailComponent implements OnInit {
       console.error('Delete event failed:', err);
     } finally {
       this.isDeleting.set(false);
-      this.router.navigate(['/events']);
+      this.router.navigate(['/admin/community'], { queryParams: { tab: 'events' } });
     }
   }
 
@@ -496,22 +544,12 @@ export class EventDetailComponent implements OnInit {
 
     try {
       await this.api.cancelOccurrence(guildId, current.id, occurrenceId);
+      // Reload: cancelling may archive the event or (for a series) add new dates.
+      const refreshed = await this.api.getEvent(guildId, current.id);
+      this.event.set(refreshed);
     } catch (err: unknown) {
       console.error('Cancel occurrence failed:', err);
     }
-
-    // Update locally in signal
-    const updatedOccurrences = current.occurrences.map((occ) => {
-      if (occ.id === occurrenceId) {
-        return { ...occ, status: 'cancelled' as const };
-      }
-      return occ;
-    });
-
-    this.event.set({
-      ...current,
-      occurrences: updatedOccurrences,
-    });
   }
 
   async toggleRsvps(occurrenceId: string): Promise<void> {
@@ -535,8 +573,7 @@ export class EventDetailComponent implements OnInit {
         }
       } catch (err: unknown) {
         console.error('Could not fetch RSVPs from API:', err);
-        const occ = this.occurrences().find((o) => o.id === occurrenceId);
-        this.setOccurrenceRsvps(occurrenceId, occ?.rsvps || []);
+        this.setOccurrenceRsvps(occurrenceId, []);
       } finally {
         this.setLoadingRsvps(occurrenceId, false);
       }

@@ -18,6 +18,8 @@ export interface RenderLineupOptions {
   width?: number;
   height?: number;
   showSlotTags?: boolean;
+  /** Optional second line under each name (e.g. the player's EA name), keyed by slot. */
+  subtitles?: Record<string, string>;
 }
 
 function escapeXml(unsafe: any): string {
@@ -28,6 +30,16 @@ function escapeXml(unsafe: any): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+/**
+ * Shortens text to at most maxChars characters (whole code points, so an emoji is never
+ * split), ending with an ellipsis when cut.
+ */
+export function truncateText(value: string, maxChars: number): string {
+  const chars = Array.from(value);
+  if (chars.length <= maxChars) return value;
+  return chars.slice(0, Math.max(1, maxChars - 1)).join('').trimEnd() + '…';
 }
 
 function safeColor(value: string | undefined, fallback: string): string {
@@ -124,6 +136,7 @@ export class LineupRendererService {
       primary,
       secondary,
       showSlotTags,
+      options.subtitles || {},
     );
 
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="width: 100%; max-width: 100%; height: auto; display: block;">
@@ -134,6 +147,7 @@ export class LineupRendererService {
       .txt-kickoff { font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif; font-weight: 700; fill: #d9d9d9; font-size: 16px; }
       .txt-num { font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif; font-weight: 800; font-size: 20px; text-anchor: middle; dominant-baseline: central; }
       .txt-name { font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif; font-weight: 700; font-size: 13.5px; fill: #ffffff; text-anchor: middle; dominant-baseline: central; }
+      .txt-sub { font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif; font-weight: 700; font-size: 11px; fill: #EAE905; text-anchor: middle; dominant-baseline: central; }
       .txt-pos { font-family: 'Liberation Sans', 'DejaVu Sans', sans-serif; font-weight: 700; font-size: 11.5px; fill: #111111; text-anchor: middle; dominant-baseline: central; }
     </style>
   </defs>
@@ -250,6 +264,8 @@ export class LineupRendererService {
 
     const titleX = 50;
     const titleY = 56;
+    // 34px bold text averages under 21px per character: stop before the formation pill.
+    const titleMaxChars = Math.floor((pillX - titleX - 24) / 21);
 
     const row1 = kickoffRows[0] || { flag: 'ro', text: 'Kickoff pending' };
     const row2 = kickoffRows[1] || { flag: 'uk', text: 'Kickoff pending' };
@@ -270,7 +286,7 @@ export class LineupRendererService {
     <text x="${pillX + pillWidth / 2}" y="${pillY + 31}" class="txt-pill" text-anchor="middle">${escapeXml(formationLabel)}</text>
 
     <!-- Title -->
-    <text x="${titleX}" y="${titleY}" class="txt-title" font-size="34">${escapeXml(title)}</text>
+    <text x="${titleX}" y="${titleY}" class="txt-title" font-size="34">${escapeXml(truncateText(title, titleMaxChars))}</text>
 
     <!-- Kickoff row in a single clean horizontal banner -->
     ${flag1Svg}
@@ -287,6 +303,7 @@ export class LineupRendererService {
     primary: string,
     secondary: string,
     showSlotTags: boolean,
+    subtitles: Record<string, string>,
   ): string {
     const numColor = contrastText(primary);
     return layout.positions
@@ -299,6 +316,8 @@ export class LineupRendererService {
         const playerName =
           typeof raw === 'string' && raw.trim() ? raw.trim() : position.label;
         const playerNumber = index + 1;
+        const rawSubtitle = subtitles[position.key] || subtitles[position.key.toLowerCase()];
+        const subtitle = typeof rawSubtitle === 'string' && rawSubtitle.trim() && rawSubtitle.trim() !== playerName ? rawSubtitle.trim() : '';
         return this.renderSinglePlayer(
           x,
           y,
@@ -309,6 +328,7 @@ export class LineupRendererService {
           secondary,
           numColor,
           showSlotTags,
+          subtitle,
         );
       })
       .join('\n');
@@ -324,6 +344,7 @@ export class LineupRendererService {
     secondary: string,
     numColor: string,
     showSlotTags: boolean,
+    subtitle = '',
   ): string {
     const topY = y - 11;
     const sleeveBottomY = y + 20;
@@ -349,7 +370,9 @@ export class LineupRendererService {
     // Position tag
     const tagWidth = Math.max(44, positionLabel.length * 9 + 18);
     const tagHeight = 20;
-    const tagY = plateY + plateHeight + 6;
+    const subtitleText = subtitle.length > 22 ? subtitle.slice(0, 20) + '..' : subtitle;
+    const subtitleY = plateY + plateHeight + 7;
+    const tagY = plateY + plateHeight + (subtitleText ? 15 : 6);
 
     return `
     <!-- Player ${number} (${positionLabel}) -->
@@ -368,6 +391,7 @@ export class LineupRendererService {
       <!-- Nameplate -->
       <rect x="${x - plateWidth / 2}" y="${plateY}" width="${plateWidth}" height="${plateHeight}" rx="10" fill="#0b0b0b" stroke="#252525" stroke-width="1" />
       <text x="${x}" y="${plateY + plateHeight / 2}" class="txt-name">${escapeXml(displayName)}</text>
+      ${subtitleText ? `<text x="${x}" y="${subtitleY}" class="txt-sub">${escapeXml(subtitleText)}</text>` : ''}
 
       <!-- Position Tag -->
       ${
