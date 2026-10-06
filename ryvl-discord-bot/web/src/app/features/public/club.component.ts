@@ -13,12 +13,15 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { distinctUntilChanged, map } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { EaMatchCardComponent } from '../ea-tracker/shared/ea-match-card.component';
+import { EaMemberTableComponent } from '../ea-tracker/shared/ea-member-table.component';
+import { formatEaTimestamp } from '../ea-tracker/shared/ea-format';
 
 @Component({
   selector: 'app-public-club',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, RouterLink, PublicPageHeaderComponent],
+  imports: [CommonModule, RouterLink, PublicPageHeaderComponent, EaMatchCardComponent, EaMemberTableComponent],
   template: `
     <div class="public-page space-y-8">
       <app-public-page-header heading="RYVL Club Tracker" eyebrow="EA SPORTS FC 27 Pro Clubs">
@@ -199,168 +202,12 @@ import { ApiService } from '../../core/api.service';
         } @else {
           <div class="space-y-5">
             @for (match of matches(); track match.matchId) {
-              <div class="rounded-3xl bg-[#0c0c0e] border border-white/10 hover:border-[#EAE905]/30 transition overflow-hidden shadow-xl">
-                <!-- Match Header Bar -->
-                <div class="px-6 py-3.5 bg-[#121214] border-b border-white/5 flex items-center justify-between flex-wrap gap-2 text-xs">
-                  <div class="flex items-center gap-3">
-                    <!-- Outcome Badge -->
-                    <span
-                      class="px-3 py-1 rounded-full font-black text-[11px] tracking-wide"
-                      [ngClass]="{
-                        'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30': match.outcome === 'WIN',
-                        'bg-rose-500/15 text-rose-400 border border-rose-500/30': match.outcome === 'LOSS',
-                        'bg-amber-500/15 text-amber-300 border border-amber-500/30': match.outcome === 'DRAW'
-                      }"
-                    >
-                      {{ match.outcome === 'WIN' ? '🟢 VICTORY' : match.outcome === 'LOSS' ? '🔴 DEFEAT' : '⚪ DRAW' }}
-                    </span>
-
-                    <span class="text-slate-300 font-semibold">{{ match.matchTypeLabel || 'Pro Clubs Match' }}</span>
-                    <span class="text-slate-600">•</span>
-                    <span class="text-slate-400">{{ formatTimestamp(match.timestamp) }}</span>
-                  </div>
-
-                  <button
-                    type="button"
-                    (click)="toggleExpandMatch(match.matchId)"
-                    class="text-xs text-[#EAE905] hover:text-[#d8d704] font-bold px-3 py-1 rounded-lg bg-white/5 hover:bg-white/10 transition cursor-pointer"
-                  >
-                    {{ expandedMatchId() === match.matchId ? 'Hide Squad Stats ▲' : 'View Squad Stats ▼' }}
-                  </button>
-                </div>
-
-                <!-- Match Scoreboard Display -->
-                <div class="p-6 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-6">
-                  <!-- Tracked Team (Left) -->
-                  <div class="flex items-center gap-5 flex-1 justify-end order-1 md:order-1 text-right">
-                    <div>
-                      <div class="text-base sm:text-lg font-black text-white uppercase tracking-tight">{{ match.trackedClub.name }}</div>
-                      <div class="text-[11px] text-slate-400">{{ match.trackedPlayers.length }} Players Rated</div>
-                    </div>
-                    <img
-                      [src]="match.trackedClub.crestUrl || defaultCrest"
-                      alt="Tracked Crest"
-                      class="w-14 h-14 object-contain rounded-2xl bg-black/60 p-1.5 border border-white/10 shrink-0"
-                    />
-                  </div>
-
-                  <!-- Central Score Box -->
-                  <div class="flex items-center gap-4 px-8 py-3 rounded-2xl bg-[#141419] border border-white/10 shadow-inner order-2">
-                    <span
-                      class="text-3xl font-black font-mono"
-                      [ngClass]="match.trackedClub.score > match.opponentClub.score ? 'text-[#EAE905]' : 'text-white'"
-                    >
-                      {{ match.trackedClub.score }}
-                    </span>
-                    <span class="text-slate-500 font-bold text-xl">:</span>
-                    <span
-                      class="text-3xl font-black font-mono"
-                      [ngClass]="match.opponentClub.score > match.trackedClub.score ? 'text-rose-400' : 'text-white'"
-                    >
-                      {{ match.opponentClub.score }}
-                    </span>
-                  </div>
-
-                  <!-- Opponent Team (Right) -->
-                  <div class="flex items-center gap-5 flex-1 order-3">
-                    <img
-                      [src]="match.opponentClub.crestUrl || defaultCrest"
-                      alt="Opponent Crest"
-                      class="w-14 h-14 object-contain rounded-2xl bg-black/60 p-1.5 border border-white/10 shrink-0"
-                    />
-                    <div>
-                      <div class="text-base sm:text-lg font-black text-white uppercase tracking-tight">{{ match.opponentClub.name }}</div>
-                      <div class="text-[11px] text-slate-400">Club ID: {{ match.opponentClub.id }}</div>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Expanded Squad Performance Breakdown -->
-                @if(expandedMatchId() === match.matchId) {
-                  <div class="px-6 pb-6 pt-3 border-t border-white/10 bg-[#121214] space-y-6 animate-fadeIn">
-                    <!-- Team Aggregate Statistics -->
-                    @if(match.trackedClub.aggregate || match.opponentClub.aggregate) {
-                      <div>
-                        <h4 class="text-xs font-mono font-bold uppercase tracking-wider text-[#EAE905] mb-3">
-                          Match statistics
-                        </h4>
-                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                          <div class="bg-[#18181c] p-3 rounded-xl border border-white/5">
-                            <div class="text-slate-400 text-[10px] uppercase font-mono">Shots on Target</div>
-                            <div class="text-sm font-bold text-white mt-1">
-                              {{ match.trackedClub.aggregate?.shots ?? 0 }} vs {{ match.opponentClub.aggregate?.shots ?? 0 }}
-                            </div>
-                          </div>
-
-                          <div class="bg-[#18181c] p-3 rounded-xl border border-white/5">
-                            <div class="text-slate-400 text-[10px] uppercase font-mono">Passes Completed</div>
-                            <div class="text-sm font-bold text-white mt-1">
-                              {{ match.trackedClub.aggregate?.passesmade ?? 0 }} / {{ match.trackedClub.aggregate?.passattempts ?? 0 }}
-                            </div>
-                          </div>
-
-                          <div class="bg-[#18181c] p-3 rounded-xl border border-white/5">
-                            <div class="text-slate-400 text-[10px] uppercase font-mono">Tackles Won</div>
-                            <div class="text-sm font-bold text-white mt-1">
-                              {{ match.trackedClub.aggregate?.tacklesmade ?? 0 }} vs {{ match.opponentClub.aggregate?.tacklesmade ?? 0 }}
-                            </div>
-                          </div>
-
-                          <div class="bg-[#18181c] p-3 rounded-xl border border-white/5">
-                            <div class="text-slate-400 text-[10px] uppercase font-mono">Saves</div>
-                            <div class="text-sm font-bold text-white mt-1">
-                              {{ match.trackedClub.aggregate?.saves ?? 0 }} vs {{ match.opponentClub.aggregate?.saves ?? 0 }}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    }
-
-                    <!-- RYVL Squad Performance Table -->
-                    @if(match.trackedPlayers.length > 0) {
-                      <div>
-                        <h4 class="text-xs font-mono font-bold uppercase tracking-wider text-[#EAE905] mb-2 flex items-center justify-between">
-                          <span>{{ match.trackedClub.name }} Player Performance</span>
-
-                        </h4>
-                        <div class="overflow-x-auto rounded-xl border border-white/10">
-                          <table class="w-full text-left text-xs">
-                            <thead class="bg-[#18181c] text-slate-400 text-[10px] uppercase font-bold border-b border-white/10">
-                              <tr>
-                                <th class="py-2.5 px-3">Player</th>
-                                <th class="py-2.5 px-3">Pos</th>
-                                <th class="py-2.5 px-3 text-center">Rating</th>
-                                <th class="py-2.5 px-3 text-center">Goals</th>
-                                <th class="py-2.5 px-3 text-center">Assists</th>
-                                <th class="py-2.5 px-3 text-center">Passes</th>
-                                <th class="py-2.5 px-3 text-center">Tackles</th>
-                              </tr>
-                            </thead>
-                            <tbody class="divide-y divide-white/5 bg-[#141419]">
-                              @for (p of match.trackedPlayers; track p.gamertag) {
-                                <tr class="hover:bg-white/5 transition">
-                                  <td class="py-2 px-3 font-semibold text-white flex items-center gap-1.5">
-                                    @if(p.isMom) {
-                                      <span title="Man of the Match" class="text-amber-400">⭐</span>
-                                    }
-                                    <span>{{ p.gamertag }}</span>
-                                  </td>
-                                  <td class="py-2 px-3 text-slate-400 font-mono text-[11px] uppercase">{{ p.position }}</td>
-                                  <td class="py-2 px-3 text-center font-bold text-[#EAE905]">{{ p.rating }}</td>
-                                  <td class="py-2 px-3 text-center font-bold text-emerald-400">{{ p.goals }}</td>
-                                  <td class="py-2 px-3 text-center font-bold text-sky-400">{{ p.assists }}</td>
-                                  <td class="py-2 px-3 text-center text-slate-300">{{ p.passesMade }}/{{ p.passAttempts }}</td>
-                                  <td class="py-2 px-3 text-center text-slate-300">{{ p.tacklesMade }}/{{ p.tackleAttempts }}</td>
-                                </tr>
-                              }
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    }
-                  </div>
-                }
-              </div>
+              <app-ea-match-card
+                [match]="match"
+                theme="public"
+                [expanded]="expandedMatchId() === match.matchId"
+                (toggle)="toggleExpandMatch($event)"
+              />
             }
           </div>
         }
@@ -382,53 +229,7 @@ import { ApiService } from '../../core/api.service';
             <p class="text-xs text-slate-400 max-w-md mx-auto">Could not fetch individual member statistics for {{ clubName() }}.</p>
           </div>
         } @else {
-          <div class="rounded-3xl bg-[#0c0c0e] border border-white/10 overflow-hidden shadow-2xl">
-            <div class="p-6 bg-[#121214] border-b border-white/10 flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <h3 class="text-lg font-semibold text-white tracking-tight">Player statistics</h3>
-
-              </div>
-              <span class="px-3 py-1 rounded-full text-xs font-mono font-bold bg-[#EAE905]/15 text-[#EAE905] border border-[#EAE905]/30">
-                {{ members().length }} Registered Players
-              </span>
-            </div>
-
-            <div class="overflow-x-auto">
-              <table class="w-full text-left text-xs">
-                <thead class="bg-[#16161a] text-slate-400 text-[10px] uppercase font-bold border-b border-white/10">
-                  <tr>
-                    <th class="py-3 px-4">Player</th>
-                    <th class="py-3 px-4 text-center">Matches</th>
-                    <th class="py-3 px-4 text-center">Goals</th>
-                    <th class="py-3 px-4 text-center">Assists</th>
-                    <th class="py-3 px-4 text-center">MOTM</th>
-                    <th class="py-3 px-4 text-center">Avg Rating</th>
-                    <th class="py-3 px-4 text-center">Pass %</th>
-                    <th class="py-3 px-4 text-center">Tackle %</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-white/5 bg-[#0c0c0e]">
-                  @for (m of members(); track m.name) {
-                    <tr class="hover:bg-white/5 transition">
-                      <td class="py-3 px-4 font-bold text-white flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-xl bg-[#141419] border border-white/10 flex items-center justify-center text-xs font-black text-[#EAE905]">
-                          {{ m.name.slice(0, 2).toUpperCase() }}
-                        </div>
-                        <span>{{ m.name }}</span>
-                      </td>
-                      <td class="py-3 px-4 text-center font-semibold text-slate-200">{{ m.gamesPlayed || 0 }}</td>
-                      <td class="py-3 px-4 text-center font-bold text-emerald-400">{{ m.goals || 0 }}</td>
-                      <td class="py-3 px-4 text-center font-bold text-sky-400">{{ m.assists || 0 }}</td>
-                      <td class="py-3 px-4 text-center font-bold text-amber-400">{{ m.manOfTheMatch || 0 }}</td>
-                      <td class="py-3 px-4 text-center font-extrabold text-[#EAE905]">{{ m.rating ? (+m.rating).toFixed(1) : '-' }}</td>
-                      <td class="py-3 px-4 text-center text-slate-300">{{ m.passSuccessRate || 0 }}%</td>
-                      <td class="py-3 px-4 text-center text-slate-300">{{ m.tackleSuccessRate || 0 }}%</td>
-                    </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <app-ea-member-table [members]="members()" theme="public" heading="Player statistics" />
         }
       }
 
@@ -652,17 +453,5 @@ export class PublicClubComponent implements OnInit {
     }
   }
 
-  formatTimestamp(timestamp: any): string {
-    if (!timestamp) return '';
-    try {
-      const d = new Date(timestamp);
-      return d.toLocaleString('en-GB', {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-        timeZone: 'Europe/Bucharest',
-      });
-    } catch {
-      return String(timestamp);
-    }
-  }
+  readonly formatTimestamp = formatEaTimestamp;
 }
