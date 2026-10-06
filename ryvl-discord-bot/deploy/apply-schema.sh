@@ -10,6 +10,7 @@ FILES=(
   stats-totw-tournaments.sql
   superliga-mvp.sql
   schema-catchup.sql
+  vpg-awards-fixes.sql
 )
 for f in "${FILES[@]}"; do
   echo "Applying prisma/deploy/$f"

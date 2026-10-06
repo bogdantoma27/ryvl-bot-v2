@@ -1,33 +1,35 @@
-import { Injectable, Logger, NotFoundException, Inject, forwardRef } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { Injectable, Logger, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { ChannelType } from 'discord.js';
 import { PrismaService } from '../prisma/prisma.service';
 import { DiscordService } from '../discord/discord.service';
 import { TotwRendererService, TotwPositionsMap, TotwPlayer } from './totw-renderer.service';
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { VpgService } from './vpg.service';
+import { VpgService, VpgLeaderboardCategory } from './vpg.service';
+import { VpgLeaderboardEntry } from './vpg.types';
+import { COMMUNITY_SLUG, DEFAULT_TOTW_CRON, LEAGUE_TIMEZONE, SUPERLIGA_LEAGUE_SLUG, leagueDisplayName } from './league.constants';
+import { cronScheduleError, dueTotwOccurrence } from './totw-schedule';
 
-const POSITIONS = ['gk', 'cb', 'cdm', 'cam', 'wingers', 'strikers'];
-const LEADERBOARD_NAMES: Record<string, string> = {
-  gk: 'top_gk',
-  cb: 'top_cb',
-  cdm: 'top_cdm',
-  cam: 'top_cam',
-  wingers: 'top_wingers',
-  strikers: 'top_strikers',
-};
-const POS_PRIORITY: Record<string, number> = {
-  gk: 0,
-  cb: 1,
-  cdm: 2,
-  cam: 3,
-  wingers: 4,
-  strikers: 5,
-};
+const POSITIONS: VpgLeaderboardCategory[] = ['gk', 'cb', 'cdm', 'cam', 'wingers', 'strikers'];
+// After a failed scheduled post, wait this long before trying again (within the catch-up window).
+const SCHEDULED_RETRY_MS = 10 * 60 * 1000;
+
+/**
+ * VPG's weekly leaderboards report a `week` that counts match sessions, and Superliga
+ * plays two sessions per calendar week, so the Team of the Week number is half of it,
+ * rounded up. VPG's match list has no week field (only `match_day`, one per session),
+ * so the leaderboard week is the only week source. Kept as-is so the week numbers of
+ * already stored TOTW picks stay comparable.
+ */
+export function totwWeekFromSession(sessionWeek: number | null | undefined): number | null {
+  if (sessionWeek == null || !Number.isFinite(Number(sessionWeek))) return null;
+  return Math.max(1, Math.ceil(Number(sessionWeek) / 2));
+}
 
 @Injectable()
 export class TotwService {
   private readonly logger = new Logger(TotwService.name);
-  private readonly baseUrl = 'https://api.virtualprogaming.com/public/leagues';
+  private scheduling = false;
+  private readonly retryAfter = new Map<string, number>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -38,8 +40,8 @@ export class TotwService {
   ) {}
 
   /**
-   * Stores who made a posted weekly Team of the Week, replacing any earlier record of
-   * the same week. Superliga MVP uses the count as its tiebreaker.
+   * Stores who made a weekly Team of the Week, replacing any earlier record of the same
+   * week. Superliga MVP uses the count as its tiebreaker.
    */
   async recordWeeklySelections(leagueSlug: string, season: number, week: number | null, players: TotwPositionsMap): Promise<number> {
     if (!week) {
@@ -54,6 +56,8 @@ export class TotwService {
         }
       }
     }
+    // An empty week (VPG reset the weekly boards, nobody has played yet) must not wipe a recorded one.
+    if (!rows.length) return 0;
     const withNames = await Promise.all(
       rows.map(async (r) => ({
         ...r,
@@ -70,7 +74,7 @@ export class TotwService {
     return withNames.length;
   }
 
-  async getOrCreateConfig(guildId: string, leagueSlug = 'Superliga-Romania') {
+  async getOrCreateConfig(guildId: string, leagueSlug = SUPERLIGA_LEAGUE_SLUG) {
     const existing = await this.prisma.totwConfig.findUnique({
       where: {
         guildId_leagueSlug: { guildId, leagueSlug },
@@ -84,10 +88,10 @@ export class TotwService {
       data: {
         guildId,
         leagueSlug,
-        communitySlug: 'VPGRoPS5',
+        communitySlug: COMMUNITY_SLUG,
         channelId: guild?.defaultChannelId || null,
         formation: '3-5-2',
-        cronSchedule: '0 20 * * 6', // Saturdays at 20:00 Romania time
+        cronSchedule: DEFAULT_TOTW_CRON,
         enabled: true,
       },
     });
@@ -96,8 +100,14 @@ export class TotwService {
   async updateConfig(
     guildId: string,
     leagueSlug: string,
-    data: { channelId?: string | null; formation?: string; enabled?: boolean; cronSchedule?: string },
+    data: { channelId?: string | null; formation?: string; enabled?: boolean; cronSchedule?: string | null },
   ) {
+    let cronSchedule: string | undefined;
+    if (data.cronSchedule !== undefined) {
+      cronSchedule = data.cronSchedule && data.cronSchedule.trim() ? data.cronSchedule.trim().replace(/\s+/g, ' ') : DEFAULT_TOTW_CRON;
+      const error = cronScheduleError(cronSchedule);
+      if (error) throw new BadRequestException(error);
+    }
     return this.prisma.totwConfig.upsert({
       where: {
         guildId_leagueSlug: { guildId, leagueSlug },
@@ -106,76 +116,21 @@ export class TotwService {
         ...(data.channelId !== undefined ? { channelId: data.channelId } : {}),
         ...(data.formation ? { formation: data.formation } : {}),
         ...(data.enabled !== undefined ? { enabled: data.enabled } : {}),
-        ...(data.cronSchedule !== undefined ? { cronSchedule: data.cronSchedule } : {}),
+        ...(cronSchedule !== undefined ? { cronSchedule } : {}),
       },
       create: {
         guildId,
         leagueSlug,
-        communitySlug: 'VPGRoPS5',
+        communitySlug: COMMUNITY_SLUG,
         channelId: data.channelId || null,
         formation: data.formation || '3-5-2',
-        cronSchedule: data.cronSchedule || '0 20 * * 6',
+        cronSchedule: cronSchedule || DEFAULT_TOTW_CRON,
         enabled: data.enabled !== undefined ? data.enabled : true,
       },
     });
   }
 
-  async fetchLeagueSeasons(slug: string): Promise<number[]> {
-    try {
-      const res = await fetch(`${this.baseUrl}/${slug}/seasons/`, {
-        headers: { 'User-Agent': 'RYVLBot/2.0' },
-        signal: AbortSignal.timeout(10000),
-      });
-      if (!res.ok) return [1];
-      const data = await res.json();
-      const arr = Array.isArray(data) ? data.map(Number).sort((a, b) => b - a) : [1];
-      return arr.length ? arr : [1];
-    } catch {
-      return [1];
-    }
-  }
-
-  async fetchLeaderboard(slug: string, position: string, season: number, weekly: boolean) {
-    const lbName = LEADERBOARD_NAMES[position];
-    if (!lbName) return { entries: [], sessionWeek: null };
-    const url = `${this.baseUrl}/${slug}/leaderboard/?leaderboard=${lbName}&weekly=${weekly}&season=${season}&limit=25&offset=0`;
-    try {
-      const res = await fetch(url, {
-        headers: { 'User-Agent': 'RYVLBot/2.0' },
-        signal: AbortSignal.timeout(12000),
-      });
-      if (!res.ok) return { entries: [], sessionWeek: null };
-      const data = await res.json();
-      return {
-        entries: Array.isArray(data?.data) ? data.data : [],
-        sessionWeek: data?.week ?? null,
-      };
-    } catch (e: any) {
-      this.logger.warn(`Failed to fetch leaderboard ${position} for ${slug}: ${e.message}`);
-      return { entries: [], sessionWeek: null };
-    }
-  }
-
-  resolvePositions(leaderboards: Record<string, any[]>): TotwPositionsMap {
-    // Phase 1: determine each player's highest ranked role
-    const bestFor = new Map<string, { pos: string; rank: number; player: any }>();
-
-    for (const pos of POSITIONS) {
-      const list = leaderboards[pos] || [];
-      list.forEach((p, idx) => {
-        const rank = idx + 1;
-        const username = p.username || p.player_name || `player_${idx}`;
-        const existing = bestFor.get(username);
-        if (
-          !existing ||
-          rank < existing.rank ||
-          (rank === existing.rank && (POS_PRIORITY[pos] || 0) > (POS_PRIORITY[existing.pos] || 0))
-        ) {
-          bestFor.set(username, { pos, rank, player: p });
-        }
-      });
-    }
-
+  resolvePositions(leaderboards: Record<string, VpgLeaderboardEntry[]>): TotwPositionsMap {
     const used = new Set<string>();
     const result: TotwPositionsMap = {
       gk: [],
@@ -187,28 +142,17 @@ export class TotwService {
       st: [],
     };
 
-    const VPG_CDN = 'https://virtualprogaming.com/cdn-cgi/imagedelivery/cl8ocWLdmZDs72LEaQYaYw';
-
-    const buildAvatarUrl = (raw: any): string | undefined => {
-      const av = raw.user_avatar || raw.avatar_url || raw.avatar || raw.player_avatar || raw.photo;
-      if (!av) return undefined;
-      if (typeof av === 'string' && (av.startsWith('http://') || av.startsWith('https://'))) {
-        return av;
-      }
-      return `${VPG_CDN}/${av}/public`;
-    };
-
-    const mapToPlayer = (raw: any): TotwPlayer => ({
-      username: raw.username || raw.player_name || 'Player',
-      display_name: raw.display_name || raw.username || raw.player_name,
-      team_name: raw.team_name || raw.team || '',
-      team_logo: raw.team_logo || null,
-      avatar_url: buildAvatarUrl(raw),
-      rating: raw.rating || raw.avg_rating || null,
-      goals: Number(raw.goals || 0),
-      assists: Number(raw.assists || 0),
-      clean_sheets: Number(raw.clean_sheets || 0),
-      matches_played: Number(raw.matches_played || 0),
+    const mapToPlayer = (p: VpgLeaderboardEntry): TotwPlayer => ({
+      username: p.username || 'Player',
+      display_name: p.displayName || p.username || 'Player',
+      team_name: p.teamName || '',
+      team_logo: p.teamLogoUrl || undefined,
+      avatar_url: p.userAvatarUrl || undefined,
+      rating: p.rating != null && p.rating > 0 ? p.rating.toFixed(1) : undefined,
+      goals: Number(p.goals || 0),
+      assists: Number(p.assists || 0),
+      clean_sheets: Number(p.cleanSheets || 0),
+      matches_played: Number(p.matchesPlayed || 0),
     });
 
     const fillSlot = (slotKey: keyof TotwPositionsMap, sourcePos: string, count: number) => {
@@ -217,18 +161,14 @@ export class TotwService {
       const slot = result[slotKey]!;
       for (const p of list) {
         if (slot.length >= count) break;
-        const u = p.username || p.player_name;
-        if (used.has(u)) continue;
-
-        const best = bestFor.get(u);
-        if (!best || best.pos === sourcePos || slot.length < count) {
-          used.add(u);
-          slot.push(mapToPlayer(p));
-        }
+        const u = p.username;
+        if (!u || used.has(u)) continue;
+        used.add(u);
+        slot.push(mapToPlayer(p));
       }
     };
 
-    // Phase 2: greedy allocation for standard 3-4-3 formation
+    // Greedy allocation for the 3-4-3 card; a player fills the first position that lists them.
     fillSlot('gk', 'gk', 1);
     fillSlot('cb', 'cb', 3);
     fillSlot('cdm', 'cdm', 2);
@@ -240,95 +180,80 @@ export class TotwService {
     return result;
   }
 
-  async generateTotw(slug = 'Superliga-Romania', isTots = false) {
-    const seasons = await this.fetchLeagueSeasons(slug);
-    const season = seasons[0] || 1;
+  /** The Team of the Week (or Season) line-up, without the image. Throws when VPG fails. */
+  async buildTotw(slug = SUPERLIGA_LEAGUE_SLUG, isTots = false) {
+    const leagueSlug = slug || SUPERLIGA_LEAGUE_SLUG;
+    const season = await this.vpgService.fetchLatestSeason(leagueSlug);
     const weekly = !isTots;
 
-    const lbResults = await Promise.all(
-      POSITIONS.map((pos) => this.fetchLeaderboard(slug, pos, season, weekly)),
+    const pages = await Promise.all(
+      POSITIONS.map((pos) => this.vpgService.fetchLeaderboardPage(pos, season, leagueSlug, weekly)),
     );
 
-    const leaderboards: Record<string, any[]> = {};
+    const leaderboards: Record<string, VpgLeaderboardEntry[]> = {};
     let sessionWeek: number | null = null;
-
     POSITIONS.forEach((pos, idx) => {
-      leaderboards[pos] = lbResults[idx].entries;
-      if (sessionWeek === null && lbResults[idx].sessionWeek != null) {
-        sessionWeek = lbResults[idx].sessionWeek;
-      }
-    });
-
-    const week = weekly
-      ? sessionWeek != null
-        ? Math.max(1, Math.ceil(sessionWeek / 2))
-        : null
-      : null;
-
-    const players = this.resolvePositions(leaderboards);
-
-    const leagueDisplayName =
-      slug === 'Superliga-Romania'
-        ? 'Superliga România'
-        : slug.replace(/-/g, ' ');
-
-    const imageBuffer = await this.renderer.renderPng({
-      leagueName: leagueDisplayName,
-      season,
-      week,
-      isTots,
-      players,
-      accentColor: isTots ? '#FFB800' : '#00E5FF',
+      leaderboards[pos] = pages[idx].entries;
+      if (sessionWeek === null && pages[idx].week != null) sessionWeek = pages[idx].week;
     });
 
     return {
-      leagueName: leagueDisplayName,
+      leagueSlug,
+      leagueName: leagueDisplayName(leagueSlug),
       season,
-      week,
+      week: weekly ? totwWeekFromSession(sessionWeek) : null,
       isTots,
-      players,
-      imageBuffer,
+      players: this.resolvePositions(leaderboards),
     };
   }
 
-  async postTotwToDiscord(guildId: string, channelId?: string, isTots = false) {
-    const config = await this.getOrCreateConfig(guildId);
-    const targetChannelId = channelId || config.channelId;
+  async generateTotw(slug = SUPERLIGA_LEAGUE_SLUG, isTots = false) {
+    const data = await this.buildTotw(slug, isTots);
+    const imageBuffer = await this.renderer.renderPng({
+      leagueName: data.leagueName,
+      season: data.season,
+      week: data.week,
+      isTots,
+      players: data.players,
+      accentColor: isTots ? '#FFB800' : '#00E5FF',
+    });
+    return { ...data, imageBuffer };
+  }
+
+  async postTotwToDiscord(guildId: string, channelId?: string, isTots = false, leagueSlug = SUPERLIGA_LEAGUE_SLUG) {
+    const slug = leagueSlug || SUPERLIGA_LEAGUE_SLUG;
+    const config = await this.prisma.totwConfig.findUnique({ where: { guildId_leagueSlug: { guildId, leagueSlug: slug } } });
+    const targetChannelId = channelId || config?.channelId;
 
     if (!targetChannelId) {
       throw new NotFoundException('No channel configured for Team of the Week announcements.');
     }
+    const channel = await this.discordService.client.channels.fetch(targetChannelId).catch(() => null);
+    if (
+      !channel ||
+      (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement) ||
+      channel.guildId !== guildId
+    ) {
+      throw new BadRequestException('The Team of the Week channel is not a text channel in this server.');
+    }
 
-    const totwData = await this.generateTotw(config.leagueSlug, isTots);
+    const totwData = await this.generateTotw(slug, isTots);
 
     const title = isTots
       ? `🌟 TEAM OF THE SEASON — ${totwData.leagueName}`
       : `⭐ TEAM OF THE WEEK — ${totwData.leagueName}`;
-
-    const subtitle = [
-      `**Season ${totwData.season}**`,
-      totwData.week ? `**Week ${totwData.week}**` : null,
-    ]
-      .filter(Boolean)
-      .join(' • ');
-
-    const embed = new EmbedBuilder()
-      .setTitle(title)
-      .setColor(isTots ? 0xffc107 : 0x00e5ff)
-      .setDescription(
-        `${subtitle}\n\nHere is the official **Top 11** lineup selected based on verified performance metrics from the VPG ${totwData.leagueName} platform.`,
-      )
-      .setImage('attachment://totw.png')
-      .setFooter({ text: 'RYVL Esports • VPG Team of the Week' });
+    const subtitle = [`Season ${totwData.season}`, totwData.week ? `Week ${totwData.week}` : null].filter(Boolean).join(' • ');
 
     const message = await this.discordService.sendImageMessageToChannel(
       targetChannelId,
       totwData.imageBuffer,
       'totw.png',
+      `**${title}**\n${subtitle}`,
     );
 
-    if (!isTots) {
-      await this.recordWeeklySelections(config.leagueSlug, totwData.season, totwData.week, totwData.players).catch((err: any) =>
+    // The posted line-up is the official one, so it replaces any automatic record of the week.
+    if (!isTots && slug === SUPERLIGA_LEAGUE_SLUG) {
+      await this.recordWeeklySelections(slug, totwData.season, totwData.week, totwData.players).catch((err: any) =>
         this.logger.warn(`Could not record TOTW selections: ${err.message}`),
       );
     }
@@ -337,30 +262,79 @@ export class TotwService {
       success: true,
       messageId: message.id,
       channelId: targetChannelId,
+      leagueSlug: slug,
       season: totwData.season,
       week: totwData.week,
     };
   }
 
-  @Cron('0 20 * * 6', { name: 'totw-weekly-publisher', timeZone: 'Europe/Bucharest' })
-  async handleWeeklyTotwPublish(): Promise<void> {
-    this.logger.log('Executing weekly Team of the Week publisher (Saturday 20:00 Romania)...');
+  /**
+   * Posts every enabled Team of the Week whose own schedule (cronSchedule, in the guild's
+   * time zone) is due. lastPostedAt is claimed before posting, so a tick that overlaps
+   * another server process or a slow post never posts the same week twice.
+   */
+  @Cron(CronExpression.EVERY_MINUTE, { name: 'totw-scheduled-publisher' })
+  async handleScheduledTotwPosts(now = new Date()): Promise<number> {
+    if (this.scheduling || !this.discordService.client.isReady()) return 0;
+    this.scheduling = true;
+    let posted = 0;
     try {
-      const activeConfigs = await this.prisma.totwConfig.findMany({
+      const configs = await this.prisma.totwConfig.findMany({
         where: { enabled: true, channelId: { not: null } },
+        include: { guild: { select: { timezone: true } } },
       });
-      for (const config of activeConfigs) {
-        if (!config.channelId) continue;
+      for (const config of configs) {
+        const due = dueTotwOccurrence(config.cronSchedule, config.guild?.timezone, now, config.lastPostedAt);
+        if (!due || (this.retryAfter.get(config.id) ?? 0) > now.getTime()) continue;
+        const claimed = await this.prisma.totwConfig.updateMany({
+          where: { id: config.id, OR: [{ lastPostedAt: null }, { lastPostedAt: { lt: due } }] },
+          data: { lastPostedAt: now },
+        });
+        if (!claimed.count) continue;
         try {
-          await this.postTotwToDiscord(config.guildId, config.channelId, false);
-          this.logger.log(`Posted weekly TOTW for guild ${config.guildId} to channel ${config.channelId}`);
+          await this.postTotwToDiscord(config.guildId, config.channelId!, false, config.leagueSlug);
+          this.retryAfter.delete(config.id);
+          posted++;
+          this.logger.log(`Posted scheduled TOTW (${config.leagueSlug}) for guild ${config.guildId} to channel ${config.channelId}`);
         } catch (err: any) {
-          this.logger.warn(`Failed posting weekly TOTW for guild ${config.guildId}: ${err.message}`);
+          // Release the claim so the week is retried, unless a newer post happened meanwhile.
+          await this.prisma.totwConfig.updateMany({ where: { id: config.id, lastPostedAt: now }, data: { lastPostedAt: config.lastPostedAt } });
+          this.retryAfter.set(config.id, now.getTime() + SCHEDULED_RETRY_MS);
+          this.logger.warn(`Failed posting scheduled TOTW (${config.leagueSlug}) for guild ${config.guildId}: ${err.message}`);
         }
       }
     } catch (err: any) {
-      this.logger.error(`Error in weekly TOTW publisher: ${err.message}`);
+      this.logger.error(`Error in scheduled TOTW publisher: ${err.message}`);
+    } finally {
+      this.scheduling = false;
+    }
+    return posted;
+  }
+
+  /**
+   * Records each week's Superliga Team of the Week picks for the Superliga Awards
+   * tiebreaker, whether or not any server posts the TOTW. Runs at the default TOTW time
+   * and retries hourly that evening; a week already recorded (by a post or an earlier
+   * run) is left alone, since a posted line-up is the official one.
+   */
+  @Cron('0 20-23 * * 6', { name: 'totw-selection-recorder', timeZone: LEAGUE_TIMEZONE })
+  async recordSuperligaWeek(): Promise<number> {
+    try {
+      const data = await this.buildTotw(SUPERLIGA_LEAGUE_SLUG, false);
+      if (!data.week) {
+        this.logger.warn('Weekly TOTW recorder: VPG reported no week number; nothing recorded.');
+        return 0;
+      }
+      const existing = await this.prisma.superligaMvpTotwSelection.count({
+        where: { leagueSlug: SUPERLIGA_LEAGUE_SLUG, season: data.season, week: data.week },
+      });
+      if (existing) return 0;
+      const count = await this.recordWeeklySelections(SUPERLIGA_LEAGUE_SLUG, data.season, data.week, data.players);
+      if (count) this.logger.log(`Recorded ${count} Superliga TOTW picks for S${data.season} week ${data.week}.`);
+      return count;
+    } catch (err: any) {
+      this.logger.warn(`Weekly TOTW recorder failed: ${err.message}`);
+      return 0;
     }
   }
 }
-

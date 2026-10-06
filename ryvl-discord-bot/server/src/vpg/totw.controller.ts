@@ -13,6 +13,7 @@ import type { Response } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { GuildAdminGuard } from '../auth/guild-admin.guard';
 import { TotwService } from './totw.service';
+import { SUPERLIGA_LEAGUE_SLUG } from './league.constants';
 
 @Controller('api/guilds/:guildId/vpg/totw')
 export class TotwController {
@@ -22,7 +23,7 @@ export class TotwController {
   @UseGuards(AuthGuard)
   async getConfig(
     @Param('guildId') guildId: string,
-    @Query('leagueSlug') leagueSlug = 'Superliga-Romania',
+    @Query('leagueSlug') leagueSlug = SUPERLIGA_LEAGUE_SLUG,
   ) {
     return this.totwService.getOrCreateConfig(guildId, leagueSlug);
   }
@@ -31,13 +32,13 @@ export class TotwController {
   @UseGuards(AuthGuard, GuildAdminGuard)
   async updateConfig(
     @Param('guildId') guildId: string,
-    @Query('leagueSlug') leagueSlug = 'Superliga-Romania',
+    @Query('leagueSlug') leagueSlug = SUPERLIGA_LEAGUE_SLUG,
     @Body()
     body: {
       channelId?: string | null;
       formation?: string;
       enabled?: boolean;
-      cronSchedule?: string;
+      cronSchedule?: string | null;
     },
   ) {
     return this.totwService.updateConfig(guildId, leagueSlug, body);
@@ -47,7 +48,7 @@ export class TotwController {
   @UseGuards(AuthGuard)
   async getPreview(
     @Param('guildId') guildId: string,
-    @Query('leagueSlug') leagueSlug = 'Superliga-Romania',
+    @Query('leagueSlug') leagueSlug = SUPERLIGA_LEAGUE_SLUG,
     @Query('isTots') isTots?: string,
   ) {
     const data = await this.totwService.generateTotw(leagueSlug, isTots === 'true');
@@ -84,7 +85,7 @@ export class TotwController {
   @Get('image')
   async getImage(
     @Param('guildId') guildId: string,
-    @Query('leagueSlug') leagueSlug = 'Superliga-Romania',
+    @Query('leagueSlug') leagueSlug = SUPERLIGA_LEAGUE_SLUG,
     @Query('isTots') isTots: string,
     @Res() res: Response,
   ) {
@@ -100,8 +101,8 @@ export class TotwController {
   @UseGuards(AuthGuard, GuildAdminGuard)
   async postToDiscord(
     @Param('guildId') guildId: string,
-    @Body() body: { channelId?: string; isTots?: boolean },
+    @Body() body: { channelId?: string; isTots?: boolean; leagueSlug?: string },
   ) {
-    return this.totwService.postTotwToDiscord(guildId, body.channelId, body.isTots);
+    return this.totwService.postTotwToDiscord(guildId, body.channelId, body.isTots, body.leagueSlug || SUPERLIGA_LEAGUE_SLUG);
   }
 }
