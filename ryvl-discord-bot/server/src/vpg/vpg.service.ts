@@ -1,5 +1,7 @@
-import { isRyvlTeam, isRyvlMatch, isRyvlSide, resolveRyvlIdentity } from './notification-policy';
+import { isRyvlTeam, isRyvlMatch, isRyvlSide, resolveRyvlIdentity, fixturesOnDay, romaniaClock } from './notification-policy';
 import { collectPages, completedResult } from './notification-delivery';
+import { COMMUNITY_NAME, COMMUNITY_SLUG, SUPERLIGA_LEAGUE_SLUG, SUPERLIGA_NAME } from './league.constants';
+import { TtlCache } from './ttl-cache';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -19,16 +21,32 @@ import {
   VpgTeamProfile,
 } from './vpg.types';
 
+export const VPG_LEAGUE_CACHE_TTL_MS = 45 * 1000;
+
+export type VpgLeaderboardCategory = 'strikers' | 'cam' | 'gk' | 'cb' | 'cdm' | 'wingers';
+const LEADERBOARD_NAMES: Record<VpgLeaderboardCategory, string> = {
+  strikers: 'top_strikers',
+  cam: 'top_cam',
+  gk: 'top_gk',
+  cb: 'top_cb',
+  cdm: 'top_cdm',
+  wingers: 'top_wingers',
+};
+
 @Injectable()
 export class VpgService {
   private readonly logger = new Logger(VpgService.name);
 
   private readonly API_BASE = 'https://api.virtualprogaming.com/public';
-  private readonly COMMUNITY_SLUG = 'VPGRoPS5';
+  private readonly COMMUNITY_SLUG = COMMUNITY_SLUG;
   private readonly VPG_CDN = 'https://virtualprogaming.com/cdn-cgi/imagedelivery/cl8ocWLdmZDs72LEaQYaYw';
 
   private readonly communityIdCache = new Map<string, number>();
-  private readonly historyCache = new Map<string, string[]>();
+  // A player's club history rarely changes; keep it for hours, not forever.
+  private readonly historyCache = new TtlCache<string[]>(6 * 60 * 60 * 1000, 2000);
+  // League data shared by the notification poller, MVP sync, TOTW and the public site.
+  // Short enough that a new result shows up within a minute.
+  private readonly leagueCache = new TtlCache<unknown>(VPG_LEAGUE_CACHE_TTL_MS, 500);
   private cachedCommunities: { list: Array<{ id: string | number; name: string; slug: string; logo?: string }>; timestamp: number } | null = null;
   private readonly communityLeaguesCache = new Map<string, { list: any[]; timestamp: number }>();
 
@@ -128,49 +146,38 @@ export class VpgService {
     const trimmed = (username || '').trim();
     if (!trimmed) return [];
 
-    const cacheKey = `${communitySlug || this.COMMUNITY_SLUG}:${trimmed}`;
-    if (this.historyCache.has(cacheKey)) {
-      return this.historyCache.get(cacheKey)!;
-    }
-
-    const communityId = await this.ensureCommunityId(communitySlug);
+    const slug = communitySlug || this.COMMUNITY_SLUG;
     try {
-      const url = `${this.API_BASE}/users/${encodeURIComponent(trimmed)}/contracts/`;
-      const res = await fetch(url, {
-        signal: AbortSignal.timeout(15000),
-        headers: { 'User-Agent': 'RYVLBot/2.0' },
-      });
-      if (!res.ok) {
-        this.historyCache.set(cacheKey, []);
-        return [];
-      }
-      const data = await res.json();
-      const list: VpgPlayerContract[] = Array.isArray(data)
-        ? data
-        : Array.isArray(data?.data)
-        ? data.data
-        : [];
+      return await this.historyCache.getOrLoad(`${slug}:${trimmed}`, async () => {
+        const communityId = await this.ensureCommunityId(slug);
+        // Unknown community: do not cache an empty history for hours.
+        if (!communityId) throw new Error(`community ${slug} could not be resolved`);
+        const url = `${this.API_BASE}/users/${encodeURIComponent(trimmed)}/contracts/`;
+        const res = await fetch(url, {
+          signal: AbortSignal.timeout(15000),
+          headers: { 'User-Agent': 'RYVLBot/2.0' },
+        });
+        // A missing profile is an answer; a server error is retried next time.
+        if (res.status === 404) return [];
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const list: VpgPlayerContract[] = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.data)
+          ? data.data
+          : [];
 
-      const seen = new Set<string>();
-      const names: string[] = [];
-
-      for (const contract of list) {
-        const teamName = contract.team_name?.trim();
-        if (
-          contract.community_id === communityId &&
-          teamName &&
-          !seen.has(teamName)
-        ) {
-          seen.add(teamName);
-          names.push(teamName);
+        const names: string[] = [];
+        for (const contract of list) {
+          const teamName = contract.team_name?.trim();
+          if (contract.community_id === communityId && teamName && !names.includes(teamName)) {
+            names.push(teamName);
+          }
         }
-      }
-
-      this.historyCache.set(cacheKey, names);
-      return names;
+        return names;
+      });
     } catch (err: any) {
       this.logger.warn(`Could not fetch contract history for ${trimmed}: ${err.message}`);
-      this.historyCache.set(cacheKey, []);
       return [];
     }
   }
@@ -239,7 +246,7 @@ export class VpgService {
     }
 
     const communities = this.cachedCommunities?.list || [
-      { id: '1', name: 'VPG Romania', slug: 'VPGRoPS5' },
+      { id: '1', name: COMMUNITY_NAME, slug: COMMUNITY_SLUG },
       { id: '2', name: 'VPG Europe Cross-Play', slug: 'VPG-Europe' },
       { id: '3', name: 'VPG Italy', slug: 'VPG-Italy' },
       { id: '4', name: 'VPG España', slug: 'VPG-espana-ps5' },
@@ -284,9 +291,9 @@ export class VpgService {
 
   async searchLeagues(query?: string): Promise<Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }>> {
     const knownLeagues: Array<{ communitySlug: string; communityName: string; leagueSlug: string; leagueName: string }> = [
-      { communitySlug: 'VPGRoPS5', communityName: 'VPG Romania', leagueSlug: 'Superliga-Romania', leagueName: 'Superliga România' },
-      { communitySlug: 'VPGRoPS5', communityName: 'VPG Romania', leagueSlug: 'Liga-2-Romania', leagueName: 'Liga 2 România' },
-      { communitySlug: 'VPGRoPS5', communityName: 'VPG Romania', leagueSlug: 'Cupa-Romaniei', leagueName: 'Cupa României' },
+      { communitySlug: COMMUNITY_SLUG, communityName: COMMUNITY_NAME, leagueSlug: SUPERLIGA_LEAGUE_SLUG, leagueName: SUPERLIGA_NAME },
+      { communitySlug: COMMUNITY_SLUG, communityName: COMMUNITY_NAME, leagueSlug: 'Liga-2-Romania', leagueName: 'Liga 2 România' },
+      { communitySlug: COMMUNITY_SLUG, communityName: COMMUNITY_NAME, leagueSlug: 'Cupa-Romaniei', leagueName: 'Cupa României' },
       { communitySlug: 'VPG-Europe', communityName: 'VPG Europe', leagueSlug: 'Europe-Premier', leagueName: 'Europe Premier' },
       { communitySlug: 'VPG-Europe', communityName: 'VPG Europe', leagueSlug: 'Europe-Championship', leagueName: 'Europe Championship' },
       { communitySlug: 'VPG-Europe', communityName: 'VPG Europe', leagueSlug: 'Europe-League-1', leagueName: 'Europe League 1' },
@@ -389,8 +396,8 @@ export class VpgService {
       id: 'default',
       guildId: 'default',
       communitySlug: this.COMMUNITY_SLUG,
-      leagueSlug: 'Superliga-Romania',
-      leagueName: 'Superliga România',
+      leagueSlug: SUPERLIGA_LEAGUE_SLUG,
+      leagueName: SUPERLIGA_NAME,
       channelId: null,
       enabled: true,
       pollIntervalSec: 120,
@@ -402,7 +409,9 @@ export class VpgService {
   }
 
   async updateConfig(guildId: string, dto: UpdateVpgConfigDto) {
-    await this.getOrCreateConfig(guildId);
+    const current = await this.getOrCreateConfig(guildId);
+    // Another community has its own transfer feed: start again from its newest transfer.
+    const communityChanged = dto.communitySlug !== undefined && (dto.communitySlug || COMMUNITY_SLUG) !== (current.communitySlug || COMMUNITY_SLUG);
 
     if (dto.channelId !== undefined) {
       await this.prisma.guild.update({
@@ -416,8 +425,9 @@ export class VpgService {
       data: {
         ...(dto.channelId !== undefined ? { channelId: dto.channelId } : {}),
         ...(dto.enabled !== undefined ? { enabled: dto.enabled } : {}),
-        ...(dto.pollIntervalSec !== undefined ? { pollIntervalSec: dto.pollIntervalSec } : {}),
+        ...(dto.pollIntervalSec !== undefined ? { pollIntervalSec: Math.min(3600, Math.max(60, Math.round(Number(dto.pollIntervalSec)) || 120)) } : {}),
         ...(dto.communitySlug !== undefined ? { communitySlug: dto.communitySlug } : {}),
+        ...(communityChanged ? { lastTransferId: null } : {}),
         ...(dto.leagueSlug !== undefined ? { leagueSlug: dto.leagueSlug } : {}),
         ...(dto.leagueName !== undefined ? { leagueName: dto.leagueName } : {}),
       },
@@ -492,53 +502,69 @@ export class VpgService {
   // Superliga Romania Competitions, Standings, Fixtures, Results, Leaderboards
   // ---------------------------------------------------------------------------
 
-  async fetchSeasons(leagueSlug = 'Superliga-Romania'): Promise<number[]> {
-    const response = await fetch(`${this.API_BASE}/leagues/${encodeURIComponent(leagueSlug)}/seasons/`, {
-      signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'RYVLBot/2.0' },
-    });
-    if (!response.ok) throw new Error(`VPG seasons HTTP ${response.status} for ${leagueSlug}`);
-    const raw = await response.json();
-    const values = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
-    const seasons = values.map(Number).filter((n: number) => Number.isInteger(n) && n > 0).sort((x: number, y: number) => y - x);
-    if (!seasons.length) throw new Error(`No valid VPG season available for ${leagueSlug}`);
-    return seasons;
+  /** Shared, short-lived cache of league reads. Callers get their own copy of a list. */
+  private cachedList<T>(key: string, load: () => Promise<T[]>): Promise<T[]> {
+    return (this.leagueCache.getOrLoad(key, load) as Promise<T[]>).then((list) => list.slice());
   }
 
-  async fetchLatestSeason(leagueSlug = 'Superliga-Romania'): Promise<number> {
+  /** Drops cached league data, e.g. before a manual "check now". */
+  clearLeagueCache(): void {
+    this.leagueCache.clear();
+  }
+
+  async fetchSeasons(leagueSlug = SUPERLIGA_LEAGUE_SLUG): Promise<number[]> {
+    return this.cachedList(`seasons:${leagueSlug}`, async () => {
+      const response = await fetch(`${this.API_BASE}/leagues/${encodeURIComponent(leagueSlug)}/seasons/`, {
+        signal: AbortSignal.timeout(15000), headers: { 'User-Agent': 'RYVLBot/2.0' },
+      });
+      if (!response.ok) throw new Error(`VPG seasons HTTP ${response.status} for ${leagueSlug}`);
+      const raw = await response.json();
+      const values = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+      const seasons = values.map(Number).filter((n: number) => Number.isInteger(n) && n > 0).sort((x: number, y: number) => y - x);
+      if (!seasons.length) throw new Error(`No valid VPG season available for ${leagueSlug}`);
+      return seasons;
+    });
+  }
+
+  async fetchLatestSeason(leagueSlug = SUPERLIGA_LEAGUE_SLUG): Promise<number> {
     return (await this.fetchSeasons(leagueSlug))[0];
   }
 
-  async fetchAllMatches(status: 'complete' | 'scheduled', season: number, leagueSlug = 'Superliga-Romania'): Promise<VpgMatchItem[]> {
+  async fetchAllMatches(status: 'complete' | 'scheduled', season: number, leagueSlug = SUPERLIGA_LEAGUE_SLUG): Promise<VpgMatchItem[]> {
     // Fetch every page. A late result must not be dropped just because its match date is old.
-    return collectPages((limit, offset) => this.fetchMatches(status, season, limit, offset, leagueSlug));
+    return this.cachedList(`all:${status}:${leagueSlug}:${season}`, () =>
+      collectPages((limit, offset) => this.fetchMatches(status, season, limit, offset, leagueSlug)),
+    );
   }
 
-  async fetchStandings(season?: number, leagueSlug = 'Superliga-Romania'): Promise<VpgStandingsRow[]> {
+  async fetchStandings(season?: number, leagueSlug = SUPERLIGA_LEAGUE_SLUG): Promise<VpgStandingsRow[]> {
     const targetSeason = season || (await this.fetchLatestSeason(leagueSlug));
-    const url = `${this.API_BASE}/leagues/${leagueSlug}/table/?season=${targetSeason}&is_history=false`;
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(15000),
-      headers: { 'User-Agent': 'RYVLBot/2.0' },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status} fetching standings`);
-    const raw = await res.json();
-    const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+    return this.cachedList(`table:${leagueSlug}:${targetSeason}`, async () => {
+      const url = `${this.API_BASE}/leagues/${encodeURIComponent(leagueSlug)}/table/?season=${targetSeason}&is_history=false`;
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(15000),
+        headers: { 'User-Agent': 'RYVLBot/2.0' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status} fetching standings`);
+      const raw = await res.json();
+      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
 
-    return list.map((item: any, idx: number) => ({
-      position: idx + 1,
-      teamName: item.team_name || 'Unknown Team',
-      teamAbbr: item.team_abbr,
-      teamSlug: item.team_slug,
-      teamLogoUrl: this.buildLogoUrl(item.team_logo),
-      played: Number(item.played || 0),
-      wins: Number(item.wins || 0),
-      draws: Number(item.draws || 0),
-      losses: Number(item.losses || 0),
-      scoreFor: Number(item.score_for || 0),
-      scoreAgainst: Number(item.score_against || 0),
-      goalDifference: Number(item.goal_difference || (item.score_for - item.score_against) || 0),
-      points: Number(item.points || 0),
-    }));
+      return list.map((item: any, idx: number) => ({
+        position: idx + 1,
+        teamName: item.team_name || 'Unknown Team',
+        teamAbbr: item.team_abbr,
+        teamSlug: item.team_slug,
+        teamLogoUrl: this.buildLogoUrl(item.team_logo),
+        played: Number(item.played || 0),
+        wins: Number(item.wins || 0),
+        draws: Number(item.draws || 0),
+        losses: Number(item.losses || 0),
+        scoreFor: Number(item.score_for || 0),
+        scoreAgainst: Number(item.score_against || 0),
+        goalDifference: Number(item.goal_difference || (item.score_for - item.score_against) || 0),
+        points: Number(item.points || 0),
+      }));
+    });
   }
 
   async fetchMatches(
@@ -546,76 +572,128 @@ export class VpgService {
     season?: number,
     limit = 20,
     offset = 0,
-    leagueSlug = 'Superliga-Romania',
+    leagueSlug = SUPERLIGA_LEAGUE_SLUG,
   ): Promise<VpgMatchItem[]> {
     const targetSeason = season || (await this.fetchLatestSeason(leagueSlug));
-    const url = `${this.API_BASE}/leagues/${leagueSlug}/matches/?status=${status}&season=${targetSeason}&limit=${limit}&offset=${offset}`;
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(15000),
-      headers: { 'User-Agent': 'RYVLBot/2.0' },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${status} matches`);
-    const json = await res.json();
-    if (!Array.isArray(json?.data) && !Array.isArray(json)) throw new Error('VPG returned an invalid match page');
-    const list = Array.isArray(json?.data) ? json.data : json;
+    return this.cachedList(`page:${status}:${leagueSlug}:${targetSeason}:${limit}:${offset}`, async () => {
+      const url = `${this.API_BASE}/leagues/${encodeURIComponent(leagueSlug)}/matches/?status=${status}&season=${targetSeason}&limit=${limit}&offset=${offset}`;
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(15000),
+        headers: { 'User-Agent': 'RYVLBot/2.0' },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${status} matches`);
+      const json = await res.json();
+      if (!Array.isArray(json?.data) && !Array.isArray(json)) throw new Error('VPG returned an invalid match page');
+      const list = Array.isArray(json?.data) ? json.data : json;
 
-    return list.map((m: any) => ({
-      id: Number(m.id),
-      datetime: m.datetime,
-      dateFormattedRo: this.formatDateRo(m.datetime),
-      dateFormattedEn: this.formatDateEn(m.datetime),
-      status: m.status || status,
-      matchDay: Number(m.match_day || 0),
-      homeSlug: m.home_slug || null,
-      awaySlug: m.away_slug || null,
-      homeName: m.home_name || 'Home Team',
-      awayName: m.away_name || 'Away Team',
-      homeScore: m.home_score != null ? Number(m.home_score) : null,
-      awayScore: m.away_score != null ? Number(m.away_score) : null,
-      homeLogoUrl: this.buildLogoUrl(m.home_logo),
-      awayLogoUrl: this.buildLogoUrl(m.away_logo),
-    }));
+      return list.map((m: any) => ({
+        id: Number(m.id),
+        datetime: m.datetime,
+        dateFormattedRo: this.formatDateRo(m.datetime),
+        dateFormattedEn: this.formatDateEn(m.datetime),
+        status: m.status || status,
+        matchDay: Number(m.match_day || 0),
+        homeSlug: m.home_slug || null,
+        awaySlug: m.away_slug || null,
+        homeName: m.home_name || 'Home Team',
+        awayName: m.away_name || 'Away Team',
+        homeScore: m.home_score != null ? Number(m.home_score) : null,
+        awayScore: m.away_score != null ? Number(m.away_score) : null,
+        homeLogoUrl: this.buildLogoUrl(m.home_logo),
+        awayLogoUrl: this.buildLogoUrl(m.away_logo),
+      }));
+    });
   }
 
-  async fetchLeaderboard(
-    category: 'strikers' | 'cam' | 'gk' | 'cb' | 'cdm' | 'wingers' = 'strikers',
-    season?: number,
-    leagueSlug = 'Superliga-Romania',
-  ): Promise<VpgLeaderboardEntry[]> {
-    const targetSeason = season || (await this.fetchLatestSeason(leagueSlug));
-    const lbNameMap: Record<string, string> = {
-      strikers: 'top_strikers',
-      cam: 'top_cam',
-      gk: 'top_gk',
-      cb: 'top_cb',
-      cdm: 'top_cdm',
-      wingers: 'top_wingers',
-    };
-    const lbName = lbNameMap[category] || 'top_strikers';
-    const url = `${this.API_BASE}/leagues/${leagueSlug}/leaderboard/?leaderboard=${lbName}&weekly=false&season=${targetSeason}&limit=25&offset=0`;
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(15000),
-      headers: { 'User-Agent': 'RYVLBot/2.0' },
-    });
-    if (!res.ok) return [];
-    const json = await res.json();
-    const list = Array.isArray(json?.data) ? json.data : [];
+  /**
+   * Completed results, newest first. One implementation behind `/superliga results`,
+   * `/live_results today`, `/ryvl results` and the public "today" endpoint.
+   * `day` (YYYY-MM-DD, league time zone) keeps only that day's games; `ryvlOnly` keeps
+   * only games RYVL played.
+   */
+  async getResults(
+    opts: { leagueSlug?: string; season?: number; limit?: number; day?: string; ryvlOnly?: boolean } = {},
+  ): Promise<{ season: number; leagueSlug: string; results: VpgMatchItem[] }> {
+    const leagueSlug = opts.leagueSlug || SUPERLIGA_LEAGUE_SLUG;
+    const season = opts.season || (await this.fetchLatestSeason(leagueSlug));
+    let results = (await this.fetchAllMatches('complete', season, leagueSlug)).filter((m) => completedResult(m));
+    if (opts.ryvlOnly) {
+      const table = await this.fetchStandings(season, leagueSlug).catch(() => [] as VpgStandingsRow[]);
+      const identity = resolveRyvlIdentity(table);
+      results = results.filter((m) => isRyvlMatch(m, identity));
+    }
+    if (opts.day) results = fixturesOnDay(results, opts.day);
+    results.sort((a, b) => Date.parse(b.datetime) - Date.parse(a.datetime) || b.id - a.id);
+    return { season, leagueSlug, results: opts.limit && opts.limit > 0 ? results.slice(0, opts.limit) : results };
+  }
 
-    return list.map((entry: any, index: number) => ({
+  /** Today's date in the league time zone, as YYYY-MM-DD. */
+  leagueToday(now = new Date()): string {
+    return romaniaClock(now).date;
+  }
+
+  /**
+   * One VPG leaderboard page, plus the VPG week it covers (weekly boards only).
+   * Throws when VPG fails, so a caller can tell "no players" from "VPG is down".
+   */
+  async fetchLeaderboardPage(
+    category: VpgLeaderboardCategory,
+    season?: number,
+    leagueSlug = SUPERLIGA_LEAGUE_SLUG,
+    weekly = false,
+  ): Promise<{ season: number; week: number | null; entries: VpgLeaderboardEntry[] }> {
+    const targetSeason = season || (await this.fetchLatestSeason(leagueSlug));
+    const lbName = LEADERBOARD_NAMES[category] || LEADERBOARD_NAMES.strikers;
+    const page = (await this.leagueCache.getOrLoad(`lb:${leagueSlug}:${targetSeason}:${lbName}:${weekly}`, async () => {
+      const url = `${this.API_BASE}/leagues/${encodeURIComponent(leagueSlug)}/leaderboard/?leaderboard=${lbName}&weekly=${weekly}&season=${targetSeason}&limit=25&offset=0`;
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(15000),
+        headers: { 'User-Agent': 'RYVLBot/2.0' },
+      });
+      if (!res.ok) throw new Error(`VPG leaderboard ${lbName} HTTP ${res.status} for ${leagueSlug}`);
+      const json = await res.json();
+      const list = Array.isArray(json?.data) ? json.data : [];
+      const week = json?.week != null && Number.isFinite(Number(json.week)) ? Number(json.week) : null;
+      return { week, entries: list.map((entry: any, index: number) => this.mapLeaderboardEntry(entry, index)) };
+    })) as { week: number | null; entries: VpgLeaderboardEntry[] };
+    return { season: targetSeason, week: page.week, entries: page.entries.slice() };
+  }
+
+  private mapLeaderboardEntry(entry: any, index: number): VpgLeaderboardEntry {
+    const num = (...values: unknown[]) => {
+      const v = values.find((x) => x != null && x !== '');
+      return v != null && Number.isFinite(Number(v)) ? Number(v) : null;
+    };
+    return {
       rank: index + 1,
-      username: (entry.username || '').trim(),
+      username: String(entry.username || entry.player_name || '').trim(),
+      displayName: entry.display_name ? String(entry.display_name).trim() : null,
       userAvatarUrl: entry.user_avatar ? `${this.VPG_CDN}/${entry.user_avatar}/public` : null,
       nationality: entry.user_nationality || 'RO',
       teamName: entry.team_name || 'Team',
       teamLogoUrl: this.buildLogoUrl(entry.team_logo),
       goals: Number(entry.goals || 0),
       assists: Number(entry.assists || 0),
-      shots: entry.shots != null ? Number(entry.shots) : null,
-      cleanSheets: entry.clean_sheet != null ? Number(entry.clean_sheet) : null,
+      shots: num(entry.shots),
+      cleanSheets: num(entry.clean_sheet, entry.clean_sheets),
       matchesPlayed: Number(entry.matches_played || 0),
-      rating: entry.match_rating != null ? Number(entry.match_rating) : null,
-      points: entry.points != null ? Number(entry.points) : null,
-    }));
+      rating: num(entry.match_rating, entry.rating, entry.avg_rating),
+      points: num(entry.points),
+    };
+  }
+
+  /** Season leaderboard for the public site and `/superliga leaderboard`; empty when VPG fails. */
+  async fetchLeaderboard(
+    category: VpgLeaderboardCategory = 'strikers',
+    season?: number,
+    leagueSlug = SUPERLIGA_LEAGUE_SLUG,
+  ): Promise<VpgLeaderboardEntry[]> {
+    try {
+      return (await this.fetchLeaderboardPage(category, season, leagueSlug, false)).entries;
+    } catch (err: any) {
+      this.logger.warn(`VPG leaderboard ${category} unavailable: ${err.message}`);
+      return [];
+    }
   }
 
   private async getJson(path: string): Promise<any> {
@@ -628,7 +706,7 @@ export class VpgService {
   }
 
   /** Teams currently in a league. The list omits the EA link; use fetchTeam for that. */
-  async fetchLeagueTeams(leagueSlug = 'Superliga-Romania'): Promise<VpgTeamSummary[]> {
+  async fetchLeagueTeams(leagueSlug = SUPERLIGA_LEAGUE_SLUG): Promise<VpgTeamSummary[]> {
     const json = await this.getJson(`/leagues/${encodeURIComponent(leagueSlug)}/teams/?limit=100&offset=0`);
     const list = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
     return list
@@ -671,60 +749,17 @@ export class VpgService {
     };
   }
 
-  async isMatchProcessed(guildId: string, vpgMatchId: number): Promise<boolean> {
-    const existing = await this.prisma.processedVpgMatch.findUnique({
-      where: {
-        guildId_vpgMatchId: {
-          guildId,
-          vpgMatchId,
-        },
-      },
-    });
-    return !!existing;
-  }
-
-  async recordProcessedMatch(params: {
-    guildId: string;
-    vpgMatchId: number;
-    homeName: string;
-    awayName: string;
-    homeScore: number;
-    awayScore: number;
-    matchDay?: number;
-    datetime: Date;
-    discordMessageId?: string | null;
-    channelId?: string | null;
-  }) {
-    return this.prisma.processedVpgMatch.upsert({
-      where: {
-        guildId_vpgMatchId: {
-          guildId: params.guildId,
-          vpgMatchId: params.vpgMatchId,
-        },
-      },
-      create: {
-        guildId: params.guildId,
-        vpgMatchId: params.vpgMatchId,
-        homeName: params.homeName,
-        awayName: params.awayName,
-        homeScore: params.homeScore,
-        awayScore: params.awayScore,
-        matchDay: params.matchDay,
-        datetime: params.datetime,
-        discordMessageId: params.discordMessageId,
-        channelId: params.channelId,
-      },
-      update: {
-        discordMessageId: params.discordMessageId,
-        channelId: params.channelId,
-      },
-    });
+  /** The guild whose settings the public site shows: RYVL_GUILD_ID, else the longest-joined guild. */
+  async resolvePublicGuildId(): Promise<string | undefined> {
+    const configured = process.env.RYVL_GUILD_ID?.trim();
+    if (configured) return configured;
+    const publicGuild = await this.prisma.guild.findFirst({ orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }] });
+    return publicGuild?.id;
   }
 
   async getCompetitions(guildId?: string): Promise<RyvlCompetitionDto[]> {
     if (!guildId) {
-      const publicGuild = await this.prisma.guild.findFirst({ orderBy: { joinedAt: 'asc' } });
-      guildId = publicGuild?.id;
+      guildId = await this.resolvePublicGuildId();
     }
     if (guildId) {
       const comps = await this.prisma.ryvlCompetition.findMany({
@@ -800,7 +835,7 @@ export class VpgService {
         guildId,
         name: data.name || 'VPG Competition',
         slug: data.slug || `competition-${Date.now()}`,
-        communitySlug: data.communitySlug || 'VPGRoPS5',
+        communitySlug: data.communitySlug || COMMUNITY_SLUG,
         active: data.active ?? true,
         season: data.season,
         displayOrder: data.displayOrder ?? 1,
@@ -808,18 +843,23 @@ export class VpgService {
     });
   }
 
+  /** The RYVL competition asked for (by slug), else the guild's first active one. Throws when it is not active. */
+  async resolveCompetition(guildId?: string, competitionSlug?: string): Promise<{ competitions: RyvlCompetitionDto[]; competition: RyvlCompetitionDto }> {
+    const competitions = await this.getCompetitions(guildId);
+    const competition = competitionSlug
+      ? competitions.find((c) => c.slug === competitionSlug) || competitions[0]
+      : competitions.find((c) => c.active) || competitions[0];
+    if (!competition.active || !competition.slug) throw new Error('This competition is not active yet');
+    return { competitions, competition };
+  }
+
   async getRyvlPerformance(
     guildId?: string,
     competitionSlug?: string,
   ): Promise<RyvlPerformanceResponse> {
-    const competitions = await this.getCompetitions(guildId);
-    const targetComp = competitionSlug
-      ? competitions.find((c) => c.slug === competitionSlug) || competitions[0]
-      : competitions.find((c) => c.active) || competitions[0];
-
+    const { competitions, competition: targetComp } = await this.resolveCompetition(guildId, competitionSlug);
     const activeSlug = targetComp.slug;
     const activeName = targetComp.name;
-    if (!targetComp.active) throw new Error('This competition is not active yet');
     const targetSeason = targetComp.season || (await this.fetchLatestSeason(activeSlug));
     const warnings: string[] = [];
 

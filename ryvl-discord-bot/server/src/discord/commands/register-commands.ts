@@ -4,6 +4,7 @@ import {
   SlashCommandBuilder,
   RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
+import { SUPERLIGA_LEAGUE_SLUG } from '../../vpg/league.constants';
 
 export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONBody[] {
   const eventCommand = new SlashCommandBuilder()
@@ -187,7 +188,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .addStringOption((opt) =>
           opt
             .setName('league')
-            .setDescription('League slug (e.g. Superliga-Romania, Balkan-Premier)')
+            .setDescription(`League slug (e.g. ${SUPERLIGA_LEAGUE_SLUG}, Balkan-Premier)`)
             .setRequired(false),
         )
         .addBooleanOption((opt) =>
@@ -204,7 +205,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .addStringOption((opt) =>
           opt
             .setName('league')
-            .setDescription('League slug (e.g. Superliga-Romania, Balkan-Premier)')
+            .setDescription(`League slug (e.g. ${SUPERLIGA_LEAGUE_SLUG}, Balkan-Premier)`)
             .setRequired(false),
         )
         .addBooleanOption((opt) =>
@@ -227,7 +228,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .addStringOption((opt) =>
           opt
             .setName('league')
-            .setDescription('League slug (defaults to Superliga-Romania)')
+            .setDescription(`League slug (defaults to ${SUPERLIGA_LEAGUE_SLUG})`)
             .setRequired(false),
         ),
     );

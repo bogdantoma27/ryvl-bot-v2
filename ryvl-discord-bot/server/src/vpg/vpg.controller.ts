@@ -1,4 +1,4 @@
-import { fixturesOnDay, romaniaClock } from './notification-policy';
+import { fixturesOnDay } from './notification-policy';
 import {
   Controller,
   Get,
@@ -16,6 +16,7 @@ import { VpgPollerService } from './vpg-poller.service';
 import { VpgSuperligaPollerService } from './vpg-superliga-poller.service';
 import { UpdateVpgConfigDto } from './vpg.types';
 import { RyvlCommands } from '../discord/commands/ryvl-commands';
+import { COMMUNITY_NAME, COMMUNITY_SLUG, SUPERLIGA_NAME } from './league.constants';
 
 @Controller()
 export class VpgController {
@@ -56,9 +57,9 @@ export class VpgController {
     return {
       config,
       community: {
-        slug: config.communitySlug || 'VPGRoPS5',
-        name: config.leagueName || 'VPG Romania',
-        league: config.leagueName || 'Superliga România',
+        slug: config.communitySlug || COMMUNITY_SLUG,
+        name: config.leagueName || COMMUNITY_NAME,
+        league: config.leagueName || SUPERLIGA_NAME,
       },
     };
   }
@@ -84,9 +85,9 @@ export class VpgController {
     return {
       config,
       community: {
-        slug: config.communitySlug || 'VPGRoPS5',
-        name: config.leagueName || 'VPG Romania',
-        league: config.leagueName || 'Superliga România',
+        slug: config.communitySlug || COMMUNITY_SLUG,
+        name: config.leagueName || COMMUNITY_NAME,
+        league: config.leagueName || SUPERLIGA_NAME,
       },
     };
   }
@@ -121,16 +122,15 @@ export class VpgController {
   @Get('api/vpg/superliga/seasons')
   async getSuperligaSeasons() {
     const seasons = await this.vpgService.fetchSeasons();
-    const latest = await this.vpgService.fetchLatestSeason();
-    return { seasons, latest };
+    return { seasons, latest: seasons[0] };
   }
 
   @Get('api/vpg/superliga/standings')
   async getSuperligaStandings(@Query('season') season?: string) {
-    const parsedSeason = season ? parseInt(season, 10) : undefined;
+    const parsedSeason = (season ? parseInt(season, 10) : 0) || (await this.vpgService.fetchLatestSeason());
     const standings = await this.vpgService.fetchStandings(parsedSeason);
     return {
-      season: parsedSeason || (await this.vpgService.fetchLatestSeason()),
+      season: parsedSeason,
       standings,
       total: standings.length,
     };
@@ -141,11 +141,11 @@ export class VpgController {
     @Query('season') season?: string,
     @Query('limit') limit = '20',
   ) {
-    const parsedSeason = season ? parseInt(season, 10) : undefined;
+    const parsedSeason = (season ? parseInt(season, 10) : 0) || (await this.vpgService.fetchLatestSeason());
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
     const fixtures = await this.vpgService.fetchMatches('scheduled', parsedSeason, parsedLimit);
     return {
-      season: parsedSeason || (await this.vpgService.fetchLatestSeason()),
+      season: parsedSeason,
       fixtures,
       total: fixtures.length,
     };
@@ -156,11 +156,11 @@ export class VpgController {
     @Query('season') season?: string,
     @Query('limit') limit = '20',
   ) {
-    const parsedSeason = season ? parseInt(season, 10) : undefined;
+    const parsedSeason = (season ? parseInt(season, 10) : 0) || (await this.vpgService.fetchLatestSeason());
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
-    const results = await this.vpgService.fetchMatches('complete', parsedSeason, parsedLimit);
+    const { results } = await this.vpgService.getResults({ season: parsedSeason, limit: parsedLimit });
     return {
-      season: parsedSeason || (await this.vpgService.fetchLatestSeason()),
+      season: parsedSeason,
       results,
       total: results.length,
     };
@@ -169,12 +169,14 @@ export class VpgController {
   @Get('api/vpg/superliga/today')
   async getTodayMatches() {
     const season = await this.vpgService.fetchLatestSeason();
-    const [results, fixtures] = await Promise.all([
-      this.vpgService.fetchAllMatches('complete', season),
+    const date = this.vpgService.leagueToday();
+    const [today, fixtures] = await Promise.all([
+      this.vpgService.getResults({ season, day: date }),
       this.vpgService.fetchAllMatches('scheduled', season),
     ]);
-    const date = romaniaClock(new Date()).date;
-    return { date, season, results: fixturesOnDay(results, date), fixtures: fixturesOnDay(fixtures, date), updatedAt: new Date().toISOString() };
+    // Oldest first, as the day's schedule reads.
+    const results = today.results.reverse();
+    return { date, season, results, fixtures: fixturesOnDay(fixtures, date), updatedAt: new Date().toISOString() };
   }
 
   @Get('api/vpg/superliga/leaderboard')
@@ -182,11 +184,11 @@ export class VpgController {
     @Query('category') category: 'strikers' | 'cam' | 'gk' | 'cb' | 'cdm' | 'wingers' = 'strikers',
     @Query('season') season?: string,
   ) {
-    const parsedSeason = season ? parseInt(season, 10) : undefined;
+    const parsedSeason = (season ? parseInt(season, 10) : 0) || (await this.vpgService.fetchLatestSeason());
     const entries = await this.vpgService.fetchLeaderboard(category, parsedSeason);
     return {
       category,
-      season: parsedSeason || (await this.vpgService.fetchLatestSeason()),
+      season: parsedSeason,
       leaderboard: entries,
       total: entries.length,
     };

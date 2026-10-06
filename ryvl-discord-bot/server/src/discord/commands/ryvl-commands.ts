@@ -78,16 +78,14 @@ export class RyvlCommands {
     await interaction.deferReply();
 
     try {
+      if (subcommand === 'results') {
+        await interaction.editReply({ embeds: [await this.ryvlResultsEmbed(guildId, compOpt)] });
+        return;
+      }
       const performance = await this.vpgService.getRyvlPerformance(guildId, compOpt);
 
       if (subcommand === 'performance') {
         const embed = RyvlEmbedBuilder.buildPerformanceOverviewEmbed(performance);
-        await interaction.editReply({ embeds: [embed] });
-      } else if (subcommand === 'results') {
-        const embed = RyvlEmbedBuilder.buildRyvlResultsEmbed(
-          performance.recentResults,
-          performance.stats.competitionName,
-        );
         await interaction.editReply({ embeds: [embed] });
       } else if (subcommand === 'fixtures') {
         const embed = RyvlEmbedBuilder.buildRyvlFixturesEmbed(
@@ -121,11 +119,20 @@ export class RyvlCommands {
       return { success: false, message: `Could not access text channel ${targetChannelId}` };
     }
 
-    const performance = await this.vpgService.getRyvlPerformance(guildId);
-    const embed = RyvlEmbedBuilder.buildRyvlResultsEmbed(performance.recentResults, performance.stats.competitionName);
-
-    await channel.send({ embeds: [embed] });
+    await channel.send({ embeds: [await this.ryvlResultsEmbed(guildId)] });
     return { success: true, message: `Posted RYVL results to #${channel.name}` };
+  }
+
+  /** RYVL's latest results in a competition; the same results query `/superliga results` uses. */
+  async ryvlResultsEmbed(guildId: string, competitionSlug?: string) {
+    const { competition } = await this.vpgService.resolveCompetition(guildId, competitionSlug);
+    const { results } = await this.vpgService.getResults({
+      leagueSlug: competition.slug,
+      season: competition.season,
+      ryvlOnly: true,
+      limit: 10,
+    });
+    return RyvlEmbedBuilder.buildRyvlResultsEmbed(results, competition.name);
   }
 
   async postRyvlFixturesToChannel(guildId: string, channelId?: string): Promise<{ success: boolean; message: string }> {
@@ -170,9 +177,18 @@ export class RyvlCommands {
     return { success: true, message: `Posted RYVL performance & leaderboard overview to #${channel.name}` };
   }
 
+  /** Guilds in a fixed order: the public site's guild (RYVL_GUILD_ID or longest-joined) first. */
+  private async publicGuildsFirst() {
+    const [publicId, guilds] = await Promise.all([
+      this.vpgService.resolvePublicGuildId(),
+      this.prisma.guild.findMany({ orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }] }),
+    ]);
+    return [...guilds.filter((g) => g.id === publicId), ...guilds.filter((g) => g.id !== publicId)];
+  }
+
   async dispatchContactNotification(payload: ContactFormPayload): Promise<{ success: boolean; message?: string }> {
     try {
-      const guilds = await this.prisma.guild.findMany();
+      const guilds = await this.publicGuildsFirst();
       if (!guilds || guilds.length === 0) {
         return { success: false, message: 'No registered Discord server found.' };
       }
@@ -208,7 +224,7 @@ export class RyvlCommands {
 
   async dispatchRecruitmentNotification(payload: RecruitmentFormPayload): Promise<{ success: boolean; message?: string }> {
     try {
-      const guilds = await this.prisma.guild.findMany();
+      const guilds = await this.publicGuildsFirst();
       if (!guilds || guilds.length === 0) {
         return { success: false, message: 'No registered Discord server found.' };
       }

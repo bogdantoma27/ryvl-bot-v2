@@ -8,6 +8,7 @@ import { VpgService } from '../../vpg/vpg.service';
 import { VpgPollerService } from '../../vpg/vpg-poller.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { buildVpgTransferEmbed } from '../embeds/vpg-embed.builder';
+import { COMMUNITY_SLUG } from '../../vpg/league.constants';
 
 @Injectable()
 export class VpgCommands {
@@ -53,8 +54,8 @@ export class VpgCommands {
           `Whenever a transfer happens in **VPG Superliga România**, it will be posted here automatically!`,
         )
         .addFields(
-          { name: 'Community', value: 'VPGRoPS5 (VPG Romania)', inline: true },
-          { name: 'League', value: 'Superliga România', inline: true },
+          { name: 'Community', value: config.communitySlug || COMMUNITY_SLUG, inline: true },
+          { name: 'League', value: config.leagueName || 'Superliga România', inline: true },
           { name: 'Channel', value: `<#${channel.id}>`, inline: true },
           { name: 'Auto-Check Interval', value: `${config.pollIntervalSec || 120} seconds`, inline: true },
         )
@@ -75,7 +76,12 @@ export class VpgCommands {
     const count = Math.min(Math.max(interaction.options.getInteger('count') || 3, 1), 5);
 
     try {
-      const transfers = await this.vpgService.fetchTransfers(count, 0);
+      // The server's own community when it set one; reading the setting must not create it.
+      const config = interaction.guildId
+        ? await this.prisma.vpgTransferConfig.findUnique({ where: { guildId: interaction.guildId } })
+        : null;
+      const communitySlug = config?.communitySlug || COMMUNITY_SLUG;
+      const transfers = await this.vpgService.fetchTransfers(count, 0, communitySlug);
       if (!transfers || transfers.length === 0) {
         await interaction.editReply('No recent VPG transfers found.');
         return;
@@ -83,7 +89,7 @@ export class VpgCommands {
 
       const embeds = transfers.map((t) => buildVpgTransferEmbed(t));
       await interaction.editReply({
-        content: `📋 **Latest VPG Superliga România Transfers** (Showing ${transfers.length}):`,
+        content: `📋 **Latest VPG transfers — ${communitySlug}** (Showing ${transfers.length}):`,
         embeds,
       });
     } catch (err: any) {

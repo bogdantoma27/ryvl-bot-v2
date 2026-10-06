@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 
@@ -33,7 +33,7 @@ interface VpgTransfer {
   selector: 'app-vpg-transfers',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule],
   template: `
     <div class="max-w-7xl w-full mx-auto space-y-6 pb-12">
       <!-- Toast Notification -->
