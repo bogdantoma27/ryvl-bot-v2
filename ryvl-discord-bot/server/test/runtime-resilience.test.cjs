@@ -82,6 +82,27 @@ test('scheduled EA and VPG transfer polls skip guilds the bot was removed from',
   assert.deepEqual(polledTransfers, ['kept']);
 });
 
+test('startup sync survives one unavailable guild and still registers slash commands', async () => {
+  const { Events } = require('discord.js');
+  const listeners = {};
+  const service = Object.create(DiscordService.prototype);
+  service.logger = { log() {}, warn() {}, error() {} };
+  const upserted = [];
+  service.prisma = { guild: { upsert: async ({ where }) => { upserted.push(where.id); } } };
+  const guild = (id, ok) => [id, { fetch: async () => { if (!ok) throw new Error('Unknown Guild'); return { name: id, iconURL: () => null }; } }];
+  service.client = {
+    user: { tag: 'bot' },
+    on: (event, fn) => { listeners[event] = fn; },
+    guilds: { fetch: async () => new Map([guild('a', true), guild('b', false), guild('c', true)]) },
+  };
+  let registered = false;
+  service.registerGuildSlashCommands = async () => { registered = true; };
+  service.setupEventHandlers();
+  await listeners[Events.ClientReady]();
+  assert.deepEqual(upserted, ['a', 'c']);
+  assert.equal(registered, true);
+});
+
 test('the Discord edit modal accepts every description the event API accepts', async () => {
   const { EventEditCommand } = require('../dist/discord/commands/event-edit.command');
   const description = 'd'.repeat(2000);
