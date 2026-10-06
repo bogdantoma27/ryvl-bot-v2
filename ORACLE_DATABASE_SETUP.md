@@ -1,192 +1,79 @@
-# Database Architecture & Production Isolation Guide
+# Database guide
 
-> [!NOTE]
-> **Primary Production Database: Supabase PostgreSQL**
-> 
-> The application is configured to connect to **Supabase PostgreSQL** as its primary, authoritative production database.
-> The local PostgreSQL instance on Oracle Cloud VM described below is an **unused alternative / local fallback**.
-> 
-> When GitHub Actions builds and deploys updates to Oracle Cloud or when Prisma client generates, existing Supabase tables and data remain completely safe and untouched because all migrations are strictly additive.
+The backend uses the PostgreSQL database named by `DATABASE_URL` in `ryvl-discord-bot/server/.env` on the VM. Production currently points at a hosted **Supabase PostgreSQL** database; a PostgreSQL installed on the Oracle VM itself is only an optional alternative (section 4). Deployment never resets or recreates the database.
 
----
+## 1. Local development is isolated
 
-## 1. Local Development vs. Production Environment Isolation
+- Locally the backend uses the `DATABASE_URL` of your local `server/.env` (a local PostgreSQL or the Docker Compose `db` service). Never point it at production.
+- The VM does not expose a database port; OCI security rules and the Ubuntu firewall only allow 22, 80 and 443.
+- CORS only allows `FRONTEND_URL` (plus `localhost:4200` when `FRONTEND_URL` itself is a localhost origin).
+- If your local `.env` uses the production `DISCORD_TOKEN`, your machine and the VM both answer Discord interactions. Use a separate test application and bot token, or stop production briefly with `pm2 stop ryvl-backend` and start it again afterwards.
 
-### Will running the backend locally affect the production environment?
-**No.** Running the backend locally will **never** affect your production environment, database, or live website users, provided you follow standard local development practices:
+## 2. Schema changes
 
-1. **Database Network Isolation:**
-   - **Local Database:** When running locally, your backend connects to `DATABASE_URL` specified in your local `.env` (typically `localhost:5432` or the Docker Compose container `db:5432`).
-   - **Production Database:** On the Oracle Cloud VM, PostgreSQL is strictly bound to `127.0.0.1:5432`. Oracle Cloud Infrastructure (OCI) Security Lists and internal Ubuntu firewall rules (`iptables` / `ufw`) **block all external inbound traffic to port 5432**.
-   - Your local machine cannot connect to the Oracle VM database unless you explicitly open an SSH port tunnel.
+`prisma/schema.prisma` is the model; the production database is upgraded only by the reviewed SQL files in `server/prisma/deploy/`, applied in order by:
 
-2. **CORS & Origin Safety:**
-   - In `server/src/main.ts`, local ports (`http://localhost:4200`) are strictly restricted to local development environments and are excluded in production, ensuring cross-origin requests cannot bleed between environments.
-
-3. **Discord Gateway Bot Token Tip:**
-   - If your local `server/.env` uses the exact same `DISCORD_TOKEN` as production, both your local machine and your Oracle VM will connect to Discord's WebSocket Gateway simultaneously. Discord allows this, but both bots might respond to the same message or button click.
-   - **Recommendation:** When testing Discord slash commands locally, either pause the production PM2 bot temporarily (`pm2 stop ryvl-bot`), or create a secondary test application on the Discord Developer Portal with its own test bot token.
-
----
-
-## 2. Oracle Cloud Production Database Architecture
-
-- **Operating System:** Ubuntu 22.04 / 24.04 LTS (Oracle Cloud Always Free Ampere A1 or E2 Micro)
-- **Database Engine:** PostgreSQL 16
-- **Connection URI (in `/opt/ryvl/ryvl-discord-bot/server/.env`):**
-  ```env
-  DATABASE_URL="postgresql://ryvl:your_secure_password@127.0.0.1:5432/ryvl?schema=public"
-  ```
-
-### Initial PostgreSQL Setup on the VM (if installing fresh)
 ```bash
-sudo apt update && sudo apt install -y postgresql postgresql-contrib
-
-# Switch to postgres user and create application role & database
-sudo -u postgres psql <<EOF
-CREATE USER ryvl WITH ENCRYPTED PASSWORD 'your_secure_password';
-CREATE DATABASE ryvl OWNER ryvl;
-GRANT ALL PRIVILEGES ON DATABASE ryvl TO ryvl;
-\q
-EOF
+cd ~/ryvl-bot-v2
+DATABASE_URL=... bash ryvl-discord-bot/deploy/apply-schema.sh   # the deploy runs this with server/.env
 ```
 
----
+Each file runs in one transaction, takes the advisory lock `739201630`, only adds things (`IF NOT EXISTS`, never drops or renames columns with data) and can be run any number of times.
 
-## 3. Applying Database Schema Migrations
+To change the schema:
 
-Whenever new features (such as Club Tracking, Player Registrations, TOTW, or FC Draft Tournaments) are added, the Prisma schema must be synced on the Oracle VM:
+1. Edit `schema.prisma` (additive and backward compatible).
+2. Add `server/prisma/deploy/<area>-fixes.sql` with the matching idempotent SQL, wrapped in `BEGIN; SELECT pg_advisory_xact_lock(739201630); … COMMIT;`.
+3. Append the file to the `FILES` list in `deploy/apply-schema.sh`.
+4. Check on a disposable database built from the previous schema: run `apply-schema.sh` twice, then `npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code` must report no difference. CI does the same.
+
+`npx prisma db push` is only for a brand-new, empty database. Never run it, or anything with `--force-reset`, against production.
+
+## 3. Backups
+
+Back up the production database independently of deployments. For a hosted database, also enable the provider's own backups. A simple daily dump on the VM:
 
 ```bash
-# 1. SSH into your Oracle Cloud VM
-ssh -i ~/.ssh/id_rsa ubuntu@your-oracle-vm-ip
-
-# 2. Navigate to the server folder
-cd /opt/ryvl/ryvl-discord-bot/server
-
-# 3. Pull latest code (when ready)
-git pull origin main
-
-# 4. Generate the Prisma Client
-npx prisma generate
-
-# 5. Push schema updates to the production database
-npx prisma db push
-
-# 6. Rebuild the server
-npm run build
-
-# 7. Restart the PM2 process
-pm2 restart ryvl-bot
-```
-
-### New Database Tables in This Release
-| Table Name | Purpose |
-| :--- | :--- |
-| `ea_player_match_stats` | Stores individual Pro Clubs match statistics (goals, assists, passes, tackles, ratings, MOTM). |
-| `registered_discord_players` | Maps Discord User IDs to EA Pro Clubs Gamertags per Discord guild. |
-| `player_registration_audits` | Security and audit log of who linked or unlinked players. |
-| `totw_configs` | Stores Team of the Week automation settings, channel IDs, and formation preferences. |
-| `tournament_configs` | Default settings for FC Draft tournaments. |
-| `tournament_instances` | Lifecycle, signups, brackets, and match results for FC Draft tournaments. |
-
----
-
-## 4. Automated Backup & Recovery Strategy
-
-To ensure zero data loss on Oracle Cloud, configure automated daily backups with rotation.
-
-### A. Create Backup Directory & Script
-```bash
-sudo mkdir -p /opt/backups/postgres
-sudo chown -R ubuntu:ubuntu /opt/backups
-
-cat << 'EOF' > /opt/backups/backup_db.sh
+mkdir -p ~/backups/postgres && chmod 700 ~/backups
+cat > ~/backups/backup_db.sh <<'SCRIPT'
 #!/bin/bash
-set -e
-
-BACKUP_DIR="/opt/backups/postgres"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-BACKUP_FILE="${BACKUP_DIR}/ryvl_backup_${TIMESTAMP}.sql.gz"
-
-# Dump and compress database
-PGPASSWORD="your_secure_password" pg_dump -U ryvl -h 127.0.0.1 -d ryvl | gzip > "${BACKUP_FILE}"
-
-# Keep only the last 14 days of backups
-find "${BACKUP_DIR}" -type f -name "ryvl_backup_*.sql.gz" -mtime +14 -delete
-
-echo "[$(date)] Backup completed successfully: ${BACKUP_FILE}"
-EOF
-
-chmod +x /opt/backups/backup_db.sh
+set -euo pipefail
+cd ~/ryvl-bot-v2/ryvl-discord-bot/server
+DATABASE_URL=$(grep -E '^DATABASE_URL=' .env | cut -d= -f2- | tr -d '"')
+FILE=~/backups/postgres/ryvl_$(date +%Y%m%d_%H%M%S).sql.gz
+pg_dump "$DATABASE_URL" | gzip > "$FILE"
+find ~/backups/postgres -name 'ryvl_*.sql.gz' -mtime +14 -delete
+echo "[$(date)] backup written: $FILE"
+SCRIPT
+chmod 700 ~/backups/backup_db.sh
 ```
 
-### B. Configure Daily Cron Job
-```bash
-crontab -e
-```
-Add the following line to run every morning at 03:00 AM Romanian time:
+`pg_dump` must be the same major version as the server or newer (`sudo apt install postgresql-client-<version>`). Schedule it with `crontab -e`:
+
 ```cron
-0 3 * * * /opt/backups/backup_db.sh >> /opt/backups/backup.log 2>&1
+0 3 * * * ~/backups/backup_db.sh >> ~/backups/backup.log 2>&1
 ```
 
-### C. Restoring from a Backup
-If you ever need to restore the database from a backup archive:
+Restore into an empty database, with `DATABASE_URL` exported in the shell (never over a live database without a fresh dump first):
+
 ```bash
-# 1. Stop PM2 service
-pm2 stop ryvl-bot
-
-# 2. Restore database from compressed dump
-gunzip -c /opt/backups/postgres/ryvl_backup_YYYYMMDD_HHMMSS.sql.gz | PGPASSWORD="your_secure_password" psql -U ryvl -h 127.0.0.1 -d ryvl
-
-# 3. Restart PM2 service
-pm2 restart ryvl-bot
+pm2 stop ryvl-backend
+gunzip -c ~/backups/postgres/ryvl_YYYYMMDD_HHMMSS.sql.gz | psql "$DATABASE_URL"
+pm2 start ryvl-backend
 ```
 
----
+The dumps contain member data and settings: keep them private and out of Git.
 
-## 5. Multi-Domain & Subdomain Architecture
+## 4. Optional: PostgreSQL on the VM
 
-Caddy manages SSL certificates and serves the appropriate context based on the requested domain:
+Only if you move production off the hosted database:
 
-| Domain | Role | Target Route |
-| :--- | :--- | :--- |
-| `ryvl.top` & `www.ryvl.top` | Official RYVL Esports Team Website | Serves public shell (`/`, `/team`, `/about`, `/recruitment`, etc.) |
-| `bot.ryvl.top` | Multi-Server Bot Management Console | Automatically routes `/` to `/admin/dashboard` |
-| `/api/*` (both domains) | NestJS Backend API | Reverse proxied to `127.0.0.1:3000` |
-
----
-
-## 6. Full Deployment Procedure (When Ready to Push)
-
-> [!IMPORTANT]
-> Do not execute `git push` from your local machine until you have reviewed and tested everything locally.
-
-When you are ready to deploy:
 ```bash
-# On your local machine (when authorized):
-git add .
-git commit -m "feat: multi-server isolation, player registrations, TOTW cards, and tournament bot"
-git push origin main
-
-# On the Oracle VM:
-cd /opt/ryvl
-git pull origin main
-
-# Build Server
-cd /opt/ryvl/ryvl-discord-bot/server
-npm ci
-npx prisma generate
-npx prisma db push
-npm run build
-
-# Build Web (or copy dist)
-cd /opt/ryvl/ryvl-discord-bot/web
-npm ci
-npm run build
-sudo cp -r dist/web/* /var/www/ryvl/
-
-# Restart Services
-pm2 restart ryvl-bot
-sudo systemctl reload caddy
+sudo apt update && sudo apt install -y postgresql
+sudo -u postgres psql <<'EOF'
+CREATE USER ryvl WITH ENCRYPTED PASSWORD 'choose-a-strong-password';
+CREATE DATABASE ryvl OWNER ryvl;
+EOF
 ```
+
+Keep it bound to `127.0.0.1`, set `DATABASE_URL=postgresql://ryvl:<password>@127.0.0.1:5432/ryvl` in `server/.env`, restore a dump of the current production database into it (section 3), run `apply-schema.sh`, then `pm2 restart ryvl-backend --update-env`.
