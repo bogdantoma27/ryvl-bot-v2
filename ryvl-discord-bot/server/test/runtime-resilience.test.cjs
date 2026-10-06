@@ -80,3 +80,22 @@ test('the Discord edit modal accepts every description the event API accepts', a
   assert.equal(input.value.length, 2000);
   assert.ok(input.value.length <= input.max_length, 'Discord rejects a prefilled value longer than max_length');
 });
+
+test('event publishing backs off on errors a retry cannot fix', () => {
+  const { isPermanentDiscordError } = require('../dist/events/event-publisher.service');
+  assert.equal(isPermanentDiscordError({ code: 10003 }), true);
+  assert.equal(isPermanentDiscordError({ code: 50013 }), true);
+  assert.equal(isPermanentDiscordError(new Error('socket hang up')), false);
+  assert.equal(isPermanentDiscordError(null), false);
+});
+
+test('public VPG season queries reject negative or malformed seasons with 400', async () => {
+  const { VpgController } = require('../dist/vpg/vpg.controller');
+  const controller = Object.create(VpgController.prototype);
+  controller.vpgService = { fetchLatestSeason: async () => 7 };
+  assert.equal(await controller.seasonOrLatest(undefined), 7);
+  assert.equal(await controller.seasonOrLatest('3'), 3);
+  for (const bad of ['-2', '0', 'abc', '1.5']) {
+    await assert.rejects(controller.seasonOrLatest(bad), (e) => e.getStatus() === 400);
+  }
+});

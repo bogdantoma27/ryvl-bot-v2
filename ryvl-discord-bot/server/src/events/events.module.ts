@@ -11,7 +11,7 @@ import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [PrismaModule, AuthModule],
-  controllers: [EventsController, EventsGateway],
+  controllers: [EventsController],
   providers: [EventPublisher, EventsService, EventFixturesService, RecurrenceService, RsvpService, EventsGateway],
   exports: [EventsService, EventPublisher, RecurrenceService, RsvpService, EventsGateway],
 })

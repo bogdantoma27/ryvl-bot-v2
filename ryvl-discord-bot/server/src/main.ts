@@ -39,6 +39,9 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
+  // Run module cleanup hooks (Discord logout, cron stop) when pm2 restarts the process.
+  app.enableShutdownHooks();
+
   const port = configService.port || 3000;
   await app.listen(port);
   logger.log(`RYVL backend listening on port ${port}; public website: ${frontendOrigin}`);

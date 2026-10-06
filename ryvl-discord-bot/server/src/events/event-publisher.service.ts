@@ -11,6 +11,12 @@ export interface EventDiscordSync { updated: number; failed: number; }
 export type PublishOutcome = 'published' | 'closed' | 'skipped' | 'failed';
 export interface PublishRunResult { published: number; closed: number; failed: number; skipped: boolean; }
 
+/** Discord errors that retrying soon cannot fix: unknown channel, missing access, missing permissions. */
+export function isPermanentDiscordError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === 10003 || code === 50001 || code === 50013;
+}
+
 /** A claim older than this is assumed to belong to a crashed worker and may be retaken. */
 export const PUBLISH_CLAIM_TTL_MS = 10 * 60 * 1000;
 /** Upper bound of Event.publishLeadMinutes (30 days); also bounds the candidate query. */
@@ -135,7 +141,9 @@ export class EventPublisher {
     try {
       messageId = await this.postAnnouncement(channelId, occurrence);
     } catch (error) {
-      await release().catch(() => undefined);
+      // A deleted channel or missing permission won't fix itself in 15 seconds: keep the
+      // claim so the occurrence is retried only after the claim expires (PUBLISH_CLAIM_TTL_MS).
+      if (!isPermanentDiscordError(error)) await release().catch(() => undefined);
       this.logger.error(`Failed to publish occurrence ${occurrenceId} to ${channelId}: ${error instanceof Error ? error.message : error}`);
       return 'failed';
     }

@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { GuildAdminGuard } from '../auth/guild-admin.guard';
@@ -23,6 +24,14 @@ import { COMMUNITY_NAME, COMMUNITY_SLUG, SUPERLIGA_NAME } from './league.constan
 @Controller()
 export class VpgController {
   private readonly logger = new Logger(VpgController.name);
+
+  /** A `season` query must be a positive whole number; absent means the latest season. */
+  private async seasonOrLatest(season?: string): Promise<number> {
+    if (season === undefined || season === '') return this.vpgService.fetchLatestSeason();
+    const parsed = Number(season);
+    if (!Number.isInteger(parsed) || parsed < 1) throw new BadRequestException('season must be a positive whole number');
+    return parsed;
+  }
 
   constructor(
     private readonly vpgService: VpgService,
@@ -124,7 +133,7 @@ export class VpgController {
 
   @Get('api/vpg/superliga/standings')
   async getSuperligaStandings(@Query('season') season?: string) {
-    const parsedSeason = (season ? parseInt(season, 10) : 0) || (await this.vpgService.fetchLatestSeason());
+    const parsedSeason = await this.seasonOrLatest(season);
     const standings = await this.vpgService.fetchStandings(parsedSeason);
     return {
       season: parsedSeason,
@@ -138,7 +147,7 @@ export class VpgController {
     @Query('season') season?: string,
     @Query('limit') limit = '20',
   ) {
-    const parsedSeason = (season ? parseInt(season, 10) : 0) || (await this.vpgService.fetchLatestSeason());
+    const parsedSeason = await this.seasonOrLatest(season);
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
     const fixtures = await this.vpgService.fetchMatches('scheduled', parsedSeason, parsedLimit);
     return {
@@ -153,7 +162,7 @@ export class VpgController {
     @Query('season') season?: string,
     @Query('limit') limit = '20',
   ) {
-    const parsedSeason = (season ? parseInt(season, 10) : 0) || (await this.vpgService.fetchLatestSeason());
+    const parsedSeason = await this.seasonOrLatest(season);
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
     const { results } = await this.vpgService.getResults({ season: parsedSeason, limit: parsedLimit });
     return {
@@ -181,7 +190,7 @@ export class VpgController {
     @Query('category') category: 'strikers' | 'cam' | 'gk' | 'cb' | 'cdm' | 'wingers' = 'strikers',
     @Query('season') season?: string,
   ) {
-    const parsedSeason = (season ? parseInt(season, 10) : 0) || (await this.vpgService.fetchLatestSeason());
+    const parsedSeason = await this.seasonOrLatest(season);
     const entries = await this.vpgService.fetchLeaderboard(category, parsedSeason);
     return {
       category,

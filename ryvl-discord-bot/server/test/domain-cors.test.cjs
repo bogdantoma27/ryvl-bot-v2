@@ -7,7 +7,7 @@ const vm = require('node:vm');
 async function originPolicy(frontendUrl) {
   let cors;
   const errors = [];
-  const app = { get: () => ({ frontendUrl, port: 3000 }), enableCors: value => { cors = value; }, useGlobalPipes() {}, async listen() {} };
+  const app = { get: () => ({ frontendUrl, port: 3000 }), enableCors: value => { cors = value; }, useGlobalPipes() {}, enableShutdownHooks() {}, async listen() {} };
   const noop = class { log() {} error(e) { errors.push(e); } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist/main.js'), 'utf8'), {
     exports: {}, URL,
