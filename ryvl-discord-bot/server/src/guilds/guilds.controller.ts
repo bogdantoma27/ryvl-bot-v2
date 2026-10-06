@@ -1,5 +1,5 @@
 import { Controller, Get, Patch, Param, Body, UseGuards } from '@nestjs/common';
-import { GuildsService, UserGuildItem, GuildBootstrapData } from './guilds.service';
+import { GuildsService, UserGuildItem, GuildBootstrapData, GuildSettingsPatch } from './guilds.service';
 import { AuthGuard } from '../auth/auth.guard';
 import { GuildAdminGuard } from '../auth/guild-admin.guard';
 import { CurrentUser } from '../auth/user.decorator';
@@ -37,17 +37,7 @@ export class GuildsController {
   @Patch(':guildId/settings')
   async updateSettings(
     @Param('guildId') guildId: string,
-    @Body()
-    body: {
-      name?: string;
-      timezone?: string;
-      defaultChannelId?: string | null;
-      defaultLineupChannelId?: string | null;
-      defaultTransfersChannelId?: string | null;
-      defaultFixturesChannelId?: string | null;
-      defaultStandingsChannelId?: string | null;
-      defaultLiveResultsChannelId?: string | null;
-    },
+    @Body() body: GuildSettingsPatch,
   ) {
     return this.guildsService.updateSettings(guildId, body);
   }

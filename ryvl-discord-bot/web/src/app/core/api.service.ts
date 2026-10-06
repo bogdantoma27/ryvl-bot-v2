@@ -1,6 +1,6 @@
 import { VpgNotificationSettings, VpgNotificationResponse } from './models';
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, isDevMode } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
   AuthState,
@@ -22,6 +22,8 @@ import {
   RyvlCompetition,
   ContactSubmission,
   RecruitmentSubmission,
+  WebsiteSubmissionItem,
+  BotCommandDoc,
   RosterPlayer,
   RegisteredDiscordPlayer,
   PlayerRegistrationAudit,
@@ -43,9 +45,12 @@ export class ApiService {
     if (typeof window !== 'undefined' && window.location) {
       const { hostname, port } = window.location;
 
-      const customApi =
-        (window as unknown as { __RYVL_API_URL__?: string }).__RYVL_API_URL__ ||
-        localStorage.getItem('ryvl_api_url');
+      // Development builds only: a production build must never send the session token
+      // to an API origin taken from page globals or localStorage.
+      const customApi = isDevMode()
+        ? (window as unknown as { __RYVL_API_URL__?: string }).__RYVL_API_URL__ ||
+          localStorage.getItem('ryvl_api_url')
+        : null;
       if (customApi) {
         return customApi.replace(/\/+$/, '');
       }
@@ -736,6 +741,19 @@ export class ApiService {
         payload,
       ),
     );
+  }
+
+  getWebsiteSubmissions(guildId: string, limit = 50): Promise<WebsiteSubmissionItem[]> {
+    return firstValueFrom(
+      this.http.get<WebsiteSubmissionItem[]>(`${this.baseUrl}/api/guilds/${guildId}/website-submissions`, {
+        headers: this.headers(),
+        params: { limit: String(limit) },
+      }),
+    );
+  }
+
+  getBotCommands(): Promise<BotCommandDoc[]> {
+    return firstValueFrom(this.http.get<BotCommandDoc[]>(`${this.baseUrl}/api/public/bot-commands`));
   }
 
   getPublicRoster(): Promise<RosterPlayer[]> {

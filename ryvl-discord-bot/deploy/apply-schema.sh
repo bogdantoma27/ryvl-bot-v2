@@ -11,6 +11,7 @@ FILES=(
   superliga-mvp.sql
   schema-catchup.sql
   ea-fixes.sql
+  platform-security-fixes.sql
 )
 for f in "${FILES[@]}"; do
   echo "Applying prisma/deploy/$f"

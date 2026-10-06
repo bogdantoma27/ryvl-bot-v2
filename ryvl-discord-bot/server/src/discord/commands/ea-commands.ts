@@ -238,7 +238,7 @@ export class EaCommands {
       return;
     }
 
-    const config = await this.eaService.getOrCreateTrackerConfig(guildId);
+    const config = await this.eaService.findTrackerConfigOrDefault(guildId);
     const customClubName = interaction.options.getString('club_name')?.trim();
 
     let targetClubId = config.clubId;

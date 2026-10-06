@@ -22,7 +22,10 @@ import {
   LineupDraftPayload,
 } from './lineup.service';
 
+// Admin dashboard API: rendering is CPU-heavy and posting speaks for the server, so
+// every route needs a signed-in admin of :guildId.
 @Controller('api/guilds/:guildId/lineup')
+@UseGuards(AuthGuard, GuildAdminGuard)
 export class LineupController {
   constructor(private readonly lineupService: LineupService) {}
 
@@ -55,7 +58,6 @@ export class LineupController {
   }
 
   @Post('post')
-  @UseGuards(AuthGuard, GuildAdminGuard)
   async postLineup(
     @Param('guildId') guildId: string,
     @Body() dto: LineupPostDto,
@@ -64,13 +66,11 @@ export class LineupController {
   }
 
   @Get('drafts')
-  @UseGuards(AuthGuard, GuildAdminGuard)
   async listDrafts(@Param('guildId') guildId: string) {
     return this.lineupService.listDrafts(guildId);
   }
 
   @Get('drafts/:draftId')
-  @UseGuards(AuthGuard, GuildAdminGuard)
   async getDraft(
     @Param('guildId') guildId: string,
     @Param('draftId') draftId: string,
@@ -79,7 +79,6 @@ export class LineupController {
   }
 
   @Post('drafts')
-  @UseGuards(AuthGuard, GuildAdminGuard)
   async createDraft(
     @Param('guildId') guildId: string,
     @CurrentUser() user: JwtPayload,
@@ -89,7 +88,6 @@ export class LineupController {
   }
 
   @Patch('drafts/:draftId')
-  @UseGuards(AuthGuard, GuildAdminGuard)
   async updateDraft(
     @Param('guildId') guildId: string,
     @Param('draftId') draftId: string,
@@ -99,7 +97,6 @@ export class LineupController {
   }
 
   @Delete('drafts/:draftId')
-  @UseGuards(AuthGuard, GuildAdminGuard)
   async deleteDraft(
     @Param('guildId') guildId: string,
     @Param('draftId') draftId: string,

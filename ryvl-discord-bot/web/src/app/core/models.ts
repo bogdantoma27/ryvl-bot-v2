@@ -288,6 +288,26 @@ export interface ContactSubmission {
   guildId?: string;
 }
 
+/** A stored website form submission, as listed under Settings > Website forms. */
+export interface WebsiteSubmissionItem {
+  id: string;
+  kind: 'contact' | 'recruitment' | string;
+  payload: Record<string, string | number | null>;
+  createdAt: string;
+  delivered: boolean;
+  deliveredMessageId: string | null;
+}
+
+/** One slash command or subcommand as registered with Discord (GET /api/public/bot-commands). */
+export interface BotCommandDoc {
+  name: string;
+  command: string;
+  subcommand: string | null;
+  description: string;
+  adminOnly: boolean;
+  options: Array<{ name: string; description: string; type: string; required: boolean; choices?: string[] }>;
+}
+
 export interface RecruitmentSubmission {
   gamertag: string;
   discordTag: string;

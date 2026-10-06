@@ -373,6 +373,30 @@ export class VpgService {
     return config;
   }
 
+  // Unsaved defaults: GET endpoints must never create rows.
+  defaultTransferConfig(guildId: string) {
+    const now = new Date();
+    return {
+      id: '',
+      guildId,
+      communitySlug: '',
+      leagueSlug: '',
+      leagueName: '',
+      channelId: null as string | null,
+      enabled: false,
+      pollIntervalSec: 120,
+      lastPolledAt: null as Date | null,
+      lastTransferId: null as number | null,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  async findConfigOrDefault(guildId: string) {
+    const config = await this.prisma.vpgTransferConfig.findUnique({ where: { guildId } });
+    return config ?? this.defaultTransferConfig(guildId);
+  }
+
   async getDefaultConfig() {
     const firstConfig = await this.prisma.vpgTransferConfig.findFirst({
       orderBy: { createdAt: 'asc' },
@@ -380,24 +404,12 @@ export class VpgService {
 
     if (firstConfig) return firstConfig;
 
-    const firstGuild = await this.prisma.guild.findFirst();
-    if (firstGuild) {
-      return this.getOrCreateConfig(firstGuild.id);
-    }
-
     return {
+      ...this.defaultTransferConfig('default'),
       id: 'default',
-      guildId: 'default',
       communitySlug: this.COMMUNITY_SLUG,
       leagueSlug: 'Superliga-Romania',
       leagueName: 'Superliga România',
-      channelId: null,
-      enabled: true,
-      pollIntervalSec: 120,
-      lastPolledAt: null,
-      lastTransferId: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
     };
   }
 

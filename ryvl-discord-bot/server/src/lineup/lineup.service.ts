@@ -114,6 +114,7 @@ export class LineupService {
     if (!dto.channel_id) {
       throw new BadRequestException('channel_id is required');
     }
+    await this.discordService.assertChannelInGuild(guildId, dto.channel_id);
 
     const pngBuffer = await this.renderPng(dto);
 

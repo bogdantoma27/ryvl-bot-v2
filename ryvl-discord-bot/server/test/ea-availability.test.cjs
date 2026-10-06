@@ -9,7 +9,7 @@ function controller(fetchMatchesRaw) {
   const config = { clubId: '654321', guildId: 'fixture', platform: 'common-gen5', matchTypes: ['leagueMatch', 'friendlyMatch'] };
   // Real EaService (shared fetch-and-merge), only EA I/O and config lookup substituted.
   const ea = new EaService({});
-  Object.assign(ea, { getOrCreateTrackerConfig: async () => config, getDefaultTrackerConfig: async () => config, fetchMatchesRaw, parseMatch: match => match });
+  Object.assign(ea, { getOrCreateTrackerConfig: async () => config, findTrackerConfigOrDefault: async () => config, getDefaultTrackerConfig: async () => config, fetchMatchesRaw, parseMatch: match => match });
   return new EaController(ea, {});
 }
 test('total EA match outage returns 503 instead of an empty successful feed', async () => {

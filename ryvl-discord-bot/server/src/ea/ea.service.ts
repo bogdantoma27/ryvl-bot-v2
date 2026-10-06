@@ -486,25 +486,44 @@ export class EaService {
     };
   }
 
+  // Unsaved defaults for a guild without a tracker row. New trackers start disabled with
+  // no channel, so nothing posts anywhere until an admin configures it.
+  defaultTrackerConfig(guildId: string) {
+    const now = new Date();
+    return {
+      id: '',
+      guildId,
+      clubId: '128199',
+      clubName: 'RYVL Esports',
+      platform: 'common-gen5',
+      channelId: null as string | null,
+      enabled: false,
+      matchTypes: ['leagueMatch', 'friendlyMatch', 'playoffMatch'],
+      pollIntervalSec: 90,
+      lastPolledAt: null as Date | null,
+      lastMatchId: null as string | null,
+      elo: DEFAULT_ELO,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  /** Read-only lookup for public and admin GETs: never creates a row. */
+  async findTrackerConfigOrDefault(guildId: string) {
+    const existing = await this.prisma.clubTrackerConfig.findUnique({
+      where: { guildId },
+    });
+    return existing ?? this.defaultTrackerConfig(guildId);
+  }
+
   async getOrCreateTrackerConfig(guildId: string) {
     const existing = await this.prisma.clubTrackerConfig.findUnique({
       where: { guildId },
     });
     if (existing) return existing;
 
-    const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
-    return this.prisma.clubTrackerConfig.create({
-      data: {
-        guildId,
-        clubId: '128199',
-        clubName: 'RYVL Esports',
-        platform: 'common-gen5',
-        channelId: guild?.defaultChannelId || null,
-        enabled: true,
-        matchTypes: ['leagueMatch', 'friendlyMatch', 'playoffMatch'],
-        pollIntervalSec: 90,
-      },
-    });
+    const { id: _id, createdAt: _c, updatedAt: _u, ...data } = this.defaultTrackerConfig(guildId);
+    return this.prisma.clubTrackerConfig.create({ data });
   }
 
   async updateTrackerConfig(
@@ -551,7 +570,7 @@ export class EaService {
         clubName: data.clubName ? String(data.clubName) : 'RYVL Esports',
         platform: nextPlatform,
         channelId: normalizeChannelId(data.channelId),
-        enabled: data.enabled !== undefined ? Boolean(data.enabled) : true,
+        enabled: data.enabled !== undefined ? Boolean(data.enabled) : false,
         matchTypes: matchTypes && matchTypes.length ? matchTypes : DEFAULT_EA_MATCH_TYPES,
         pollIntervalSec: pollIntervalSec ?? 90,
         lastMatchId: null,
@@ -1039,8 +1058,9 @@ export class EaService {
         }));
     }
 
-    const targetClubId = trackedClub?.clubId ?? '128199';
-    const targetClubName = trackedClub?.clubName ?? 'RYVL Esports';
+    const defaultCfg = await this.findTrackerConfigOrDefault(guildId);
+    const targetClubId = trackedClub?.clubId ?? defaultCfg.clubId;
+    const targetClubName = trackedClub?.clubName ?? defaultCfg.clubName;
     const elo = await this.getClubElo(guildId, targetClubId);
 
     // Rows store the tracked club in home* and its opponent in away*.

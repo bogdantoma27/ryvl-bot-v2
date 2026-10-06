@@ -27,6 +27,7 @@ import {
   formatDualKickoff,
 } from '../../lineup/lineup-renderer.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertChannelInGuild } from '../channel-guard';
 
 export const LINEUP_MODAL_SETUP_PREFIX = 'lineup:modal:setup:';
 export const LINEUP_MODAL_CUSTOM_PREFIX = 'lineup:modal:custom:';
@@ -545,8 +546,10 @@ export class LineupPostCommand {
         kickoffAt: session.kickoffAt,
       });
 
-      const channel = (await interaction.client.channels.fetch(session.channelId)) as TextChannel;
-      if (!channel || !('send' in channel)) {
+      const channel = (await assertChannelInGuild(interaction.client, session.guildId, session.channelId).catch(
+        () => null,
+      )) as TextChannel | null;
+      if (!channel) {
         await interaction.editReply({
           content: `❌ Could not find text channel <#${session.channelId}> or bot lacks send permissions.`,
           components: [],

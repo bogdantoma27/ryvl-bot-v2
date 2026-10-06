@@ -77,7 +77,8 @@ export class TotwCommands {
       }
 
       try {
-        await this.totwService.updateConfig(guildId, leagueSlug, { channelId: channel.id });
+        // Setting a channel is the admin's intent to publish there: enable the weekly post.
+        await this.totwService.updateConfig(guildId, leagueSlug, { channelId: channel.id, enabled: true });
         await interaction.editReply(`✅ Configured **<#${channel.id}>** as the announcement channel for **${leagueSlug}** Team of the Week!`);
       } catch (err: any) {
         await interaction.editReply(`❌ Failed to update TOTW config: ${err?.message || err}`);

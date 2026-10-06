@@ -35,6 +35,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
   const lineupPostCommand = new SlashCommandBuilder()
     .setName('lineup_post')
     .setDescription('Open step-by-step lineup wizard and post to a channel')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addChannelOption((option) =>
       option
         .setName('channel')
@@ -70,6 +71,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
   const eaSetupCommand = new SlashCommandBuilder()
     .setName('ea_setup')
     .setDescription('Configure automatic EA Pro Clubs match notifications')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addChannelOption((option) =>
       option
         .setName('channel')
@@ -95,7 +97,8 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
 
   const eaLatestCommand = new SlashCommandBuilder()
     .setName('ea_latest')
-    .setDescription('Post the most recent EA Pro Clubs match results immediately');
+    .setDescription('Post the most recent EA Pro Clubs match results immediately')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
   const statsCommand = new SlashCommandBuilder()
     .setName('stats')
@@ -122,6 +125,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
   const trackTeamCommand = new SlashCommandBuilder()
     .setName('track_team')
     .setDescription('Track an EA Pro Clubs team for auto match results and ELO ratings (Admin only)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption((opt) =>
       opt
         .setName('name')
@@ -179,6 +183,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
   const totwCommand = new SlashCommandBuilder()
     .setName('totw')
     .setDescription('Team of the Week & Team of the Season generator')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand((sub) =>
       sub
         .setName('post')

@@ -19,12 +19,12 @@ export class TotwController {
   constructor(private readonly totwService: TotwService) {}
 
   @Get('config')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async getConfig(
     @Param('guildId') guildId: string,
     @Query('leagueSlug') leagueSlug = 'Superliga-Romania',
   ) {
-    return this.totwService.getOrCreateConfig(guildId, leagueSlug);
+    return this.totwService.getConfig(guildId, leagueSlug);
   }
 
   @Patch('config')
@@ -44,7 +44,7 @@ export class TotwController {
   }
 
   @Get('preview')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async getPreview(
     @Param('guildId') guildId: string,
     @Query('leagueSlug') leagueSlug = 'Superliga-Romania',
@@ -81,6 +81,8 @@ export class TotwController {
     };
   }
 
+  // Public on purpose: the dashboard loads it through <img src>, which cannot send a
+  // bearer token, and it only renders public VPG data without touching the database.
   @Get('image')
   async getImage(
     @Param('guildId') guildId: string,

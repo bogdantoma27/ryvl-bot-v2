@@ -184,6 +184,7 @@ import { ApiService } from '../../core/api.service';
                   rows="3"
                   [(ngModel)]="form.experience"
                   name="experience"
+                  maxlength="1000"
                   placeholder="Share details on leagues played (VPG, other tournaments), former clubs, and achievements..."
                   class="w-full bg-[#141419] border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-[#EAE905] transition"
                 ></textarea>
@@ -247,7 +248,8 @@ export class RecruitmentComponent {
       this.submitted.set(true);
     } catch (err: any) {
       console.error('Failed to submit recruitment application:', err);
-      this.error.set(err.message || 'Failed to submit application. Please join our Discord server directly.');
+      // 400 (validation) and 429 (rate limit) carry a readable message in the body.
+      this.error.set(err?.error?.message || 'Failed to submit application. Please join our Discord server directly.');
     } finally {
       this.isSubmitting.set(false);
     }

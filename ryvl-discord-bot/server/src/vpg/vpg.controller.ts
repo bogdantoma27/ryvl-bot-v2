@@ -11,6 +11,8 @@ import {
   Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import { GuildAdminGuard } from '../auth/guild-admin.guard';
+import { DiscordService } from '../discord/discord.service';
 import { VpgService } from './vpg.service';
 import { VpgPollerService } from './vpg-poller.service';
 import { VpgSuperligaPollerService } from './vpg-superliga-poller.service';
@@ -26,6 +28,7 @@ export class VpgController {
     private readonly vpgPollerService: VpgPollerService,
     private readonly vpgSuperligaPollerService: VpgSuperligaPollerService,
     private readonly ryvlCommands: RyvlCommands,
+    private readonly discordService: DiscordService,
   ) {}
 
   // ----------------------------------------------------
@@ -74,12 +77,11 @@ export class VpgController {
     };
   }
 
+  // Admin reads: the dashboard's transfer settings and the processed-transfer history.
   @Get('api/guilds/:guildId/vpg/config')
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async getConfig(@Param('guildId') guildId: string) {
-    const config =
-      guildId === 'default'
-        ? await this.vpgService.getDefaultConfig()
-        : await this.vpgService.getOrCreateConfig(guildId);
+    const config = await this.vpgService.findConfigOrDefault(guildId);
 
     return {
       config,
@@ -92,20 +94,15 @@ export class VpgController {
   }
 
   @Get('api/guilds/:guildId/vpg/transfers')
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async getGuildTransfers(
     @Param('guildId') guildId: string,
     @Query('limit') limit = '20',
   ) {
-    const config =
-      guildId === 'default'
-        ? await this.vpgService.getDefaultConfig()
-        : await this.vpgService.getOrCreateConfig(guildId);
+    const config = await this.vpgService.findConfigOrDefault(guildId);
     const parsedLimit = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 50);
     const transfers = await this.vpgService.fetchTransfers(parsedLimit, 0, config.communitySlug);
-    const processed =
-      guildId !== 'default'
-        ? await this.vpgService.getRecentProcessedTransfers(guildId, 25)
-        : [];
+    const processed = await this.vpgService.getRecentProcessedTransfers(guildId, 25);
 
     return {
       transfers,
@@ -193,15 +190,16 @@ export class VpgController {
   }
 
   // ----------------------------------------------------
-  // Protected Admin Endpoints (Require AuthGuard)
+  // Protected Admin Endpoints (signed in + admin of :guildId)
   // ----------------------------------------------------
 
   @Patch('api/guilds/:guildId/vpg/config')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async updateConfig(
     @Param('guildId') guildId: string,
     @Body() dto: UpdateVpgConfigDto,
   ) {
+    if (dto.channelId) await this.discordService.assertChannelInGuild(guildId, dto.channelId);
     const updated = await this.vpgService.updateConfig(guildId, dto);
     this.logger.log(`Updated VPG transfer config for guild ${guildId}`);
     return {
@@ -211,7 +209,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/poll-now')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async triggerPollNow(@Param('guildId') guildId: string) {
     const result = await this.vpgPollerService.checkGuildNow(guildId);
     return {
@@ -221,7 +219,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/post-latest')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postLatestNow(@Param('guildId') guildId: string) {
     const result = await this.vpgPollerService.postLatestToDiscord(guildId);
     return {
@@ -231,7 +229,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/superliga/poll-now')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async triggerSuperligaPollNow(@Param('guildId') guildId: string) {
     const result = await this.vpgSuperligaPollerService.checkGuildNow(guildId);
     return {
@@ -241,7 +239,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/superliga/post-standings')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postSuperligaStandings(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string; season?: number },
@@ -255,7 +253,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/superliga/post-fixtures')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postSuperligaFixtures(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string; season?: number },
@@ -269,7 +267,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/superliga/post-results')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postSuperligaResults(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string; season?: number },
@@ -295,13 +293,14 @@ export class VpgController {
   }
 
   @Get('api/guilds/:guildId/vpg/competitions')
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async getGuildCompetitions(@Param('guildId') guildId: string) {
     const competitions = await this.vpgService.getCompetitions(guildId);
     return { competitions };
   }
 
   @Patch('api/guilds/:guildId/vpg/competitions/:id')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async updateGuildCompetition(
     @Param('guildId') guildId: string,
     @Param('id') compId: string,
@@ -312,7 +311,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/performance/post-results')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postRyvlResults(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string },
@@ -321,7 +320,7 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/performance/post-fixtures')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postRyvlFixtures(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string },
@@ -330,48 +329,11 @@ export class VpgController {
   }
 
   @Post('api/guilds/:guildId/vpg/performance/post-leaderboard')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async postRyvlLeaderboard(
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string },
   ) {
     return this.ryvlCommands.postRyvlLeaderboardToChannel(guildId, body.channelId);
-  }
-
-  // ----------------------------------------------------
-  // Public Form Submissions (Dispatches to Discord)
-  // ----------------------------------------------------
-
-  @Post('api/public/contact')
-  async submitContactForm(@Body() body: { name: string; contact: string; topic: string; message: string; guildId?: string }) {
-    if (!body.name || !body.contact || !body.message) {
-      return { success: false, error: 'Please provide name, contact information, and message.' };
-    }
-    const result = await this.ryvlCommands.dispatchContactNotification(body);
-    return {
-      success: result.success,
-      message: result.success ? 'Message delivered to RYVL management.' : (result.message || 'Failed to deliver notification.'),
-    };
-  }
-
-  @Post('api/public/recruitment')
-  async submitRecruitmentForm(@Body() body: {
-    gamertag: string;
-    discordTag: string;
-    primaryPosition: string;
-    secondaryPosition?: string;
-    platform: string;
-    age: number;
-    experience?: string;
-    guildId?: string;
-  }) {
-    if (!body.gamertag || !body.discordTag || !body.primaryPosition) {
-      return { success: false, error: 'Gamertag, Discord tag, and primary position are required.' };
-    }
-    const result = await this.ryvlCommands.dispatchRecruitmentNotification(body);
-    return {
-      success: result.success,
-      message: result.success ? 'Trial application submitted to RYVL recruitment staff.' : (result.message || 'Failed to deliver application.'),
-    };
   }
 }

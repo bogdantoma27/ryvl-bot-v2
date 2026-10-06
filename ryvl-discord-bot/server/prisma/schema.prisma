@@ -40,6 +40,7 @@ model Guild {
   tournamentConfig      TournamentConfig?
   tournamentInstances   TournamentInstance[]
   trackedClubs          TrackedClub[]
+  websiteSubmissions    WebsiteSubmission[]
 
   @@map("guilds")
 }
@@ -164,7 +165,7 @@ model ClubTrackerConfig {
   clubName        String    @default("RYVL Esports") @map("club_name")
   platform        String    @default("common-gen5")
   channelId       String?   @map("channel_id")
-  enabled         Boolean   @default(true)
+  enabled         Boolean   @default(false)
   matchTypes      String[]  @default(["leagueMatch", "friendlyMatch", "playoffMatch"]) @map("match_types")
   pollIntervalSec Int       @default(90) @map("poll_interval_sec")
   lastPolledAt    DateTime? @map("last_polled_at")
@@ -406,7 +407,7 @@ model TotwConfig {
   leagueSlug     String    @default("Superliga-Romania") @map("league_slug")
   formation      String    @default("3-5-2")
   cronSchedule   String?   @default("0 18 * * 1") @map("cron_schedule")
-  enabled        Boolean   @default(true)
+  enabled        Boolean   @default(false)
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
@@ -564,4 +565,19 @@ model SuperligaMvpTotwSelection {
   @@unique([leagueSlug, season, week, vpgUsername])
   @@index([leagueSlug, season])
   @@map("superliga_mvp_totw_selections")
+}
+
+// Public website contact / trial forms. Stored before the Discord post so a submission
+// is never lost when the channel is missing or Discord is down.
+model WebsiteSubmission {
+  id                 String   @id @default(uuid())
+  guildId            String   @map("guild_id")
+  guild              Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  kind               String
+  payload            Json
+  deliveredMessageId String?  @map("delivered_message_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([guildId, createdAt])
+  @@map("website_submissions")
 }
