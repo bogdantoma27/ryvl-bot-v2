@@ -53,7 +53,9 @@ test('an occurrence is posted once even when two workers publish it at the same 
       const occ = event.occurrences[0];
       const outcomes = await Promise.all([f.publisher.publishOccurrence(occ.id), f.publisher.publishOccurrence(occ.id), f.publisher.publishDue()]);
       assert.equal(f.discord.posts.length, 1, 'Exactly one announcement is posted');
-      assert.equal(outcomes.filter(o => o === 'published').length, 1);
+      // Whichever worker wins the claim posts it; publishDue reports a count instead of an outcome.
+      const [workerA, workerB, due] = outcomes;
+      assert.equal([workerA, workerB].filter(o => o === 'published').length + due.published, 1);
       let row = await db.eventOccurrence.findUnique({ where: { id: occ.id } });
       assert.equal(row.status, 'PUBLISHED');
       assert.equal(row.messageId, 'msg-1');
