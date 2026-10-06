@@ -21,6 +21,8 @@ import {
   Message,
   AttachmentBuilder,
   PermissionFlagsBits,
+  MessageFlags,
+  Interaction,
 } from 'discord.js';
 import { ConfigService } from '../config/config.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -44,6 +46,11 @@ import { TournamentCommands } from './commands/tournament-commands';
 import { RsvpButtonHandler } from './interactions/rsvp-button.handler';
 import { assertChannelInGuild, GuildPostableChannel } from './channel-guard';
 import { ensureManageGuild, isAdminSubcommand } from './commands/command-permissions';
+import {
+  SlashCommandHandlers,
+  resolveAutocompleteRoute,
+  resolveSlashRoute,
+} from './commands/command-routes';
 
 
 export interface DiscordChannelInfo {
@@ -193,66 +200,27 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
           if (isAdminSubcommand(interaction.commandName, sub) && !(await ensureManageGuild(interaction))) {
             return;
           }
-          if (interaction.commandName === 'event') {
-            const subcommand = interaction.options.getSubcommand();
-            if (subcommand === 'create') {
-              await this.eventCreateCommand.showModal(interaction);
-            } else if (subcommand === 'list') {
-              await this.eventListCommand.execute(interaction);
-            } else if (subcommand === 'delete') {
-              await this.eventDeleteCommand.execute(interaction);
-            }
-          } else if (interaction.commandName === 'lineup_post') {
-            await this.lineupPostCommand.execute(interaction);
-          } else if (interaction.commandName === 'ea_setup') {
-            await this.eaCommands.handleSetup(interaction);
-          } else if (interaction.commandName === 'ea_stats') {
-            await this.eaCommands.handleStats(interaction);
-          } else if (interaction.commandName === 'ea_latest') {
-            await this.eaCommands.handleLatest(interaction);
-          } else if (interaction.commandName === 'stats') {
-            await this.eaCommands.handlePlayerStats(interaction);
-          } else if (interaction.commandName === 'register-player') {
-            await this.eaCommands.handleRegisterPlayer(interaction);
-          } else if (interaction.commandName === 'unregister-player') {
-            await this.eaCommands.handleUnregisterPlayer(interaction);
-          } else if (interaction.commandName === 'vpg_transfers') {
-            const subcommand = interaction.options.getSubcommand();
-            if (subcommand === 'setup') {
-              await this.vpgCommands.handleSetup(interaction);
-            } else if (subcommand === 'latest') {
-              await this.vpgCommands.handleLatest(interaction);
-            } else if (subcommand === 'check') {
-              await this.vpgCommands.handleCheck(interaction);
-            }
-          } else if (interaction.commandName === 'superliga') {
-            await this.superligaCommands.handleSuperliga(interaction);
-          } else if (interaction.commandName === 'superliga_mvp') {
-            await this.superligaMvpCommands.handle(interaction);
-          } else if (interaction.commandName === 'live_results') {
-            await this.superligaCommands.handleLiveResults(interaction);
-          } else if (interaction.commandName === 'ryvl') {
-            await this.ryvlCommands.handleRyvl(interaction);
-          } else if (interaction.commandName === 'totw') {
-            await this.totwCommands.handleTotw(interaction);
-          } else if (interaction.commandName === 'tournament') {
-            await this.tournamentCommands.handleTournament(interaction);
-          } else if (interaction.commandName === 'create_tournament') {
-            await this.tournamentCommands.handleCreateTournament(interaction);
-          } else if (interaction.commandName === 'track_team') {
-            await this.eaCommands.handleTrackTeam(interaction);
-          } else if (interaction.commandName === 'team_stats') {
-            await this.eaCommands.handleTeamStats(interaction);
+          const run = resolveSlashRoute(interaction.commandName, sub);
+          if (!run) {
+            // A command Discord still lists after it was removed or renamed.
+            await interaction.reply({
+              content: '⚠️ This command is no longer available. Type / to see the current commands.',
+              flags: MessageFlags.Ephemeral,
+            });
+            return;
           }
+          await run(this.commandHandlers(), interaction);
         } else if (interaction.isAutocomplete()) {
-
-          if (interaction.commandName === 'event') {
-            const subcommand = interaction.options.getSubcommand();
-            if (subcommand === 'delete') {
-              await this.eventDeleteCommand.handleAutocomplete(interaction);
-            }
-          } else if (interaction.commandName === 'lineup_post') {
-            await this.lineupPostCommand.handleAutocomplete(interaction);
+          const focused = interaction.options.getFocused(true);
+          const complete = resolveAutocompleteRoute(
+            interaction.commandName,
+            interaction.options.getSubcommand(false),
+            focused.name,
+          );
+          if (complete) {
+            await complete(this.commandHandlers(), interaction);
+          } else {
+            await interaction.respond([]);
           }
         } else if (interaction.isModalSubmit()) {
           if (interaction.customId === EVENT_CREATE_MODAL_ID) {
@@ -297,8 +265,47 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
         }
       } catch (error) {
         this.logger.error(`Error handling interaction: ${error}`);
+        await this.reportInteractionError(interaction).catch(() => undefined);
       }
     });
+  }
+
+  private commandHandlers(): SlashCommandHandlers {
+    return {
+      eventCreate: this.eventCreateCommand,
+      eventList: this.eventListCommand,
+      eventDelete: this.eventDeleteCommand,
+      lineupPost: this.lineupPostCommand,
+      ea: this.eaCommands,
+      vpg: this.vpgCommands,
+      superliga: this.superligaCommands,
+      superligaMvp: this.superligaMvpCommands,
+      ryvl: this.ryvlCommands,
+      totw: this.totwCommands,
+      tournament: this.tournamentCommands,
+    };
+  }
+
+  /**
+   * Last resort when a handler throws: without an answer Discord shows "The application
+   * did not respond" or leaves "is thinking..." forever. A deferred slash command gets
+   * its reply replaced; components get a private follow-up so a public message (an event
+   * announcement, a lineup) is never overwritten with the error.
+   */
+  private async reportInteractionError(interaction: Interaction): Promise<void> {
+    const content = '❌ Something went wrong while handling this. Please try again in a moment.';
+    if (interaction.isAutocomplete()) {
+      if (!interaction.responded) await interaction.respond([]);
+      return;
+    }
+    if (!interaction.isRepliable()) return;
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+    } else if (interaction.isChatInputCommand()) {
+      await interaction.editReply({ content, embeds: [], components: [] });
+    } else {
+      await interaction.followUp({ content, flags: MessageFlags.Ephemeral });
+    }
   }
 
   private async clearGlobalSlashCommands(): Promise<void> {

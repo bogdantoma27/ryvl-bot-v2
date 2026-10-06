@@ -114,8 +114,14 @@ export class EaCommands {
 
     try {
       const stats = await this.eaService.getClubStats(guildId, clubName);
-      if (!stats) {
-        await interaction.editReply('⚠️ That club is not tracked in this server.');
+      // getClubStats falls back to the default club when the name matches nothing;
+      // answering with another club's stats would be misleading here.
+      const matchesQuery =
+        !clubName ||
+        stats?.clubId === clubName ||
+        !!stats?.clubName.toLowerCase().includes(clubName.toLowerCase());
+      if (!stats || !matchesQuery) {
+        await interaction.editReply(`⚠️ ${clubName ? `**${clubName}** is` : 'No club is'} not tracked in this server. Admins can add one with \`/track_team\`.`);
         return;
       }
 
@@ -198,7 +204,10 @@ export class EaCommands {
           return;
         }
       } catch (err: any) {
+        // Saving the default club instead would silently track the wrong team.
         this.logger.error(`Error searching clubs for setup: ${err.message}`);
+        await interaction.editReply(`❌ Could not search EA for **"${customClubName}"**: ${err.message}. Setup cancelled; try again later.`);
+        return;
       }
     }
 
@@ -328,7 +337,8 @@ export class EaCommands {
   }
 
   async handleLatest(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply();
+    // The match itself is posted to the channel; the confirmation is only for the admin.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const guildId = interaction.guildId;
     if (!guildId) {
@@ -462,7 +472,7 @@ export class EaCommands {
       await interaction.editReply(
         `✅ Successfully linked your Discord account to EA Pro Clubs gamertag **${gamertag}**` +
         (position ? ` (Preferred: **${position}**)` : '') +
-        `!\n\nYour match statistics are tracked continuously. You and other members can now check your stats anytime with \`/stats me\` or \`/stats user:@${interaction.user.username}\`.`,
+        `!\n\nYour match statistics are tracked continuously. You and other members can now check your stats anytime with \`/stats\` or \`/stats user:@${interaction.user.username}\`.`,
       );
     } catch (err: any) {
       this.logger.error(`Error registering player: ${err?.message || err}`);
