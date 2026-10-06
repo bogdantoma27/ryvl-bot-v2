@@ -7,4 +7,4 @@ pgdata/
 .env.*
 !.env.example
 node_modules/
-dist/
+dist/.angular/
