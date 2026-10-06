@@ -168,7 +168,8 @@ test('standard tournament: 9 teams → 8-team bracket, fixtures by name either w
   assert.equal(t.status, 'ACTIVE');
   assert.equal(service.teams(t).length, 8);
   assert.equal(service.teams(t)[0].managerId, 'u1', 'captain manages the team');
-  assert.equal(service.matches(t).length, 28);
+  assert.equal(service.matches(t).length, 12, '2 groups of 4, 6 matches each');
+  assert.deepEqual(service.toDto(t).groups.map((g) => g.rows.length), [4, 4]);
   assert.equal(service.signups(t)[8].isBackup, true);
   await assert.rejects(service.toggleSignups(t.id, 'g1'), /început/);
 
@@ -184,9 +185,64 @@ test('standard tournament: 9 teams → 8-team bracket, fixtures by name either w
     service.recordMatchResult(t.id, { homeTeam: 'Team 1', awayTeam: 'Nobody', homeScore: 1, awayScore: 0 }, 'g1'),
     /Nu există/,
   );
-  const standings = service.calculateStandings(r.tournament);
-  assert.equal(standings[0].team, first.awayTeam);
-  assert.equal(standings[0].points, 3);
+  const group = service.toDto(r.tournament).groups.find((g) => g.group === first.group);
+  assert.equal(group.rows[0].team, first.awayTeam);
+  assert.equal(group.rows[0].points, 3);
+});
+
+test('group stage + knockouts: 16 teams play groups, quarters, semis and a final decided on penalties', async () => {
+  const { service, discord } = setup();
+  let t = await service.createTournament('g1', { name: 'Cupa' });
+  await service.setupTournamentChannels('g1', t.id);
+  for (let i = 1; i <= 16; i++) await service.addSignup(t.id, player(i, undefined, { teamName: `Team ${i}` }), { guildId: 'g1' });
+  t = (await service.startTournament(t.id, 'g1')).tournament;
+  assert.equal(service.toDto(t).format, 'GROUPS_KNOCKOUT');
+  assert.equal(service.toDto(t).groups.length, 4);
+
+  // Home side wins every group match, so each group table is decided.
+  const groupMatches = service.matches(t);
+  for (const [i, m] of groupMatches.entries()) {
+    const res = await service.recordMatchResult(t.id, { matchId: m.id, homeScore: 2, awayScore: i % 2 }, 'g1');
+    t = res.tournament;
+    if (i < groupMatches.length - 1) assert.equal(res.newStage.length, 0);
+    else assert.equal(res.newStage.length, 4, 'quarter-finals drawn after the last group match');
+  }
+  const tables = service.toDto(t).groups;
+  const quarters = service.matches(t).filter((m) => m.stage === 'KNOCKOUT');
+  assert.deepEqual(
+    quarters.map((m) => [m.homeTeam, m.awayTeam]),
+    [
+      [tables[0].rows[0].team, tables[1].rows[1].team],
+      [tables[2].rows[0].team, tables[3].rows[1].team],
+      [tables[1].rows[0].team, tables[0].rows[1].team],
+      [tables[3].rows[0].team, tables[2].rows[1].team],
+    ],
+  );
+  await assert.rejects(
+    service.recordMatchResult(t.id, { matchId: groupMatches[0].id, homeScore: 0, awayScore: 5 }, 'g1'),
+    /grupe nu mai pot/,
+    'group scores are frozen once the knockouts are drawn',
+  );
+  await assert.rejects(
+    service.recordMatchResult(t.id, { matchId: quarters[0].id, homeScore: 1, awayScore: 1 }, 'g1'),
+    /penalty/,
+    'knockout draws need penalties',
+  );
+
+  for (const m of quarters) t = (await service.recordMatchResult(t.id, { matchId: m.id, homeScore: 1, awayScore: 0 }, 'g1')).tournament;
+  const semis = service.matches(t).filter((m) => m.stage === 'KNOCKOUT' && m.round === 2);
+  assert.deepEqual(semis.map((m) => [m.homeTeam, m.awayTeam]), [
+    [quarters[0].homeTeam, quarters[1].homeTeam],
+    [quarters[2].homeTeam, quarters[3].homeTeam],
+  ]);
+  for (const m of semis) t = (await service.recordMatchResult(t.id, { matchId: m.id, homeScore: 0, awayScore: 2 }, 'g1')).tournament;
+  const final = service.matches(t).find((m) => m.stage === 'KNOCKOUT' && m.round === 3);
+  assert.equal(final.homeTeam, semis[0].awayTeam);
+  const res = await service.recordMatchResult(t.id, { matchId: final.id, homeScore: 2, awayScore: 2, homePens: 3, awayPens: 5 }, 'g1');
+  assert.equal(res.completed, true);
+  assert.equal(res.tournament.status, 'COMPLETED');
+  assert.equal(service.toDto(res.tournament).champion, final.awayTeam);
+  assert.ok(discord.sent.some((m) => JSON.stringify(m.payload).includes(`Campioni: ${final.awayTeam}`)));
 });
 
 test('panels are edited in place instead of reposted', async () => {

@@ -5,6 +5,7 @@ import {
   Delete,
   Param,
   Body,
+  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
@@ -105,10 +106,24 @@ export class TournamentController {
   async recordResult(
     @Param('guildId') guildId: string,
     @Param('tournamentId') tournamentId: string,
-    @Body() body: { matchId?: string; homeTeam?: string; awayTeam?: string; homeScore: number; awayScore: number },
+    @Body()
+    body: {
+      matchId?: string;
+      homeTeam?: string;
+      awayTeam?: string;
+      homeScore: number;
+      awayScore: number;
+      homePens?: number | null;
+      awayPens?: number | null;
+    },
   ) {
     const res = await this.tournamentService.recordMatchResult(tournamentId, body, guildId);
-    return { tournament: this.tournamentService.toDto(res.tournament), match: res.match, completed: res.completed };
+    return {
+      tournament: this.tournamentService.toDto(res.tournament),
+      match: res.match,
+      completed: res.completed,
+      newStage: res.newStage,
+    };
   }
 
   // Unauthenticated so it can be used as an <img> source; still limited to the server's own tournament.
@@ -116,10 +131,15 @@ export class TournamentController {
   async getStandingsImage(
     @Param('guildId') guildId: string,
     @Param('tournamentId') tournamentId: string,
+    @Query('group') group: string | undefined,
     @Res() res: Response,
   ) {
     const t = await this.tournamentService.getTournament(tournamentId, guildId);
-    const buffer = await this.renderer.renderStandingsPng(t.name, this.tournamentService.calculateStandings(t));
+    const dto = this.tournamentService.toDto(t);
+    const table = group ? dto.groups.find((g) => g.group === group) : undefined;
+    const buffer = table
+      ? await this.renderer.renderStandingsPng(`${t.name} — Grupa ${table.group}`, table.rows)
+      : await this.renderer.renderStandingsPng(t.name, dto.standings);
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Cache-Control', 'no-store');
     return res.send(buffer);

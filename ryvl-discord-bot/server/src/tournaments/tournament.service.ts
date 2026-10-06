@@ -33,6 +33,13 @@ import {
   draftPool,
   drawCandidate,
   generateRoundRobin,
+  generateGroupStage,
+  groupStandings,
+  isCupFormat,
+  knockoutRoundName,
+  knockoutWinnerSide,
+  nextStageMatches,
+  cupChampion,
   getFormationSlots,
   normalizeDraftFormation,
   openSlots,
@@ -168,6 +175,9 @@ export class TournamentService {
       matches,
       draft: t.type === 'DRAFT' ? this.draft(t) : null,
       standings: calculateStandings(teams, matches),
+      format: t.type !== 'DRAFT' && isCupFormat(matches) ? 'GROUPS_KNOCKOUT' : 'LEAGUE',
+      groups: groupStandings(teams, matches),
+      champion: cupChampion(matches),
       categoryId: t.discordCategoryId,
       channels: {
         info: channels.info ?? null,
@@ -343,7 +353,8 @@ export class TournamentService {
     return {
       tournament: res.tournament,
       message:
-        `Tabloul a fost stabilit cu ${res.bracketSize} echipe și ${this.matches(res.tournament).length} meciuri.` +
+        `Tabloul a fost stabilit cu ${res.bracketSize} echipe în ${res.bracketSize / 4} grupe de câte 4. ` +
+        `Primele 2 din fiecare grupă merg în eliminatorii.` +
         (res.cutCount > 0 ? ` ${res.cutCount} echipe au rămas în afara tabloului și au fost anunțate.` : ''),
     };
   }
@@ -364,8 +375,7 @@ export class TournamentService {
 
     const accepted = signups.slice(0, bracketSize);
     const excess = signups.slice(bracketSize);
-    const teams = buildStandardTeams(accepted);
-    const fixtures = generateRoundRobin(teams);
+    const { teams, matches: fixtures } = generateGroupStage(buildStandardTeams(accepted));
 
     const updated = await this.saveIfUnchanged(tournament, {
       status: 'ACTIVE',
@@ -664,7 +674,16 @@ export class TournamentService {
    */
   async recordMatchResult(
     tournamentId: string,
-    data: { matchId?: string; homeTeam?: string; awayTeam?: string; homeScore: number; awayScore: number; reportedBy?: string },
+    data: {
+      matchId?: string;
+      homeTeam?: string;
+      awayTeam?: string;
+      homeScore: number;
+      awayScore: number;
+      homePens?: number | null;
+      awayPens?: number | null;
+      reportedBy?: string;
+    },
     guildId?: string,
   ) {
     const t = await this.getTournament(tournamentId, guildId);
@@ -720,25 +739,98 @@ export class TournamentService {
       }
     }
 
+    const cup = isCupFormat(matches);
+    if (cup && match.completed) this.assertEditable(match, matches);
+
     match.homeScore = swapped ? awayScore : homeScore;
     match.awayScore = swapped ? homeScore : awayScore;
+    delete match.homePens;
+    delete match.awayPens;
+    if (match.stage === 'KNOCKOUT' && match.homeScore === match.awayScore) {
+      const hp = Number(data.homePens);
+      const ap = Number(data.awayPens);
+      const valid = [hp, ap].every((n) => Number.isInteger(n) && n >= 0 && n <= 99) && hp !== ap;
+      if (data.homePens == null || data.awayPens == null || !valid) {
+        throw new BadRequestException(
+          'Meciurile eliminatorii nu se pot încheia la egalitate. Completează scorul de la penalty-uri (ex: 4-3).',
+        );
+      }
+      match.homePens = swapped ? ap : hp;
+      match.awayPens = swapped ? hp : ap;
+    }
     match.completed = true;
     match.date = new Date().toISOString();
     match.reportedBy = data.reportedBy;
 
-    const allDone = matches.length > 0 && matches.every((m) => m.completed);
+    let newStage: TournamentMatchItem[] = [];
+    let allDone: boolean;
+    if (cup) {
+      newStage = nextStageMatches(teams, matches);
+      matches.push(...newStage);
+      allDone = Boolean(cupChampion(matches));
+    } else {
+      allDone = matches.length > 0 && matches.every((m) => m.completed);
+    }
     const updated = await this.saveIfUnchanged(t, {
       matchesData: matches as any,
       ...(allDone && t.status === 'ACTIVE' ? { status: 'COMPLETED' } : {}),
     });
     await this.refreshPanelsQuietly(updated, ['fixtures', 'standings']);
+    if (newStage.length > 0) await this.announceNextStage(updated, newStage);
     if (allDone && t.status === 'ACTIVE') await this.announceWinner(updated);
-    return { tournament: updated, match, completed: allDone };
+    return { tournament: updated, match, completed: allDone, newStage };
+  }
+
+  /**
+   * In a group + knockout tournament a played score can only be corrected while the next
+   * stage has not been drawn from it, otherwise the bracket would no longer match.
+   */
+  private assertEditable(match: TournamentMatchItem, matches: TournamentMatchItem[]) {
+    const knockout = matches.filter((m) => m.stage === 'KNOCKOUT');
+    if (match.stage === 'GROUP' && knockout.length > 0) {
+      throw new BadRequestException('Eliminatoriile au fost deja trase; scorurile din grupe nu mai pot fi modificate.');
+    }
+    if (match.stage === 'KNOCKOUT' && knockout.some((m) => (m.round ?? 1) > (match.round ?? 1))) {
+      throw new BadRequestException('Runda următoare a fost deja stabilită; acest scor nu mai poate fi modificat.');
+    }
+  }
+
+  private async announceNextStage(t: TournamentInstance, newMatches: TournamentMatchItem[]) {
+    const channels = this.channels(t);
+    const channelId = channels.announcements || channels.fixtures;
+    if (!channelId) return;
+    const title = knockoutRoundName(newMatches.length);
+    await this.discordService
+      .sendMessageToChannel(
+        channelId,
+        new EmbedBuilder()
+          .setTitle(`⚔️ ${t.name} — ${title}`)
+          .setColor(0xe67e22)
+          .setDescription(
+            newMatches.map((m) => `• **${m.homeTeam}** vs **${m.awayTeam}**`).join('\n') +
+              `\n\nMeciurile sunt în ${channels.fixtures ? `<#${channels.fixtures}>` : '#fixtures-results'}.`,
+          ),
+      )
+      .catch(() => undefined);
   }
 
   private async announceWinner(t: TournamentInstance) {
     const channels = this.channels(t);
     const channelId = channels.announcements || channels.fixtures;
+    const matches = this.matches(t);
+    const champion = cupChampion(matches);
+    if (channelId && champion) {
+      await this.discordService
+        .sendMessageToChannel(
+          channelId,
+          new EmbedBuilder()
+            .setTitle(`🏆 ${t.name} — Campioni: ${champion}`)
+            .setColor(0xf1c40f)
+            .setDescription(`**${champion}** a câștigat finala și este campioana turneului!`),
+        )
+        .catch(() => undefined);
+      return;
+    }
     const top = this.calculateStandings(t)[0];
     if (!channelId || !top) return;
     await this.discordService
@@ -845,10 +937,18 @@ export class TournamentService {
       case 'fixtures':
         return this.buildFixturesPanel(t);
       case 'standings': {
-        const buffer = await this.renderer.renderStandingsPng(t.name, this.calculateStandings(t));
+        const groups = groupStandings(this.teams(t), this.matches(t));
+        // Group tournaments get one table per group (Discord allows 10 files per message).
+        const tables = groups.length
+          ? groups.map((g) => ({ title: `${t.name} — Grupa ${g.group}`, rows: g.rows, file: `grupa-${g.group}.png` }))
+          : [{ title: t.name, rows: this.calculateStandings(t), file: 'clasament.png' }];
+        const files: AttachmentBuilder[] = [];
+        for (const table of tables.slice(0, 10)) {
+          files.push(new AttachmentBuilder(await this.renderer.renderStandingsPng(table.title, table.rows), { name: table.file }));
+        }
         return {
-          content: `📊 **Clasament Actualizat — ${t.name}**`,
-          files: [new AttachmentBuilder(buffer, { name: 'clasament.png' })],
+          content: `📊 **Clasament Actualizat — ${t.name}**${groups.length ? ' (primele 2 din fiecare grupă merg în eliminatorii)' : ''}`,
+          files,
           attachments: [],
           embeds: [],
           components: [],
@@ -900,7 +1000,9 @@ export class TournamentService {
         `3. Fiecare echipă are **4 jokeri** pentru a reînvârti roata. Ordinea este snake (1→N, N→1).\n` +
         `4. După draft se generează automat meciurile (fiecare cu fiecare).\n\n` +
         `**Formație**: \`${formation}\` • **Poziții**: ${getFormationSlots(formation).join(', ')}\n\n`
-      : `**Format**: fiecare echipă joacă o dată cu fiecare. Tabloul se stabilește automat la 8, 16 sau 32 de echipe, în ordinea înscrierii.\n\n`;
+      : `**Format**: faza grupelor + eliminatorii. Tabloul se stabilește automat la 8, 16 sau 32 de echipe, în ordinea înscrierii, ` +
+        `iar echipele sunt trase la sorți în grupe de câte 4. Fiecare echipă joacă o dată cu celelalte din grupă; ` +
+        `primele 2 merg în eliminatorii (un singur meci, la egalitate se bat penalty-uri).\n\n`;
 
     return new EmbedBuilder()
       .setTitle(`📜 Informații & Regulament — ${t.name}`)
@@ -1097,29 +1199,34 @@ export class TournamentService {
   private buildFixturesPanel(t: TournamentInstance) {
     const matches = this.matches(t);
     const completedCount = matches.filter((m) => m.completed).length;
-    const byRound = new Map<number, TournamentMatchItem[]>();
-    for (const m of matches) {
-      const r = m.round ?? 0;
-      byRound.set(r, [...(byRound.get(r) || []), m]);
-    }
-    const renderRound = (round: number, list: TournamentMatchItem[]) =>
-      `**${round ? `Etapa ${round}` : 'Meciuri'}**\n` +
-      list
-        .map((m) =>
-          m.completed
-            ? `✅ ${m.homeTeam} **${m.homeScore} - ${m.awayScore}** ${m.awayTeam}`
-            : `⏳ ${m.homeTeam} vs ${m.awayTeam}`,
-        )
-        .join('\n');
 
-    const rounds = [...byRound.entries()].sort((a, b) => a[0] - b[0]);
-    let text = rounds.map(([r, list]) => renderRound(r, list)).join('\n\n');
+    // Sections: each group (group tournaments), each knockout round, or each league matchday.
+    const sections = new Map<string, TournamentMatchItem[]>();
+    const add = (key: string, m: TournamentMatchItem) => sections.set(key, [...(sections.get(key) || []), m]);
+    const knockoutRounds = new Map<number, number>();
+    for (const m of matches) {
+      if (m.stage === 'KNOCKOUT') knockoutRounds.set(m.round ?? 1, (knockoutRounds.get(m.round ?? 1) || 0) + 1);
+    }
+    for (const m of matches) {
+      if (m.stage === 'GROUP') add(`Grupa ${m.group}`, m);
+      else if (m.stage === 'KNOCKOUT') add(knockoutRoundName(knockoutRounds.get(m.round ?? 1) || 1), m);
+      else add(m.round ? `Etapa ${m.round}` : 'Meciuri', m);
+    }
+    const line = (m: TournamentMatchItem) => {
+      if (!m.completed) return `⏳ ${m.homeTeam} vs ${m.awayTeam}`;
+      const pens = m.homePens !== undefined && m.awayPens !== undefined ? ` (${m.homePens}-${m.awayPens} pen.)` : '';
+      return `✅ ${m.homeTeam} **${m.homeScore} - ${m.awayScore}**${pens} ${m.awayTeam}`;
+    };
+    const renderSection = (title: string, list: TournamentMatchItem[]) => `**${title}**\n${list.map(line).join('\n')}`;
+
+    const ordered = [...sections.entries()];
+    let text = ordered.map(([title, list]) => renderSection(title, list)).join('\n\n');
     if (text.length > 3500) {
-      // Too long for one embed: show the rounds still being played first.
-      const open = rounds.filter(([, list]) => list.some((m) => !m.completed));
+      // Too long for one embed: show what is still being played, latest stage first.
+      const open = ordered.filter(([, list]) => list.some((m) => !m.completed)).reverse();
       text = '';
-      for (const [r, list] of open) {
-        const next = renderRound(r, list);
+      for (const [title, list] of open) {
+        const next = renderSection(title, list);
         if (text.length + next.length > 3400) break;
         text += (text ? '\n\n' : '') + next;
       }
