@@ -10,6 +10,8 @@ export type MvpRole = 'GK' | 'OUTFIELD';
 
 export interface MvpStatRow {
   playerName: string;
+  /** EA's id for the player (the key of the match's players map); stable across gamertag changes. */
+  playerProId?: string | null;
   teamName: string;
   pos?: string | null;
   rating: number;
@@ -141,21 +143,62 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 
 interface PlayerAgg {
   playerName: string;
+  /** Every name the player appeared under, for matching Team of the Week picks. */
+  names: string[];
   teamName: string;
   latestAt: number;
   gkMatches: number;
   totals: MvpTotals;
 }
 
+/** A usable EA player id: EA keys each match's players map by it; "0" or blank is not one. */
+function proIdKey(id?: string | null): string | null {
+  const v = String(id ?? '').trim();
+  return v && v !== '0' ? `id:${v}` : null;
+}
+
+/**
+ * Groups stat rows per player. EA's player id is the primary identity, so a player who
+ * changes gamertag mid-season stays one player; rows without an id fall back to the
+ * lower-cased name, and an id and a name seen on the same row are the same player.
+ */
 export function aggregatePlayers(rows: MvpStatRow[]): PlayerAgg[] {
+  const parent = new Map<string, string>();
+  const find = (k: string): string => {
+    let root = k;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    while (parent.get(k) !== root) {
+      const next = parent.get(k)!;
+      parent.set(k, root);
+      k = next;
+    }
+    return root;
+  };
+  const union = (a: string, b: string) => {
+    for (const k of [a, b]) if (!parent.has(k)) parent.set(k, k);
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(rb, ra);
+  };
+  const keysOf = (r: MvpStatRow): string[] => {
+    const name = playerKey(r.playerName);
+    return [proIdKey(r.playerProId), name ? `name:${name}` : null].filter((k): k is string => !!k);
+  };
+  for (const r of rows) {
+    const keys = keysOf(r);
+    if (keys.length) union(keys[0], keys[keys.length - 1]);
+  }
+
   const byKey = new Map<string, PlayerAgg>();
   for (const r of rows) {
-    const key = playerKey(r.playerName);
-    if (!key) continue;
+    const keys = keysOf(r);
+    if (!keys.length) continue;
+    const key = find(keys[0]);
     let agg = byKey.get(key);
     if (!agg) {
       agg = {
         playerName: r.playerName.trim(),
+        names: [],
         teamName: r.teamName,
         latestAt: 0,
         gkMatches: 0,
@@ -167,6 +210,8 @@ export function aggregatePlayers(rows: MvpStatRow[]): PlayerAgg[] {
       };
       byKey.set(key, agg);
     }
+    const name = r.playerName.trim();
+    if (name && !agg.names.includes(name)) agg.names.push(name);
     const t = agg.totals;
     const gk = isGoalkeeperPos(r.pos);
     t.matches++;
@@ -185,11 +230,11 @@ export function aggregatePlayers(rows: MvpStatRow[]): PlayerAgg[] {
     t.ratingSum += r.rating;
     if (gk) agg.gkMatches++;
     const at = r.playedAt instanceof Date ? r.playedAt.getTime() : new Date(r.playedAt).getTime();
-    // Show the club the player most recently played for (players can transfer mid-season).
+    // Show the club and gamertag the player most recently played with (transfers, renames).
     if (at >= agg.latestAt) {
       agg.latestAt = at;
       agg.teamName = r.teamName;
-      agg.playerName = r.playerName.trim();
+      agg.playerName = name;
     }
   }
   return [...byKey.values()];
@@ -200,19 +245,32 @@ export function defaultMinMatches(maxMatches: number): number {
   return Math.max(1, Math.ceil(maxMatches / 2));
 }
 
-/** Counts Team of the Week picks per player. Selections carry every name a player is known by. */
-export function totwCounter(selections: Array<{ names: string[] }>): (playerName: string) => number {
-  const counts = new Map<string, number>();
-  for (const s of selections) {
-    for (const key of new Set(s.names.map(playerKey).filter(Boolean))) counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return (playerName) => counts.get(playerKey(playerName)) ?? 0;
+/**
+ * Counts Team of the Week picks per player. Selections carry every name a player is known
+ * by; a player is counted once per selection that matches any of their names.
+ */
+export function totwCounter(selections: Array<{ names: string[] }>): (playerNames: string | string[]) => number {
+  const byName = new Map<string, number[]>();
+  selections.forEach((s, i) => {
+    for (const key of new Set(s.names.map(playerKey).filter(Boolean))) {
+      const list = byName.get(key) ?? [];
+      list.push(i);
+      byName.set(key, list);
+    }
+  });
+  return (playerNames) => {
+    const hits = new Set<number>();
+    for (const name of Array.isArray(playerNames) ? playerNames : [playerNames]) {
+      for (const i of byName.get(playerKey(name)) ?? []) hits.add(i);
+    }
+    return hits.size;
+  };
 }
 
 export function buildMvpLeaderboard(
   rows: MvpStatRow[],
   minMatches?: number | null,
-  totwCountFor: (playerName: string) => number = () => 0,
+  totwCountFor: (playerNames: string[]) => number = () => 0,
 ): MvpLeaderboardResult {
   const players = aggregatePlayers(rows);
   const maxMatches = players.reduce((m, p) => Math.max(m, p.totals.matches), 0);
@@ -235,7 +293,7 @@ export function buildMvpLeaderboard(
         role,
         matches: p.totals.matches,
         score: round1(median(metrics.map((m) => m.percentile))),
-        totwCount: totwCountFor(p.playerName),
+        totwCount: totwCountFor(p.names.length ? p.names : [p.playerName]),
         totals: p.totals,
         metrics,
       });
