@@ -569,7 +569,7 @@ export class TournamentCommands {
       .addOptions(
         pending.slice(0, 25).map((m) => ({
           label: `${m.homeTeam} vs ${m.awayTeam}`.slice(0, 100),
-          description: m.round ? `Etapa ${m.round}` : undefined,
+          description: m.stage === 'GROUP' ? `Grupa ${m.group}` : m.stage === 'KNOCKOUT' ? 'Eliminatorii' : m.round ? `Etapa ${m.round}` : undefined,
           value: m.id,
         })),
       );
@@ -633,6 +633,18 @@ export class TournamentCommands {
               .setRequired(true),
           ),
         );
+        if (match.stage === 'KNOCKOUT') {
+          modal.addComponents(
+            new ActionRowBuilder<TextInputBuilder>().addComponents(
+              new TextInputBuilder()
+                .setCustomId('penalties')
+                .setLabel('Penalty-uri, doar la egalitate (ex: 4-3)')
+                .setStyle(TextInputStyle.Short)
+                .setMaxLength(5)
+                .setRequired(false),
+            ),
+          );
+        }
         await interaction.showModal(modal);
       }
     } catch (err: any) {
@@ -734,10 +746,24 @@ export class TournamentCommands {
         }
         await interaction.deferReply();
         const parseScore = (id: string) => Number(interaction.fields.getTextInputValue(id).trim());
+        let pens: { homePens?: number; awayPens?: number } = {};
+        try {
+          const raw = interaction.fields.getTextInputValue('penalties')?.trim();
+          const parts = raw?.match(/^(\d{1,2})\s*[-:]\s*(\d{1,2})$/);
+          if (parts) pens = { homePens: Number(parts[1]), awayPens: Number(parts[2]) };
+        } catch {
+          // no penalties field on group matches
+        }
         const res = await this.tournamentService.recordMatchResult(
           t.id,
           matchId
-            ? { matchId, homeScore: parseScore('home_score'), awayScore: parseScore('away_score'), reportedBy: interaction.user.id }
+            ? {
+                matchId,
+                homeScore: parseScore('home_score'),
+                awayScore: parseScore('away_score'),
+                ...pens,
+                reportedBy: interaction.user.id,
+              }
             : {
                 homeTeam: interaction.fields.getTextInputValue('home_team').trim(),
                 awayTeam: interaction.fields.getTextInputValue('away_team').trim(),
@@ -747,9 +773,12 @@ export class TournamentCommands {
               },
           interaction.guildId!,
         );
+        const pensText =
+          res.match.homePens !== undefined ? ` (${res.match.homePens}-${res.match.awayPens} la penalty-uri)` : '';
         await interaction.editReply(
-          `⚽ **Rezultat**: **${res.match.homeTeam}** ${res.match.homeScore} - ${res.match.awayScore} **${res.match.awayTeam}** (raportat de <@${interaction.user.id}>)` +
-            (res.completed ? '\n\n🏁 Toate meciurile s-au jucat. Turneul s-a încheiat!' : ''),
+          `⚽ **Rezultat**: **${res.match.homeTeam}** ${res.match.homeScore} - ${res.match.awayScore} **${res.match.awayTeam}**${pensText} (raportat de <@${interaction.user.id}>)` +
+            (res.newStage.length ? `\n\n⚔️ Următoarea fază a fost stabilită: ${res.newStage.length} meciuri noi.` : '') +
+            (res.completed ? '\n\n🏁 Turneul s-a încheiat!' : ''),
         );
       }
     } catch (err: any) {
