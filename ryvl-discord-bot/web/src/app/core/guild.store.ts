@@ -1,4 +1,4 @@
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { ApiService } from './api.service';
 import { GuildBootstrap, GuildMemberOption, GuildSummary } from './models';
 
@@ -15,6 +15,8 @@ export class GuildStore {
   readonly availableGuilds = signal<GuildSummary[]>([]);
   readonly isLoading = signal<boolean>(false);
   readonly error = signal<string | null>(null);
+  /** RYVL-only admin pages and settings are shown only while a RYVL server is active. */
+  readonly isRyvlGuild = computed(() => (this.activeGuild()?.name || '').toLowerCase().includes('ryvl'));
 
   constructor() {
     this.restoreFromStorage();

@@ -453,7 +453,8 @@ export class EaTrackerComponent implements OnInit {
         void this.guildStore.setActiveGuild(queryGid);
       }
       const gId = queryGid || this.guildStore.activeGuildId() || 'default';
-      const tab = params.get('tab');
+      // Inside the Club section `?tab=` picks the section tab; this page's own tab is `?view=`.
+      const tab = params.get('view') || params.get('tab');
       if (tab === 'players' || tab === 'matches' || tab === 'roster' || tab === 'clubs') {
         this.activeTab.set(tab);
       }

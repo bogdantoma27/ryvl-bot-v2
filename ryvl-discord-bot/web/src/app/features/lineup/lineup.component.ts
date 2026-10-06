@@ -8,7 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { DomSanitizer } from '@angular/platform-browser';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
@@ -49,7 +49,7 @@ function errorMessage(err: unknown, fallback: string): string {
   selector: 'app-lineup',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, FormsModule, LineupMemberPickerComponent, LineupSlotBoardComponent, LineupDraftPanelComponent],
+  imports: [FormsModule, LineupMemberPickerComponent, LineupSlotBoardComponent, LineupDraftPanelComponent],
   template: `
     <div class="max-w-7xl w-full mx-auto space-y-6">
       <!-- Breadcrumb & Top Bar -->
@@ -70,13 +70,6 @@ function errorMessage(err: unknown, fallback: string): string {
         </div>
 
         <div class="flex items-center gap-2 self-start sm:self-center">
-          <a
-            routerLink="/admin/lineup/drafts"
-            class="text-xs text-slate-300 hover:text-white px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/80 hover:bg-slate-700 transition flex items-center gap-1.5"
-          >
-            <span>Saved Drafts</span>
-          </a>
-
           <button
             type="button"
             [disabled]="isSavingDraft()"
