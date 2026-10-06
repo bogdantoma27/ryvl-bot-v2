@@ -9,7 +9,7 @@ RYVL's public team website and Discord management application. A NestJS backend 
 | Area | What it does |
 |---|---|
 | Public website | Team pages, Match Center, Performance tabs, club tracker, VPG transfers and the contact / trial forms |
-| Website forms | Validated and rate-limited; every submission is stored (Admin → Settings → Website forms) and posted to the contact or recruitment channel of the server in `RYVL_GUILD_ID` (else the oldest server with that channel set) |
+| Website forms | Validated and rate-limited; every submission is stored (Admin → Server → Website forms) and posted to the contact or recruitment channel of the server in `RYVL_GUILD_ID` (else the oldest server with that channel set) |
 | VPG Superliga feeds | Standings, daily fixtures and new results in general and RYVL-only channels (see below); `/superliga`, `/live_results`, `/ryvl` |
 | VPG transfers | Per-server polling (60–3600 s, default 120 s); each new Superliga România transfer is posted once and failed sends are retried; `/vpg_transfers` |
 | EA Pro Clubs tracking | The primary club (`/ea_setup`) and any number of extra clubs (`/track_team`) are polled every 90 s by default. Results are posted with player stats, every tracked club keeps an Elo rating, and members link their gamertag with `/register-player` |
@@ -37,7 +37,7 @@ General Superliga channels include all clubs. Team-only feeds and performance ca
 
 ## Automatic Discord posting
 
-Configure destinations in **Admin → Settings**, then open **Admin → RYVL Performance → VPG automatic posting**.
+Configure destinations in **Admin → Server → Channels**, then open **Admin → Superliga → Notifications**.
 
 | Feed | Default schedule | Destination |
 |---|---|---|
