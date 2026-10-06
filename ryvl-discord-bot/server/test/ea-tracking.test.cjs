@@ -57,10 +57,13 @@ function table(uniqueFields = []) {
     rows,
     findMany: async ({ where, orderBy, take } = {}) => {
       const out = sortRows(rows.filter((r) => matchesWhere(r, where)), orderBy);
-      return take ? out.slice(0, take) : out;
+      return (take ? out.slice(0, take) : out).map((r) => ({ ...r }));
     },
-    findFirst: async ({ where, orderBy } = {}) => sortRows(rows.filter((r) => matchesWhere(r, where)), orderBy)[0] || null,
-    findUnique: async ({ where }) => uniqueOf(where) || null,
+    findFirst: async ({ where, orderBy } = {}) => {
+      const row = sortRows(rows.filter((r) => matchesWhere(r, where)), orderBy)[0];
+      return row ? { ...row } : null;
+    },
+    findUnique: async ({ where }) => { const row = uniqueOf(where); return row ? { ...row } : null; },
     create: async ({ data }) => {
       for (const fields of uniqueFields) {
         if (rows.some((r) => fields.every((f) => r[f] === data[f]))) throw Object.assign(new Error('unique'), { code: 'P2002' });
@@ -245,6 +248,9 @@ test('changing the primary club resets its checkpoint; same club keeps it', asyn
   await f.ea.updateTrackerConfig(GUILD, { clubId: '2', clubName: 'Other' });
   assert.equal(f.prisma.clubTrackerConfig.rows[0].lastMatchId, null);
   assert.equal(f.prisma.clubTrackerConfig.rows[0].elo, 1200);
+  const demoted = f.prisma.trackedClub.rows.find((r) => r.clubId === '1');
+  assert.ok(demoted, 'the previous primary club stays tracked');
+  assert.deepEqual([demoted.channelId, demoted.lastMatchId, demoted.elo], ['chan', 'm9', 1300]);
   f.prisma.clubTrackerConfig.rows[0].lastMatchId = 'z';
   await f.ea.updateTrackerConfig(GUILD, { platform: 'nx' });
   assert.equal(f.prisma.clubTrackerConfig.rows[0].lastMatchId, null, 'a platform change is a different feed too');
@@ -259,6 +265,16 @@ test('changing a tracked club platform resets its checkpoint and ignores non-whi
   assert.equal(row.lastMatchId, null);
   assert.equal(row.guildId, GUILD);
   assert.equal(row.elo, 1200);
+});
+
+test('a tracked club set back to the default channel uses the guild results channel, never "null"', async () => {
+  const f = setup();
+  f.prisma.guild.rows.push({ id: GUILD, defaultLiveResultsChannelId: '222222222222222222', defaultChannelId: '333333333333333333' });
+  f.prisma.trackedClub.rows.push({ id: 'tc', guildId: GUILD, clubId: '5', clubName: 'X', platform: 'common-gen5', channelId: '444444444444444444', enabled: true });
+  await f.ea.updateTrackedClub(GUILD, '5', { channelId: 'null' });
+  assert.equal(f.prisma.trackedClub.rows[0].channelId, '222222222222222222');
+  const added = await f.ea.addTrackedClub(GUILD, '6', 'Y', 'null', 'common-gen5');
+  assert.equal(added.channelId, '222222222222222222');
 });
 
 test('getClubStats reads the tracked club from home* without name matching', async () => {

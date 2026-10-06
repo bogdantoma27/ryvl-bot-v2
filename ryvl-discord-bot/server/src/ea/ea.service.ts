@@ -48,6 +48,12 @@ export interface RecordProcessedInput {
   discordMessageId?: string | null;
 }
 
+/** Discord channel snowflake, or null (also for the string "null" a select can send). */
+export function normalizeChannelId(value: unknown): string | null {
+  const text = typeof value === 'string' ? value.trim() : typeof value === 'number' ? String(value) : '';
+  return /^\d{15,25}$/.test(text) ? text : null;
+}
+
 export function normalizeEaPlatform(value: unknown): string {
   const text = typeof value === 'string' ? value.trim() : '';
   return (EA_PLATFORMS as readonly string[]).includes(text) ? text : DEFAULT_EA_PLATFORM;
@@ -533,7 +539,7 @@ export class EaService {
         ...(data.clubId ? { clubId: nextClubId } : {}),
         ...(data.clubName ? { clubName: String(data.clubName) } : {}),
         ...(data.platform ? { platform: nextPlatform } : {}),
-        ...(data.channelId !== undefined ? { channelId: data.channelId || null } : {}),
+        ...(data.channelId !== undefined ? { channelId: normalizeChannelId(data.channelId) } : {}),
         ...(data.enabled !== undefined ? { enabled: Boolean(data.enabled) } : {}),
         ...(matchTypes && matchTypes.length ? { matchTypes } : {}),
         ...(pollIntervalSec ? { pollIntervalSec } : {}),
@@ -544,7 +550,7 @@ export class EaService {
         clubId: nextClubId,
         clubName: data.clubName ? String(data.clubName) : 'RYVL Esports',
         platform: nextPlatform,
-        channelId: data.channelId || null,
+        channelId: normalizeChannelId(data.channelId),
         enabled: data.enabled !== undefined ? Boolean(data.enabled) : true,
         matchTypes: matchTypes && matchTypes.length ? matchTypes : DEFAULT_EA_MATCH_TYPES,
         pollIntervalSec: pollIntervalSec ?? 90,
@@ -558,8 +564,28 @@ export class EaService {
       await this.prisma.trackedClub.updateMany({
         where: { guildId, clubId: config.clubId, platform: config.platform },
         data: {
-          ...(data.channelId !== undefined ? { channelId: data.channelId || null } : {}),
+          ...(data.channelId !== undefined ? { channelId: normalizeChannelId(data.channelId) } : {}),
           ...(data.enabled !== undefined ? { enabled: Boolean(data.enabled) } : {}),
+        },
+      });
+    }
+
+    // A club that stops being the primary keeps being tracked (as before, when
+    // the primary was always mirrored into TrackedClub): "switching" the viewed
+    // club in the dashboard must not silently stop the previous one.
+    if (clubChanged && existing) {
+      await this.prisma.trackedClub.upsert({
+        where: { guildId_clubId: { guildId, clubId: existing.clubId } },
+        update: {},
+        create: {
+          guildId,
+          clubId: existing.clubId,
+          clubName: existing.clubName,
+          channelId: existing.channelId,
+          platform: existing.platform,
+          enabled: existing.enabled,
+          lastMatchId: existing.lastMatchId,
+          elo: existing.elo ?? DEFAULT_ELO,
         },
       });
     }
@@ -874,14 +900,7 @@ export class EaService {
     crestUrl?: string | null,
   ) {
     const normalizedPlatform = normalizeEaPlatform(platform);
-    let targetChannel = channelId || null;
-    if (!targetChannel) {
-      const guild = await this.prisma.guild.findUnique({
-        where: { id: guildId },
-        select: { defaultLiveResultsChannelId: true, defaultChannelId: true },
-      });
-      targetChannel = guild?.defaultLiveResultsChannelId || guild?.defaultChannelId || null;
-    }
+    const targetChannel = normalizeChannelId(channelId) ?? (await this.getDefaultResultsChannelId(guildId));
 
     const existing = await this.prisma.trackedClub.findUnique({
       where: { guildId_clubId: { guildId, clubId } },
@@ -914,6 +933,15 @@ export class EaService {
     });
   }
 
+  /** "Default" channel for tracked clubs: the guild's live results channel, else its default channel. */
+  private async getDefaultResultsChannelId(guildId: string): Promise<string | null> {
+    const guild = await this.prisma.guild.findUnique({
+      where: { id: guildId },
+      select: { defaultLiveResultsChannelId: true, defaultChannelId: true },
+    });
+    return guild?.defaultLiveResultsChannelId || guild?.defaultChannelId || null;
+  }
+
   async removeTrackedClub(guildId: string, clubId: string) {
     return this.prisma.trackedClub.deleteMany({
       where: { guildId, clubId },
@@ -929,7 +957,11 @@ export class EaService {
     // a caller rewrite elo, lastMatchId or even guildId.
     const data: { enabled?: boolean; channelId?: string | null; platform?: string; clubName?: string; lastMatchId?: null; elo?: number } = {};
     if (body.enabled !== undefined) data.enabled = Boolean(body.enabled);
-    if (body.channelId !== undefined) data.channelId = body.channelId || null;
+    // "Default" resolves to the guild's results channel: a tracked club without
+    // a channel is never polled.
+    if (body.channelId !== undefined) {
+      data.channelId = normalizeChannelId(body.channelId) ?? (await this.getDefaultResultsChannelId(guildId));
+    }
     if (body.clubName) data.clubName = String(body.clubName);
 
     const existing = await this.prisma.trackedClub.findUnique({
