@@ -53,6 +53,7 @@ cd "$SERVER"
 npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
 npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/stats-totw-tournaments.sql
 npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/superliga-mvp.sql
+npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/ea-fixes.sql
 
 
 # Publish a complete release without deleting files from the current release.

@@ -169,12 +169,18 @@ model ClubTrackerConfig {
   pollIntervalSec Int       @default(90) @map("poll_interval_sec")
   lastPolledAt    DateTime? @map("last_polled_at")
   lastMatchId     String?   @map("last_match_id")
+  elo             Int       @default(1200)
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@map("club_tracker_configs")
 }
 
+/// One row per (guild, tracked club, EA match).
+/// Column meaning (names kept for compatibility; they are NOT EA's home/away):
+/// home* = the tracked club `clubId` this row belongs to, away* = its opponent.
+/// A match between two clubs tracked in the same guild therefore has two rows,
+/// one from each club's perspective.
 model ProcessedEaMatch {
   id               String   @id @default(uuid())
   eaMatchId        String   @map("ea_match_id")
@@ -182,17 +188,22 @@ model ProcessedEaMatch {
   guild            Guild    @relation(fields: [guildId], references: [id], onDelete: Cascade)
   clubId           String   @map("club_id")
   matchType        String   @map("match_type")
-  homeClubName     String   @map("home_club_name")
-  awayClubName     String   @map("away_club_name")
-  homeScore        Int      @map("home_score")
-  awayScore        Int      @map("away_score")
+  homeClubName     String   @map("home_club_name") // tracked club
+  awayClubName     String   @map("away_club_name") // opponent
+  homeScore        Int      @map("home_score") // tracked club goals
+  awayScore        Int      @map("away_score") // opponent goals
   timestamp        DateTime
   discordMessageId String?  @map("discord_message_id")
   channelId        String?  @map("channel_id")
+  /// Nulled by the daily retention job 30 days after the row was created.
   rawPayload       Json?    @map("raw_payload")
+  /// true while the Discord post has not succeeded yet; the poller retries it.
+  postPending      Boolean  @default(false) @map("post_pending")
+  postAttempts     Int      @default(0) @map("post_attempts")
+  postError        String?  @map("post_error")
   createdAt        DateTime @default(now()) @map("created_at")
 
-  @@unique([guildId, eaMatchId])
+  @@unique([guildId, clubId, eaMatchId])
   @@map("processed_ea_matches")
 }
 
@@ -382,6 +393,7 @@ model PlayerRegistrationAudit {
   performedById    String   @map("performed_by_id")
   createdAt        DateTime @default(now()) @map("created_at")
 
+  @@index([guildId, createdAt])
   @@map("player_registration_audits")
 }
 

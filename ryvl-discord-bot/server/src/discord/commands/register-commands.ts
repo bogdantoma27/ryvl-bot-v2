@@ -137,8 +137,13 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addStringOption((opt) =>
       opt
         .setName('platform')
-        .setDescription('Platform (common-gen5, etc.)')
-        .setRequired(false),
+        .setDescription('EA platform of the club (default: common-gen5)')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Current gen (PS5 / Xbox Series / PC)', value: 'common-gen5' },
+          { name: 'Last gen (PS4 / Xbox One)', value: 'common-gen4' },
+          { name: 'Nintendo Switch', value: 'nx' },
+        ),
     );
 
   const teamStatsCommand = new SlashCommandBuilder()

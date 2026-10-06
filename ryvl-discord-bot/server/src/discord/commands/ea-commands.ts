@@ -6,7 +6,7 @@ import {
   MessageFlags,
   PermissionFlagsBits,
 } from 'discord.js';
-import { EaService } from '../../ea/ea.service';
+import { EaService, normalizeEaPlatform, EA_PLATFORMS } from '../../ea/ea.service';
 import { EaPollerService } from '../../ea/ea-poller.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -35,9 +35,18 @@ export class EaCommands {
     }
 
     const teamName = interaction.options.getString('name', true).trim();
-    const channel = interaction.options.getChannel('channel', true);
+    // The channel option is optional; without it the guild's default
+    // live-results channel is used (see EaService.addTrackedClub).
+    const channel = interaction.options.getChannel('channel', false);
+    const platformInput = interaction.options.getString('platform')?.trim();
+    if (platformInput && !(EA_PLATFORMS as readonly string[]).includes(platformInput)) {
+      await interaction.editReply(`Unknown platform \`${platformInput}\`. Use one of: ${EA_PLATFORMS.join(', ')}.`);
+      return;
+    }
+    const platform = normalizeEaPlatform(platformInput);
 
     if (
+      channel &&
       channel.type !== ChannelType.GuildText &&
       channel.type !== ChannelType.GuildAnnouncement
     ) {
@@ -46,7 +55,7 @@ export class EaCommands {
     }
 
     try {
-      const searchResults = await this.eaService.searchClubs(teamName);
+      const searchResults = await this.eaService.searchClubs(teamName, platform);
       if (!searchResults || searchResults.length === 0) {
         await interaction.editReply(
           `⚠️ Could not find any EA Pro Clubs matching **"${teamName}"** on EA servers. Please verify the exact spelling.`,
@@ -59,8 +68,8 @@ export class EaCommands {
         guildId,
         String(match.clubId),
         match.name || teamName,
-        channel.id,
-        'common-gen5',
+        channel?.id ?? null,
+        platform,
         match.crestUrl,
       );
 
@@ -74,7 +83,8 @@ export class EaCommands {
           { name: 'Club Name', value: `**${tracked.clubName}**`, inline: true },
           { name: 'Club ID', value: `\`${tracked.clubId}\``, inline: true },
           { name: 'Initial ELO', value: `⭐ **${tracked.elo}**`, inline: true },
-          { name: 'Channel', value: `<#${tracked.channelId}>`, inline: true },
+          { name: 'Channel', value: tracked.channelId ? `<#${tracked.channelId}>` : 'Not set (configure a default live results channel)', inline: true },
+          { name: 'Platform', value: `\`${tracked.platform}\``, inline: true },
           { name: 'Division', value: match.currentDivision ? `Div ${match.currentDivision}` : 'Pro Clubs', inline: true },
           { name: 'Record', value: `${match.wins || 0}W - ${match.ties || 0}D - ${match.losses || 0}L`, inline: true },
         )
@@ -104,6 +114,10 @@ export class EaCommands {
 
     try {
       const stats = await this.eaService.getClubStats(guildId, clubName);
+      if (!stats) {
+        await interaction.editReply('⚠️ That club is not tracked in this server.');
+        return;
+      }
 
       const diff = stats.goalDifference;
       const diffStr = diff >= 0 ? `+${diff}` : `${diff}`;
@@ -206,7 +220,7 @@ export class EaCommands {
         { name: 'Club Name', value: `**${updatedConfig.clubName}**`, inline: true },
         { name: 'Club ID', value: `\`${updatedConfig.clubId}\``, inline: true },
         { name: 'Notification Channel', value: `<#${updatedConfig.channelId}>`, inline: true },
-        { name: 'Check Interval', value: 'Every 90 seconds', inline: true },
+        { name: 'Check Interval', value: `Every ${updatedConfig.pollIntervalSec} seconds`, inline: true },
         { name: 'Tracked Match Types', value: 'League, Friendly, Playoff', inline: true },
         { name: 'Status', value: '🟢 **Active**', inline: true },
       )

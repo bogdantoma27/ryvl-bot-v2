@@ -4,9 +4,13 @@ require('reflect-metadata');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { EaController } = require('../dist/ea/ea.controller');
+const { EaService } = require('../dist/ea/ea.service');
 function controller(fetchMatchesRaw) {
   const config = { clubId: '654321', guildId: 'fixture', platform: 'common-gen5', matchTypes: ['leagueMatch', 'friendlyMatch'] };
-  return new EaController({ getOrCreateTrackerConfig: async () => config, getDefaultTrackerConfig: async () => config, fetchMatchesRaw, parseMatch: match => match }, {});
+  // Real EaService (shared fetch-and-merge), only EA I/O and config lookup substituted.
+  const ea = new EaService({});
+  Object.assign(ea, { getOrCreateTrackerConfig: async () => config, getDefaultTrackerConfig: async () => config, fetchMatchesRaw, parseMatch: match => match });
+  return new EaController(ea, {});
 }
 test('total EA match outage returns 503 instead of an empty successful feed', async () => {
   const value = controller(async () => { throw new Error('simulated upstream failure'); });
