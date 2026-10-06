@@ -56,12 +56,11 @@ jobs:
             .catch(error=>{console.error(error.message);process.exitCode=1;})
             .finally(()=>prisma.$disconnect());
           NODE
-          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
-          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
-          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/stats-totw-tournaments.sql
-          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/stats-totw-tournaments.sql
-          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/superliga-mvp.sql
-          npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/superliga-mvp.sql
+          # Every upgrade file must be safe to run twice.
+          bash ../deploy/apply-schema.sh
+          bash ../deploy/apply-schema.sh
+          # The upgraded database must match schema.prisma exactly.
+          npx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
       - name: Backend build and regression tests
         working-directory: ryvl-discord-bot/server
         run: npm test

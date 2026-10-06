@@ -150,13 +150,13 @@ npx prisma db push
 npm run build
 ```
 
-If required columns cannot be added to existing rows, review and backfill a migration. **Do not use --force-reset on valuable data.** The current notification feature has the reviewed additive script:
+If required columns cannot be added to existing rows, review and backfill a migration. **Do not use --force-reset on valuable data.** Reviewed additive upgrades live in `server/prisma/deploy/*.sql` and are applied in order by:
 
 ```bash
-npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
+bash ryvl-discord-bot/deploy/apply-schema.sh
 ```
 
-It creates new tables/indexes transactionally and can be repeated. Other schema changes still require review. Schedule backups for the actual PostgreSQL service independently of application deployment.
+Each file runs in a transaction and can be repeated. To change the schema, add a new idempotent SQL file and append it to the list in `apply-schema.sh`; CI fails if the upgraded database does not match `schema.prisma`. Schedule backups for the actual PostgreSQL service independently of application deployment.
 
 ## 9. Font rendering and EA Python bridge
 

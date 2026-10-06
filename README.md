@@ -120,7 +120,7 @@ The old `update/vpg-automation-public-ux` branch retains the earlier development
 
 ### Database safety
 
-`server/prisma/deploy/vpg-notifications.sql` is the reviewed transactional, additive notification upgrade. It creates tables/indexes and is safe to repeat; it does not reset guilds, channels, events or match history. The workflow applies this specific script, not arbitrary future schema changes. Never use `prisma db push --force-reset` on valuable data. Back up production PostgreSQL regularly.
+`server/prisma/deploy/*.sql` are the reviewed transactional, additive upgrades, applied in order by `deploy/apply-schema.sh`. Each is safe to repeat and never resets guilds, channels, events or match history. CI checks that the upgraded database matches `schema.prisma`. Never use `prisma db push --force-reset` on valuable data. Back up production PostgreSQL regularly.
 
 ## Tests
 

@@ -50,9 +50,7 @@ sudo caddy validate --config "$ROOT/ryvl-discord-bot/Caddyfile" --adapter caddyf
 
 # This is the reviewed additive upgrade, never a reset or blanket db push.
 cd "$SERVER"
-npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/vpg-notifications.sql
-npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/stats-totw-tournaments.sql
-npx prisma db execute --schema prisma/schema.prisma --file prisma/deploy/superliga-mvp.sql
+bash "$ROOT/ryvl-discord-bot/deploy/apply-schema.sh"
 
 
 # Publish a complete release without deleting files from the current release.
