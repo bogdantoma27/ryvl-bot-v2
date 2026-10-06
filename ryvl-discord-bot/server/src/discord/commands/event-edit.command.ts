@@ -44,7 +44,9 @@ export class EventEditCommand {
       new ActionRowBuilder<TextInputBuilder>().addComponents(field('edit_title', 'Title', event.title).setMaxLength(100)),
       new ActionRowBuilder<TextInputBuilder>().addComponents(field('edit_date', 'Date (YYYY-MM-DD, today or tomorrow)', local.date)),
       new ActionRowBuilder<TextInputBuilder>().addComponents(field('edit_time', `Time (${zone}, 24h)`.slice(0, 45), local.time)),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(field('edit_description', 'Description (optional)', event.description || '', false).setMaxLength(1000)),
+      // Same limit as the event API: Discord rejects the whole modal when the prefilled
+      // value is longer than max_length, which broke Edit for long descriptions.
+      new ActionRowBuilder<TextInputBuilder>().addComponents(field('edit_description', 'Description (optional)', event.description || '', false).setMaxLength(2000)),
     );
     await interaction.showModal(modal);
   }

@@ -81,3 +81,22 @@ test('scheduled EA and VPG transfer polls skip guilds the bot was removed from',
   await vpg.pollAllGuilds();
   assert.deepEqual(polledTransfers, ['kept']);
 });
+
+test('the Discord edit modal accepts every description the event API accepts', async () => {
+  const { EventEditCommand } = require('../dist/discord/commands/event-edit.command');
+  const description = 'd'.repeat(2000);
+  const event = {
+    id: 'e1', guildId: 'g1', createdById: 'u1', title: 'Training', description, timezone: 'Europe/Bucharest',
+    occurrences: [{ id: 'o1', messageId: 'm1', channelId: 'c1', status: 'PUBLISHED', startsAt: new Date('2026-10-10T18:00:00Z') }],
+  };
+  const command = new EventEditCommand({ event: { findUnique: async () => event } }, null);
+  let modal;
+  await command.showModal({
+    guildId: 'g1', channelId: 'c1', user: { id: 'u1' }, message: { id: 'm1' },
+    showModal: async (value) => { modal = value.toJSON(); },
+    reply: async () => assert.fail('modal expected'),
+  }, 'e1');
+  const input = modal.components.map((row) => row.components[0]).find((c) => c.custom_id === 'edit_description');
+  assert.equal(input.value.length, 2000);
+  assert.ok(input.value.length <= input.max_length, 'Discord rejects a prefilled value longer than max_length');
+});
