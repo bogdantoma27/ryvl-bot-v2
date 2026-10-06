@@ -347,7 +347,7 @@ Missing server host in Actions means the repository secrets are missing/empty. A
 
 Nothing has to be re-run in Discord after a deploy: the bot re-registers its slash commands in every server on start-up. Settings live in the database and survive deployments. The command list and who may use each command are on https://ryvl.top/docs; the permission model is summarised in the README.
 
-Channels remain in Admin → Settings; schedules, intervals and repair controls are in Admin → RYVL Performance → VPG automatic posting. Sunday standings are 10:00 Europe/Bucharest; daily fixtures default to 10:00; results default to two minutes. General and RYVL destinations are independent. The historical baseline prevents old-result floods, failures remain retryable and empty fixture days remain silent. See README for full feed behaviour.
+Channels are in Admin → Server → Channels; schedules, intervals and repair controls are in Admin → Superliga → Notifications. Sunday standings are 10:00 Europe/Bucharest; daily fixtures default to 10:00; results default to two minutes. General and RYVL destinations are independent. The historical baseline prevents old-result floods, failures remain retryable and empty fixture days remain silent. See README for full feed behaviour.
 
 New club buttons use FRONTEND_URL. Existing Discord messages keep their old stored URLs: use **Repair old club links** after migration. This asks for confirmation, edits at most 200 recent recorded bot-owned messages, and does not delete or replay history.
 
