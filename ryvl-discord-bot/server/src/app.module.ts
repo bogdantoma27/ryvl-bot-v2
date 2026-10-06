@@ -13,6 +13,7 @@ import { VpgModule } from './vpg/vpg.module';
 import { TournamentModule } from './tournaments/tournament.module';
 import { SuperligaMvpModule } from './superliga-mvp/superliga-mvp.module';
 import { WebsiteModule } from './website/website.module';
+import { HealthModule } from './health/health.module';
 
 import { AppController } from './app.controller';
 
@@ -32,6 +33,7 @@ import { AppController } from './app.controller';
     TournamentModule,
     SuperligaMvpModule,
     WebsiteModule,
+    HealthModule,
   ],
   controllers: [AppController],
 })
