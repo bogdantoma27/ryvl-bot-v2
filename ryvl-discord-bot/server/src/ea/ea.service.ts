@@ -1,5 +1,5 @@
-import { resolveEaMatchType, formatEaMatchType } from './ea-match-type';
-import { Injectable, Logger } from '@nestjs/common';
+import { resolveEaMatchType, formatEaMatchType, mergeEaRawMatch } from './ea-match-type';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { execFile } from 'child_process';
 import { join } from 'path';
 import { promisify } from 'util';
@@ -22,9 +22,67 @@ export const EA_CREST_TEMPLATE =
 export const EA_DEFAULT_CREST =
   'https://media.contentapi.ea.com/content/dam/ea/fc/common/global/tertiary-logo.svg';
 
+export const DEFAULT_EA_MATCH_TYPES = ['leagueMatch', 'friendlyMatch', 'playoffMatch'];
+export const DEFAULT_EA_PLATFORM = 'common-gen5';
+export const EA_PLATFORMS = ['common-gen5', 'common-gen4', 'nx'] as const;
+export const DEFAULT_ELO = 1200;
+export const ELO_K_FACTOR = 32;
+/** How long ea_bridge.py results are reused before spawning Python again. */
+export const EA_BRIDGE_CACHE_TTL_MS = 60_000;
+const EA_BRIDGE_CACHE_MAX_ENTRIES = 500;
+
+export interface EaClubRef {
+  clubId: string;
+  platform?: string | null;
+}
+
+/** Values accepted by recordProcessed(); see the ProcessedEaMatch column notes. */
+export interface RecordProcessedInput {
+  guildId: string;
+  clubId: string;
+  raw: EaRawMatch;
+  parsed: ParsedEaMatch;
+  channelId: string | null;
+  /** true: the match still has to be posted to Discord (the poller retries it). */
+  postPending: boolean;
+  discordMessageId?: string | null;
+}
+
+/** Discord channel snowflake, or null (also for the string "null" a select can send). */
+export function normalizeChannelId(value: unknown): string | null {
+  const text = typeof value === 'string' ? value.trim() : typeof value === 'number' ? String(value) : '';
+  return /^\d{15,25}$/.test(text) ? text : null;
+}
+
+export function normalizeEaPlatform(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return (EA_PLATFORMS as readonly string[]).includes(text) ? text : DEFAULT_EA_PLATFORM;
+}
+
+/** Standard Elo update. score is 1 (win), 0.5 (draw) or 0 (loss). */
+export function computeElo(rating: number, opponentRating: number, score: number, k = ELO_K_FACTOR): number {
+  const expected = 1 / (1 + Math.pow(10, (opponentRating - rating) / 400));
+  return Math.round(rating + k * (score - expected));
+}
+
+/** Per-club poll interval bounds; the poller ticks every EA_POLL_BASE_TICK_SEC. */
+export const EA_POLL_BASE_TICK_SEC = 30;
+export function clampPollInterval(value: unknown): number {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return 90;
+  return Math.min(Math.max(n, EA_POLL_BASE_TICK_SEC), 3600);
+}
+
+export function outcomeScore(outcome: 'WIN' | 'LOSS' | 'DRAW'): number {
+  return outcome === 'WIN' ? 1 : outcome === 'DRAW' ? 0.5 : 0;
+}
+
 @Injectable()
 export class EaService {
   private readonly logger = new Logger(EaService.name);
+  // Short-lived cache (and in-flight de-duplication) for ea_bridge.py calls, so
+  // public page loads and the poller do not spawn a Python process every time.
+  private readonly bridgeCache = new Map<string, { expiresAt: number; value: Promise<any> }>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -65,7 +123,32 @@ export class EaService {
     return 'python3';
   }
 
-  private async runBridge(command: string, args: string[]): Promise<any> {
+  private runBridge(command: string, args: string[]): Promise<any> {
+    const key = JSON.stringify([command, ...args]);
+    const now = Date.now();
+    const cached = this.bridgeCache.get(key);
+    if (cached && cached.expiresAt > now) return cached.value;
+
+    const value = this.spawnBridge(command, args);
+    this.bridgeCache.set(key, { expiresAt: now + EA_BRIDGE_CACHE_TTL_MS, value });
+    // Failures are never cached: the next caller tries EA again.
+    value.catch(() => {
+      if (this.bridgeCache.get(key)?.value === value) this.bridgeCache.delete(key);
+    });
+    if (this.bridgeCache.size > EA_BRIDGE_CACHE_MAX_ENTRIES) {
+      for (const [k, entry] of this.bridgeCache) {
+        if (entry.expiresAt <= now) this.bridgeCache.delete(k);
+      }
+      while (this.bridgeCache.size > EA_BRIDGE_CACHE_MAX_ENTRIES) {
+        const oldest = this.bridgeCache.keys().next().value;
+        if (oldest === undefined) break;
+        this.bridgeCache.delete(oldest);
+      }
+    }
+    return value;
+  }
+
+  private async spawnBridge(command: string, args: string[]): Promise<any> {
     try {
       const scriptPath = this.getScriptPath();
       const { stdout } = await execFileAsync(
@@ -98,6 +181,94 @@ export class EaService {
     // Copy each object so EA's original fields remain intact for diagnostics.
     return matches.filter((match): match is EaRawMatch => Boolean(match && typeof match === 'object' && match.matchId))
       .map(match => ({ ...match, sourceMatchTypes: [matchType] }));
+  }
+
+  /**
+   * Fetch the newest `count` matches of a club across several EA match types,
+   * merged by match ID (keeping fetch provenance) and sorted newest first.
+   * Throws 503 when every match-type request failed, so callers can tell an
+   * outage from a club that has simply not played.
+   */
+  async fetchRecentMatches(
+    club: EaClubRef,
+    types?: string[] | null,
+    count = 5,
+  ): Promise<EaRawMatch[]> {
+    const matchTypes = types && types.length > 0 ? types : DEFAULT_EA_MATCH_TYPES;
+    const merged = new Map<string, EaRawMatch>();
+    let successfulRequests = 0;
+    for (const matchType of matchTypes) {
+      try {
+        const matches = await this.fetchMatchesRaw(club.clubId, matchType, count, club.platform || DEFAULT_EA_PLATFORM);
+        if (!Array.isArray(matches)) throw new Error('Invalid upstream match response');
+        successfulRequests++;
+        for (const m of matches) {
+          if (m && m.matchId) mergeEaRawMatch(merged, m);
+        }
+      } catch (err: any) {
+        this.logger.warn(`Failed to fetch ${matchType} for club ${club.clubId}: ${err?.message || err}`);
+      }
+    }
+    if (successfulRequests === 0) {
+      throw new ServiceUnavailableException('Match data is temporarily unavailable. Please try again.');
+    }
+    return Array.from(merged.values())
+      .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+      .slice(0, count);
+  }
+
+  /**
+   * Store a match for (guild, tracked club). Returns created=false when the row
+   * already exists, so only the first caller posts it and applies Elo.
+   * home* columns always hold the tracked club, away* the opponent.
+   */
+  async recordProcessed(input: RecordProcessedInput): Promise<{ created: boolean; record: any }> {
+    const { guildId, clubId, raw, parsed } = input;
+    const eaMatchId = String(raw.matchId);
+    try {
+      const record = await this.prisma.processedEaMatch.create({
+        data: {
+          guildId,
+          eaMatchId,
+          clubId,
+          matchType: parsed.matchType,
+          homeClubName: parsed.trackedClub.name,
+          awayClubName: parsed.opponentClub.name,
+          homeScore: parsed.trackedClub.score,
+          awayScore: parsed.opponentClub.score,
+          timestamp: parsed.timestamp,
+          discordMessageId: input.discordMessageId ?? null,
+          channelId: input.channelId,
+          rawPayload: raw as any,
+          postPending: input.postPending,
+        },
+      });
+      return { created: true, record };
+    } catch (err: any) {
+      if (err?.code !== 'P2002') throw err;
+      const record = await this.prisma.processedEaMatch.findUnique({
+        where: { guildId_clubId_eaMatchId: { guildId, clubId, eaMatchId } },
+      });
+      return { created: false, record };
+    }
+  }
+
+  /** Club IDs whose stored matches belong to a guild: its primary club plus all tracked clubs. */
+  async getGuildClubIds(guildId: string): Promise<string[]> {
+    const [config, tracked] = await Promise.all([
+      this.prisma.clubTrackerConfig.findUnique({ where: { guildId }, select: { clubId: true } }),
+      this.prisma.trackedClub.findMany({ where: { guildId }, select: { clubId: true } }),
+    ]);
+    return [...new Set([config?.clubId, ...tracked.map((t) => t.clubId)].filter((id): id is string => Boolean(id)))];
+  }
+
+  /** Current Elo of a club inside a guild, or the default for clubs the guild does not track. */
+  async getClubElo(guildId: string, clubId: string): Promise<number> {
+    if (!clubId) return DEFAULT_ELO;
+    const tracked = await this.prisma.trackedClub.findFirst({ where: { guildId, clubId }, select: { elo: true } });
+    if (tracked) return tracked.elo;
+    const config = await this.prisma.clubTrackerConfig.findFirst({ where: { guildId, clubId }, select: { elo: true } });
+    return config?.elo ?? DEFAULT_ELO;
   }
 
   async fetchClubInfo(clubId: string, platform = 'common-gen5'): Promise<any> {
@@ -173,12 +344,10 @@ export class EaService {
   async getPublicRoster(platform = 'common-gen5', clubId?: string): Promise<PublicRosterMember[]> {
     let targetClubId = clubId;
     if (!targetClubId) {
-      const config = await this.prisma.clubTrackerConfig.findFirst();
-      if (config?.clubId) {
-        targetClubId = config.clubId;
-      } else {
-        targetClubId = '128199'; // Default RYVL Esports club ID
-      }
+      // Same deterministic "default" club as the public club page.
+      const config = await this.getDefaultTrackerConfig();
+      targetClubId = config.clubId || '128199'; // Default RYVL Esports club ID
+      platform = config.platform || platform;
     }
 
     try {
@@ -338,46 +507,126 @@ export class EaService {
     });
   }
 
-  async updateTrackerConfig(guildId: string, data: any) {
-    return this.prisma.clubTrackerConfig.upsert({
+  async updateTrackerConfig(
+    guildId: string,
+    data: {
+      clubId?: string;
+      clubName?: string;
+      platform?: string;
+      channelId?: string | null;
+      enabled?: boolean;
+      matchTypes?: string[];
+      pollIntervalSec?: number;
+    },
+  ) {
+    const existing = await this.prisma.clubTrackerConfig.findUnique({ where: { guildId } });
+    const nextClubId = data.clubId ? String(data.clubId) : existing?.clubId ?? '128199';
+    const nextPlatform = data.platform ? normalizeEaPlatform(data.platform) : existing?.platform ?? DEFAULT_EA_PLATFORM;
+    // A different club (or platform) must start from a fresh checkpoint, otherwise
+    // the old club's lastMatchId never matches and recent history gets reposted.
+    const clubChanged = !!existing && (existing.clubId !== nextClubId || existing.platform !== nextPlatform);
+    const trackedRow = clubChanged
+      ? await this.prisma.trackedClub.findFirst({ where: { guildId, clubId: nextClubId }, select: { elo: true } })
+      : null;
+    const matchTypes = Array.isArray(data.matchTypes)
+      ? data.matchTypes.filter((t) => typeof t === 'string' && t.trim()).map((t) => t.trim())
+      : undefined;
+    const pollIntervalSec = data.pollIntervalSec ? clampPollInterval(Number(data.pollIntervalSec)) : undefined;
+
+    const config = await this.prisma.clubTrackerConfig.upsert({
       where: { guildId },
       update: {
-        ...(data.clubId ? { clubId: String(data.clubId) } : {}),
+        ...(data.clubId ? { clubId: nextClubId } : {}),
         ...(data.clubName ? { clubName: String(data.clubName) } : {}),
-        ...(data.platform ? { platform: String(data.platform) } : {}),
-        ...(data.channelId !== undefined ? { channelId: data.channelId } : {}),
+        ...(data.platform ? { platform: nextPlatform } : {}),
+        ...(data.channelId !== undefined ? { channelId: normalizeChannelId(data.channelId) } : {}),
         ...(data.enabled !== undefined ? { enabled: Boolean(data.enabled) } : {}),
-        ...(data.matchTypes ? { matchTypes: data.matchTypes } : {}),
-        ...(data.pollIntervalSec ? { pollIntervalSec: Number(data.pollIntervalSec) } : {}),
-        ...(data.lastMatchId !== undefined ? { lastMatchId: data.lastMatchId } : {}),
-        ...(data.lastPolledAt !== undefined ? { lastPolledAt: data.lastPolledAt } : {}),
+        ...(matchTypes && matchTypes.length ? { matchTypes } : {}),
+        ...(pollIntervalSec ? { pollIntervalSec } : {}),
+        ...(clubChanged ? { lastMatchId: null, elo: trackedRow?.elo ?? DEFAULT_ELO } : {}),
       },
       create: {
         guildId,
-        clubId: data.clubId ? String(data.clubId) : '128199',
+        clubId: nextClubId,
         clubName: data.clubName ? String(data.clubName) : 'RYVL Esports',
-        platform: data.platform ? String(data.platform) : 'common-gen5',
-        channelId: data.channelId || null,
+        platform: nextPlatform,
+        channelId: normalizeChannelId(data.channelId),
         enabled: data.enabled !== undefined ? Boolean(data.enabled) : true,
-        matchTypes: data.matchTypes || ['leagueMatch', 'friendlyMatch', 'playoffMatch'],
-        pollIntervalSec: data.pollIntervalSec ? Number(data.pollIntervalSec) : 90,
-        lastMatchId: data.lastMatchId || null,
+        matchTypes: matchTypes && matchTypes.length ? matchTypes : DEFAULT_EA_MATCH_TYPES,
+        pollIntervalSec: pollIntervalSec ?? 90,
+        lastMatchId: null,
       },
     });
+
+    // The primary club and a TrackedClub row for the same club are one logical
+    // subscription (the poller polls it once); keep their channel/enabled in sync.
+    if (data.channelId !== undefined || data.enabled !== undefined) {
+      await this.prisma.trackedClub.updateMany({
+        where: { guildId, clubId: config.clubId, platform: config.platform },
+        data: {
+          ...(data.channelId !== undefined ? { channelId: normalizeChannelId(data.channelId) } : {}),
+          ...(data.enabled !== undefined ? { enabled: Boolean(data.enabled) } : {}),
+        },
+      });
+    }
+
+    // A club that stops being the primary keeps being tracked (as before, when
+    // the primary was always mirrored into TrackedClub): "switching" the viewed
+    // club in the dashboard must not silently stop the previous one.
+    if (clubChanged && existing) {
+      await this.prisma.trackedClub.upsert({
+        where: { guildId_clubId: { guildId, clubId: existing.clubId } },
+        update: {},
+        create: {
+          guildId,
+          clubId: existing.clubId,
+          clubName: existing.clubName,
+          channelId: existing.channelId,
+          platform: existing.platform,
+          enabled: existing.enabled,
+          lastMatchId: existing.lastMatchId,
+          elo: existing.elo ?? DEFAULT_ELO,
+        },
+      });
+    }
+    return config;
   }
 
-  async getDefaultTrackerConfig() {
-    const existing = await this.prisma.clubTrackerConfig.findFirst({
-      where: { enabled: true },
+  /**
+   * The guild whose club is shown on the public site. Deterministic: the
+   * RYVL_GUILD_ID environment variable when it names a known guild, otherwise
+   * the oldest guild (by joinedAt) with an enabled tracker, otherwise the
+   * oldest guild.
+   */
+  async resolveDefaultGuildId(): Promise<string | null> {
+    const envGuildId = process.env.RYVL_GUILD_ID?.trim();
+    if (envGuildId) {
+      const guild = await this.prisma.guild.findUnique({ where: { id: envGuildId }, select: { id: true } });
+      if (guild) return guild.id;
+      this.logger.warn(`RYVL_GUILD_ID=${envGuildId} is not a known guild; falling back to the oldest guild.`);
+    }
+    const order = [{ joinedAt: 'asc' as const }, { id: 'asc' as const }];
+    const tracked = await this.prisma.guild.findFirst({
+      where: { clubTrackerConfig: { is: { enabled: true } } },
+      orderBy: order,
+      select: { id: true },
     });
-    if (existing) return existing;
+    if (tracked) return tracked.id;
+    const oldest = await this.prisma.guild.findFirst({ orderBy: order, select: { id: true } });
+    return oldest?.id ?? null;
+  }
 
-    const firstGuild = await this.prisma.guild.findFirst();
-    if (firstGuild) return this.getOrCreateTrackerConfig(firstGuild.id);
+  /** Read-only: never creates a config row for a public request. */
+  async getDefaultTrackerConfig() {
+    const guildId = await this.resolveDefaultGuildId();
+    if (guildId) {
+      const existing = await this.prisma.clubTrackerConfig.findUnique({ where: { guildId } });
+      if (existing) return existing;
+    }
 
     return {
       id: 'default',
-      guildId: 'default',
+      guildId: guildId ?? 'default',
       clubId: '128199',
       clubName: 'RYVL Esports',
       platform: 'common-gen5',
@@ -387,6 +636,7 @@ export class EaService {
       pollIntervalSec: 90,
       lastPolledAt: null,
       lastMatchId: null,
+      elo: DEFAULT_ELO,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -518,14 +768,19 @@ export class EaService {
 
     const eaName = registered ? registered.eaPlayerName : trimmed;
 
-    // Fetch individual match records for this player
-    const stats = await this.prisma.eaPlayerMatchStat.findMany({
-      where: {
-        playerProName: { equals: eaName, mode: 'insensitive' },
-      },
-      orderBy: { timestamp: 'desc' },
-      take: 50,
-    });
+    // Only matches played for this guild's clubs (primary + tracked). EA
+    // gamertags are not unique, so an unscoped name match would merge stats of
+    // unrelated players from other servers. Every stored match is counted.
+    const clubIds = await this.getGuildClubIds(guildId);
+    const stats = clubIds.length
+      ? await this.prisma.eaPlayerMatchStat.findMany({
+          where: {
+            playerProName: { equals: eaName, mode: 'insensitive' },
+            clubId: { in: clubIds },
+          },
+          orderBy: { timestamp: 'desc' },
+        })
+      : [];
 
     const totalMatches = stats.length;
     let totalGoals = 0;
@@ -534,6 +789,7 @@ export class EaService {
     let totalPassesMade = 0;
     let totalPassAttempts = 0;
     let totalTacklesMade = 0;
+    let totalTackleAttempts = 0;
     let totalSaves = 0;
     let totalMom = 0;
     let totalCleanSheets = 0;
@@ -547,6 +803,7 @@ export class EaService {
       totalPassesMade += s.passesMade;
       totalPassAttempts += s.passAttempts;
       totalTacklesMade += s.tacklesMade;
+      totalTackleAttempts += s.tackleAttempts;
       totalSaves += s.saves;
       totalMom += s.mom;
       totalCleanSheets += Math.max(s.cleanSheetDef, s.cleanSheetGk);
@@ -580,11 +837,17 @@ export class EaService {
       passAttempts: totalPassAttempts,
       passAccuracy,
       tacklesMade: totalTacklesMade,
+      tackleAttempts: totalTackleAttempts,
+      tackleSuccessRate:
+        totalTackleAttempts > 0 ? Math.round((totalTacklesMade / totalTackleAttempts) * 100) : 0,
       saves: totalSaves,
       cleanSheets: totalCleanSheets,
       redCards: totalRedCards,
       momAwards: totalMom,
       events: decodedEvents,
+      // Scope of the figures above: every stored match for these clubs.
+      clubIds,
+      firstMatchAt: stats.length ? stats[stats.length - 1].timestamp : null,
       recentMatches: stats.slice(0, 5),
     };
   }
@@ -593,37 +856,39 @@ export class EaService {
   // Multi-Club Tracking Methods
   // ----------------------------------------------------
 
+  /**
+   * Tracked clubs of a guild. The primary club (ClubTrackerConfig) is always
+   * listed first with isPrimary=true; when it has no TrackedClub row of its
+   * own a read-only entry is synthesised instead of copying it into the table
+   * (copying made the poller post every match of the primary club twice).
+   */
   async getTrackedClubs(guildId: string) {
-    let clubs = await this.prisma.trackedClub.findMany({
-      where: { guildId },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    if (clubs.length === 0) {
-      try {
-        const config = await this.getOrCreateTrackerConfig(guildId);
-        const primaryClub = await this.prisma.trackedClub.upsert({
-          where: {
-            guildId_clubId: { guildId, clubId: config.clubId || '128199' },
-          },
-          update: {},
-          create: {
-            guildId,
-            clubId: config.clubId || '128199',
-            clubName: config.clubName || 'RYVL Esports',
-            channelId: config.channelId || null,
-            platform: config.platform || 'common-gen5',
-            enabled: config.enabled ?? true,
-            elo: 1200,
-          },
-        });
-        clubs = [primaryClub];
-      } catch (err: any) {
-        this.logger.warn(`Could not seed default tracked club for guild ${guildId}: ${err.message}`);
-      }
+    const [config, rows] = await Promise.all([
+      this.prisma.clubTrackerConfig.findUnique({ where: { guildId } }),
+      this.prisma.trackedClub.findMany({ where: { guildId }, orderBy: { createdAt: 'asc' } }),
+    ]);
+    const isPrimary = (row: { clubId: string; platform: string }) =>
+      !!config && row.clubId === config.clubId && row.platform === config.platform;
+    const clubs: any[] = rows.map((row) => ({ ...row, isPrimary: isPrimary(row) }));
+    if (config && !clubs.some((c) => c.isPrimary)) {
+      clubs.unshift({
+        id: `primary:${config.id}`,
+        guildId,
+        clubId: config.clubId,
+        clubName: config.clubName,
+        channelId: config.channelId,
+        platform: config.platform,
+        enabled: config.enabled,
+        lastMatchId: config.lastMatchId,
+        lastPolledAt: config.lastPolledAt,
+        crestUrl: null,
+        elo: config.elo,
+        createdAt: config.createdAt,
+        updatedAt: config.updatedAt,
+        isPrimary: true,
+      });
     }
-
-    return clubs;
+    return clubs.sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
   }
 
   async addTrackedClub(
@@ -634,14 +899,13 @@ export class EaService {
     platform = 'common-gen5',
     crestUrl?: string | null,
   ) {
-    let targetChannel = channelId || null;
-    if (!targetChannel) {
-      const guild = await this.prisma.guild.findUnique({
-        where: { id: guildId },
-        select: { defaultLiveResultsChannelId: true, defaultChannelId: true },
-      });
-      targetChannel = guild?.defaultLiveResultsChannelId || guild?.defaultChannelId || null;
-    }
+    const normalizedPlatform = normalizeEaPlatform(platform);
+    const targetChannel = normalizeChannelId(channelId) ?? (await this.getDefaultResultsChannelId(guildId));
+
+    const existing = await this.prisma.trackedClub.findUnique({
+      where: { guildId_clubId: { guildId, clubId } },
+    });
+    const platformChanged = !!existing && existing.platform !== normalizedPlatform;
 
     return this.prisma.trackedClub.upsert({
       where: {
@@ -650,21 +914,32 @@ export class EaService {
       update: {
         clubName,
         channelId: targetChannel,
-        platform,
+        platform: normalizedPlatform,
         enabled: true,
-        crestUrl: crestUrl || null,
+        // Keep a known crest when re-adding without one.
+        ...(crestUrl ? { crestUrl } : {}),
+        ...(platformChanged ? { lastMatchId: null, elo: DEFAULT_ELO } : {}),
       },
       create: {
         guildId,
         clubId,
         clubName,
         channelId: targetChannel,
-        platform,
+        platform: normalizedPlatform,
         enabled: true,
         crestUrl: crestUrl || null,
-        elo: 1200,
+        elo: await this.getClubElo(guildId, clubId),
       },
     });
+  }
+
+  /** "Default" channel for tracked clubs: the guild's live results channel, else its default channel. */
+  private async getDefaultResultsChannelId(guildId: string): Promise<string | null> {
+    const guild = await this.prisma.guild.findUnique({
+      where: { id: guildId },
+      select: { defaultLiveResultsChannelId: true, defaultChannelId: true },
+    });
+    return guild?.defaultLiveResultsChannelId || guild?.defaultChannelId || null;
   }
 
   async removeTrackedClub(guildId: string, clubId: string) {
@@ -673,49 +948,115 @@ export class EaService {
     });
   }
 
-  async updateTrackedClub(guildId: string, clubId: string, data: { enabled?: boolean; channelId?: string | null; platform?: string; clubName?: string }) {
-    return this.prisma.trackedClub.updateMany({
+  async updateTrackedClub(
+    guildId: string,
+    clubId: string,
+    body: { enabled?: boolean; channelId?: string | null; platform?: string; clubName?: string },
+  ) {
+    // Whitelist: the request body used to be passed to Prisma as-is, which let
+    // a caller rewrite elo, lastMatchId or even guildId.
+    const data: { enabled?: boolean; channelId?: string | null; platform?: string; clubName?: string; lastMatchId?: null; elo?: number } = {};
+    if (body.enabled !== undefined) data.enabled = Boolean(body.enabled);
+    // "Default" resolves to the guild's results channel: a tracked club without
+    // a channel is never polled.
+    if (body.channelId !== undefined) {
+      data.channelId = normalizeChannelId(body.channelId) ?? (await this.getDefaultResultsChannelId(guildId));
+    }
+    if (body.clubName) data.clubName = String(body.clubName);
+
+    const existing = await this.prisma.trackedClub.findUnique({
+      where: { guildId_clubId: { guildId, clubId } },
+    });
+    if (body.platform) {
+      data.platform = normalizeEaPlatform(body.platform);
+      if (existing && existing.platform !== data.platform) {
+        data.lastMatchId = null; // new feed: start from a fresh checkpoint
+        data.elo = DEFAULT_ELO;
+      }
+    }
+
+    const result = await this.prisma.trackedClub.updateMany({
       where: { guildId, clubId },
       data,
     });
-  }
 
-  async getClubStats(guildId: string, clubNameOrId?: string) {
-    let clubId = clubNameOrId?.trim();
-    let trackedClub = null;
-
-    if (clubId) {
-      trackedClub = await this.prisma.trackedClub.findFirst({
-        where: {
-          guildId,
-          OR: [
-            { clubId },
-            { clubName: { contains: clubId, mode: 'insensitive' } },
-          ],
+    // Channel/enabled of the primary club live on ClubTrackerConfig; keep both in sync.
+    const config = await this.prisma.clubTrackerConfig.findUnique({ where: { guildId } });
+    if (
+      config &&
+      config.clubId === clubId &&
+      config.platform === (data.platform ?? existing?.platform ?? config.platform) &&
+      (data.enabled !== undefined || data.channelId !== undefined)
+    ) {
+      await this.prisma.clubTrackerConfig.update({
+        where: { guildId },
+        data: {
+          ...(data.enabled !== undefined ? { enabled: data.enabled } : {}),
+          ...(data.channelId !== undefined ? { channelId: data.channelId } : {}),
         },
       });
+      return { count: Math.max(result.count, 1) };
+    }
+    return result;
+  }
+
+  /**
+   * Record, goals and top scorers of one club from the matches stored for this
+   * guild. With exact=true, clubNameOrId must be the club ID of the primary or
+   * a tracked club (returns null otherwise); without it a partial name is
+   * accepted and the first tracked club is used as a fallback (/team_stats).
+   */
+  async getClubStats(guildId: string, clubNameOrId?: string, options: { exact?: boolean } = {}) {
+    const query = clubNameOrId?.trim();
+    const config = await this.prisma.clubTrackerConfig.findUnique({ where: { guildId } });
+    let trackedClub: { clubId: string; clubName: string; elo: number } | null = null;
+
+    if (query) {
+      trackedClub = await this.prisma.trackedClub.findFirst({
+        where: options.exact
+          ? { guildId, clubId: query }
+          : {
+              guildId,
+              OR: [{ clubId: query }, { clubName: { contains: query, mode: 'insensitive' } }],
+            },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!trackedClub && config) {
+        const matchesPrimary = options.exact
+          ? config.clubId === query
+          : config.clubId === query || config.clubName.toLowerCase().includes(query.toLowerCase());
+        if (matchesPrimary) trackedClub = config;
+      }
+      if (!trackedClub && options.exact) return null;
     }
 
     if (!trackedClub) {
-      trackedClub = await this.prisma.trackedClub.findFirst({
-        where: { guildId, enabled: true },
-        orderBy: { createdAt: 'asc' },
-      });
+      trackedClub =
+        config ??
+        (await this.prisma.trackedClub.findFirst({
+          where: { guildId, enabled: true },
+          orderBy: { createdAt: 'asc' },
+        }));
     }
 
-    const defaultCfg = await this.getOrCreateTrackerConfig(guildId);
-    const targetClubId = trackedClub ? trackedClub.clubId : defaultCfg.clubId;
-    const targetClubName = trackedClub ? trackedClub.clubName : defaultCfg.clubName;
-    const elo = trackedClub ? trackedClub.elo : 1200;
+    const targetClubId = trackedClub?.clubId ?? '128199';
+    const targetClubName = trackedClub?.clubName ?? 'RYVL Esports';
+    const elo = await this.getClubElo(guildId, targetClubId);
 
-    // Fetch processed matches for this club
+    // Rows store the tracked club in home* and its opponent in away*.
     const matches = await this.prisma.processedEaMatch.findMany({
-      where: {
-        guildId,
-        clubId: targetClubId,
-      },
+      where: { guildId, clubId: targetClubId },
       orderBy: { timestamp: 'desc' },
       take: 50,
+      select: {
+        eaMatchId: true,
+        matchType: true,
+        homeClubName: true,
+        awayClubName: true,
+        homeScore: true,
+        awayScore: true,
+        timestamp: true,
+      },
     });
 
     let wins = 0;
@@ -726,9 +1067,8 @@ export class EaService {
     let cleanSheets = 0;
 
     for (const m of matches) {
-      const isHome = m.homeClubName.toLowerCase().includes(targetClubName.toLowerCase());
-      const teamScore = isHome ? m.homeScore : m.awayScore;
-      const oppScore = isHome ? m.awayScore : m.homeScore;
+      const teamScore = m.homeScore;
+      const oppScore = m.awayScore;
 
       goalsFor += teamScore;
       goalsAgainst += oppScore;
@@ -742,6 +1082,7 @@ export class EaService {
     // Top scorers from eaPlayerMatchStat for this club
     const playerStats = await this.prisma.eaPlayerMatchStat.findMany({
       where: { clubId: targetClubId },
+      select: { playerProName: true, goals: true, assists: true },
     });
 
     const goalsByPlayer = new Map<string, { name: string; goals: number; assists: number; matches: number }>();
@@ -761,7 +1102,9 @@ export class EaService {
       clubId: targetClubId,
       clubName: targetClubName,
       elo,
+      // Record and goals cover the most recent `totalMatches` stored matches (max 50).
       totalMatches: matches.length,
+      matchWindow: 50,
       wins,
       draws,
       losses,
@@ -773,6 +1116,20 @@ export class EaService {
       topScorers,
       recentMatches: matches.slice(0, 5),
     };
+  }
+
+  /**
+   * Discord ↔ EA gamertag links of a guild, for other features (e.g. lineups).
+   * Served at GET api/guilds/:guildId/ea/registrations.
+   */
+  async getRegistrationsForGuild(
+    guildId: string,
+  ): Promise<{ discordUserId: string; eaPlayerName: string; preferredPos: string | null }[]> {
+    return this.prisma.registeredDiscordPlayer.findMany({
+      where: { guildId },
+      orderBy: { eaPlayerName: 'asc' },
+      select: { discordUserId: true, eaPlayerName: true, preferredPos: true },
+    });
   }
 
   async getRegisteredPlayers(guildId: string) {

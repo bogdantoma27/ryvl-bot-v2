@@ -404,7 +404,7 @@ export class ApiService {
   updateTrackedClub(
     guildId: string,
     clubId: string,
-    data: { clubName?: string; platform?: string; channelId?: string; enabled?: boolean },
+    data: { clubName?: string; platform?: string; channelId?: string | null; enabled?: boolean },
   ): Promise<any> {
     return firstValueFrom(
       this.http.patch<any>(
@@ -801,7 +801,7 @@ export class ApiService {
 
   getPlayerStats(guildId: string, identifier: string): Promise<any> {
     return firstValueFrom(
-      this.http.get<any>(`${this.baseUrl}/api/guilds/${guildId}/ea/players/${identifier}/stats`, {
+      this.http.get<any>(`${this.baseUrl}/api/guilds/${guildId}/ea/players/${encodeURIComponent(identifier)}/stats`, {
         headers: this.headers(),
       }),
     );

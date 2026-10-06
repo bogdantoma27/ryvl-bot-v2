@@ -392,8 +392,10 @@ export interface PlayerRegistrationAudit {
   guildId: string;
   discordUserId: string;
   eaPlayerName: string;
-  action: string;
-  performedBy: string;
+  action: string; // LINK | UNLINK
+  performedById: string;
+  /** @deprecated not sent by the server; use performedById. */
+  performedBy?: string;
   reason?: string | null;
   createdAt: string;
 }
