@@ -11,7 +11,8 @@ import { UpperCasePipe, CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
-import { GuildSettings, RyvlCompetition } from '../../core/models';
+import { RyvlCompetition, WebsiteSubmissionItem } from '../../core/models';
+import { EditableSettings, changedSettings } from './settings-diff';
 
 const TIMEZONES = [
   'Europe/Bucharest',
@@ -126,6 +127,50 @@ const TIMEZONES = [
                 }
               </select>
               <p class="text-[11px] text-slate-400 mt-1">Target channel for match event sign-ups and reminders.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Superliga announcement channels (fixtures + standings have no slash command) -->
+        <div class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-5">
+          <div class="border-b border-slate-700/50 pb-3">
+            <h2 class="text-base font-bold text-white">Superliga Announcement Channels</h2>
+            <p class="text-xs text-slate-400">
+              Where the bot posts the daily Superliga fixtures and the weekly standings table. Leave empty to turn a post off.
+            </p>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label for="defaultFixturesChannelId" class="block text-xs font-semibold text-slate-300 mb-1">Fixtures Channel</label>
+              <select
+                id="defaultFixturesChannelId"
+                [ngModel]="defaultFixturesChannelId()"
+                (ngModelChange)="defaultFixturesChannelId.set($event)"
+                name="defaultFixturesChannelId"
+                class="w-full bg-[#1a1a2e] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#5865F2] transition"
+              >
+                <option value="">None (disabled)</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+              <p class="text-[11px] text-slate-400 mt-1">Today's Superliga schedule, posted each morning.</p>
+            </div>
+            <div>
+              <label for="defaultStandingsChannelId" class="block text-xs font-semibold text-slate-300 mb-1">Standings Channel</label>
+              <select
+                id="defaultStandingsChannelId"
+                [ngModel]="defaultStandingsChannelId()"
+                (ngModelChange)="defaultStandingsChannelId.set($event)"
+                name="defaultStandingsChannelId"
+                class="w-full bg-[#1a1a2e] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#5865F2] transition"
+              >
+                <option value="">None (disabled)</option>
+                @for (ch of channels(); track ch.id) {
+                  <option [value]="ch.id"># {{ ch.name }}</option>
+                }
+              </select>
+              <p class="text-[11px] text-slate-400 mt-1">The league table, posted on Sundays.</p>
             </div>
           </div>
         </div>
@@ -352,6 +397,56 @@ const TIMEZONES = [
           </button>
         </div>
       </form>
+
+      <!-- Website forms: every contact / trial submission is stored, even if the Discord post failed -->
+      <section class="p-6 rounded-xl bg-[#16213e] border border-slate-700/60 shadow space-y-4" aria-labelledby="website-forms-heading">
+        <div class="flex items-center justify-between gap-3 border-b border-slate-700/50 pb-3 flex-wrap">
+          <div>
+            <h2 id="website-forms-heading" class="text-base font-bold text-white">Website Forms</h2>
+            <p class="text-xs text-slate-400">The 50 most recent contact messages and trial applications sent from the public website.</p>
+          </div>
+          <button
+            type="button"
+            (click)="loadSubmissions()"
+            [disabled]="submissionsLoading()"
+            class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 text-xs font-semibold transition cursor-pointer"
+          >
+            {{ submissionsLoading() ? 'Loading…' : 'Refresh' }}
+          </button>
+        </div>
+
+        @if (submissionsError()) {
+          <p class="text-xs text-rose-300">{{ submissionsError() }}</p>
+        } @else if (!submissionsLoading() && submissions().length === 0) {
+          <p class="text-xs text-slate-400">No website submissions yet.</p>
+        } @else {
+          <ul class="space-y-3">
+            @for (item of submissions(); track item.id) {
+              <li class="p-4 rounded-lg bg-[#1a1a2e] border border-slate-700/70 space-y-2">
+                <div class="flex items-center justify-between gap-2 flex-wrap">
+                  <span class="text-xs font-bold text-white">
+                    {{ item.kind === 'recruitment' ? 'Trial application' : 'Contact message' }}
+                  </span>
+                  <span class="flex items-center gap-2 text-[11px] text-slate-400">
+                    <time [attr.datetime]="item.createdAt">{{ item.createdAt | date: 'medium' }}</time>
+                    @if (item.delivered) {
+                      <span class="px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Posted to Discord</span>
+                    } @else {
+                      <span class="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20">Not posted</span>
+                    }
+                  </span>
+                </div>
+                <dl class="grid grid-cols-1 sm:grid-cols-[8rem_1fr] gap-x-3 gap-y-1 text-xs">
+                  @for (field of submissionSummary(item); track field[0]) {
+                    <dt class="text-slate-400">{{ field[0] }}</dt>
+                    <dd class="text-slate-200 whitespace-pre-wrap break-words">{{ field[1] }}</dd>
+                  }
+                </dl>
+              </li>
+            }
+          </ul>
+        }
+      </section>
     </div>
   `,
   styles: ``,
@@ -387,6 +482,9 @@ export class SettingsComponent implements OnInit {
     return (g.name || '').toLowerCase().includes('ryvl');
   });
   readonly competitions = signal<RyvlCompetition[]>([]);
+  readonly submissions = signal<WebsiteSubmissionItem[]>([]);
+  readonly submissionsLoading = signal<boolean>(false);
+  readonly submissionsError = signal<string | null>(null);
 
   readonly botStatus = signal<'online' | 'offline' | 'idle'>('online');
 
@@ -412,11 +510,9 @@ export class SettingsComponent implements OnInit {
         if (active.defaultTimezone) {
           this.timezone.set(active.defaultTimezone);
         }
-        if (active.settings?.defaultChannelId) {
-          this.defaultChannelId.set(active.settings.defaultChannelId);
-        } else if (active.channels.length > 0 && !this.defaultChannelId()) {
-          this.defaultChannelId.set(active.channels[0].id);
-        }
+        // Never pre-select a channel: an unset default must stay unset until an admin
+        // picks one, or saving would silently start using the first channel.
+        this.defaultChannelId.set(active.settings?.defaultChannelId || '');
 
         const lineupCh =
           active.settings?.defaultLineupChannelId ||
@@ -485,11 +581,13 @@ export class SettingsComponent implements OnInit {
         this.ryvlTeamName.set(teamName);
 
         this.botStatus.set(active.settings?.botActive ? 'online' : 'offline');
+        this.captureLoaded();
 
         if (active.id && active.id !== this.lastLoadedSettingsGuildId) {
           this.lastLoadedSettingsGuildId = active.id;
           void this.loadSettings(active.id);
           void this.loadCompetitions(active.id);
+          void this.loadSubmissions(active.id);
         }
       }
     });
@@ -503,7 +601,58 @@ export class SettingsComponent implements OnInit {
       this.lastLoadedSettingsGuildId = gid;
       this.loadSettings(gid);
       this.loadCompetitions(gid);
+      this.loadSubmissions(gid);
     }
+  }
+
+  /** Values as last loaded from the server; saving sends only what differs from these. */
+  private loaded: EditableSettings = {};
+
+  private currentValues(): EditableSettings {
+    return {
+      timezone: this.timezone(),
+      defaultChannelId: this.defaultChannelId(),
+      defaultLineupChannelId: this.defaultLineupChannelId(),
+      defaultTransfersChannelId: this.defaultTransfersChannelId(),
+      defaultFixturesChannelId: this.defaultFixturesChannelId(),
+      defaultStandingsChannelId: this.defaultStandingsChannelId(),
+      defaultLiveResultsChannelId: this.defaultLiveResultsChannelId(),
+      defaultRyvlResultsChannelId: this.defaultRyvlResultsChannelId(),
+      defaultRyvlFixturesChannelId: this.defaultRyvlFixturesChannelId(),
+      defaultRyvlLeaderboardChannelId: this.defaultRyvlLeaderboardChannelId(),
+      defaultContactChannelId: this.defaultContactChannelId(),
+      defaultRecruitmentChannelId: this.defaultRecruitmentChannelId(),
+      ryvlTeamName: this.ryvlTeamName(),
+    };
+  }
+
+  private captureLoaded(): void {
+    this.loaded = this.currentValues();
+  }
+
+  async loadSubmissions(guildId?: string): Promise<void> {
+    const gid = guildId || this.guildStore.activeGuildId();
+    if (!gid) return;
+    this.submissionsLoading.set(true);
+    this.submissionsError.set(null);
+    try {
+      this.submissions.set(await this.api.getWebsiteSubmissions(gid, 50));
+    } catch {
+      this.submissionsError.set('Website form submissions could not be loaded.');
+    } finally {
+      this.submissionsLoading.set(false);
+    }
+  }
+
+  submissionSummary(item: WebsiteSubmissionItem): Array<[string, string]> {
+    const labels: Record<string, string> = {
+      name: 'Name', contact: 'Contact', topic: 'Topic', message: 'Message',
+      gamertag: 'Gamertag', discordTag: 'Discord', primaryPosition: 'Position',
+      secondaryPosition: 'Secondary', platform: 'Platform', age: 'Age', experience: 'Experience',
+    };
+    return Object.entries(item.payload || {})
+      .filter(([, value]) => value !== null && value !== '')
+      .map(([key, value]) => [labels[key] || key, String(value)]);
   }
 
   async loadSettings(guildId: string): Promise<void> {
@@ -525,6 +674,7 @@ export class SettingsComponent implements OnInit {
       this.defaultRecruitmentChannelId.set(s.defaultRecruitmentChannelId || '');
       this.ryvlTeamName.set(s.ryvlTeamName || '');
       if (s.botStatus) this.botStatus.set(s.botStatus);
+      this.captureLoaded();
     } catch {
       // Keep loaded bootstrap values as fallback
     }
@@ -570,43 +720,28 @@ export class SettingsComponent implements OnInit {
     this.successMessage.set(null);
     this.errorMessage.set(null);
 
-    const payload: Partial<GuildSettings> = {
-      timezone: this.timezone(),
-      defaultChannelId: this.defaultChannelId() || null,
-      defaultLineupChannelId: this.defaultLineupChannelId() || null,
-      defaultTransfersChannelId: this.defaultTransfersChannelId() || null,
-      defaultFixturesChannelId: this.defaultFixturesChannelId() || null,
-      defaultStandingsChannelId: this.defaultStandingsChannelId() || null,
-      defaultLiveResultsChannelId: this.defaultLiveResultsChannelId() || null,
-      defaultRyvlResultsChannelId: this.defaultRyvlResultsChannelId() || null,
-      defaultRyvlFixturesChannelId: this.defaultRyvlFixturesChannelId() || null,
-      defaultRyvlLeaderboardChannelId: this.defaultRyvlLeaderboardChannelId() || null,
-      defaultContactChannelId: this.defaultContactChannelId() || null,
-      defaultRecruitmentChannelId: this.defaultRecruitmentChannelId() || null,
-      ...(this.isRyvlGuild() && this.ryvlTeamName() ? { ryvlTeamName: this.ryvlTeamName() } : {}),
-    };
+    const patch = changedSettings(this.loaded, this.currentValues());
+    // The club name is only editable on the RYVL server and can't be blanked.
+    if (!this.isRyvlGuild() || !patch.ryvlTeamName) delete patch.ryvlTeamName;
+
+    if (Object.keys(patch).length === 0) {
+      this.successMessage.set('No changes to save.');
+      this.isSaving.set(false);
+      return;
+    }
 
     try {
-      await this.api.updateSettings(guildId, payload);
+      const saved = await this.api.updateSettings(guildId, patch);
       this.guildStore.updateActiveGuildSettings({
-        timezone: this.timezone(),
-        defaultChannelId: this.defaultChannelId() || null,
-        defaultLineupChannelId: this.defaultLineupChannelId() || null,
-        defaultTransfersChannelId: this.defaultTransfersChannelId() || null,
-        defaultFixturesChannelId: this.defaultFixturesChannelId() || null,
-        defaultStandingsChannelId: this.defaultStandingsChannelId() || null,
-        defaultLiveResultsChannelId: this.defaultLiveResultsChannelId() || null,
-        defaultRyvlResultsChannelId: this.defaultRyvlResultsChannelId() || null,
-        defaultRyvlFixturesChannelId: this.defaultRyvlFixturesChannelId() || null,
-        defaultRyvlLeaderboardChannelId: this.defaultRyvlLeaderboardChannelId() || null,
-        defaultContactChannelId: this.defaultContactChannelId() || null,
-        defaultRecruitmentChannelId: this.defaultRecruitmentChannelId() || null,
-        ryvlTeamName: this.ryvlTeamName() || 'RYVL Esports',
-      });
+        ...patch,
+        ...(saved?.ryvlTeamName ? { ryvlTeamName: saved.ryvlTeamName } : {}),
+      } as Parameters<GuildStore['updateActiveGuildSettings']>[0]);
+      this.captureLoaded();
       this.successMessage.set('Settings saved successfully!');
     } catch (err: unknown) {
-      console.warn('API updateSettings fallback:', err);
-      this.successMessage.set('Settings updated (offline session)');
+      const message =
+        (err as { error?: { message?: string | string[] } })?.error?.message ?? 'Settings could not be saved.';
+      this.errorMessage.set(Array.isArray(message) ? message.join(' ') : message);
     } finally {
       this.isSaving.set(false);
     }

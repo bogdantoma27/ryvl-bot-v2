@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { Guild, PermissionFlagsBits } from 'discord.js';
 import { Guild as PrismaGuild } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -10,6 +10,36 @@ export interface UserGuildItem {
   iconUrl: string | null;
   botPresent: boolean;
   hasAdminPermission: boolean;
+}
+
+export const GUILD_CHANNEL_SETTING_KEYS = [
+  'defaultChannelId',
+  'defaultLineupChannelId',
+  'defaultTransfersChannelId',
+  'defaultFixturesChannelId',
+  'defaultStandingsChannelId',
+  'defaultLiveResultsChannelId',
+  'defaultRyvlResultsChannelId',
+  'defaultRyvlFixturesChannelId',
+  'defaultRyvlLeaderboardChannelId',
+  'defaultContactChannelId',
+  'defaultRecruitmentChannelId',
+] as const;
+
+export type GuildChannelSettingKey = (typeof GUILD_CHANNEL_SETTING_KEYS)[number];
+
+export type GuildSettingsPatch = Partial<Record<GuildChannelSettingKey, string | null>> & {
+  timezone?: string;
+  ryvlTeamName?: string;
+};
+
+export function isValidTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export interface GuildBootstrapData {
@@ -166,89 +196,52 @@ export class GuildsService {
     };
   }
 
-  async updateSettings(
-    guildId: string,
-    data: {
-      name?: string;
-      timezone?: string;
-      defaultChannelId?: string | null;
-      defaultLineupChannelId?: string | null;
-      defaultTransfersChannelId?: string | null;
-      defaultFixturesChannelId?: string | null;
-      defaultStandingsChannelId?: string | null;
-      defaultLiveResultsChannelId?: string | null;
-      defaultRyvlResultsChannelId?: string | null;
-      defaultRyvlFixturesChannelId?: string | null;
-      defaultRyvlLeaderboardChannelId?: string | null;
-      defaultContactChannelId?: string | null;
-      defaultRecruitmentChannelId?: string | null;
-      ryvlTeamName?: string;
-    },
-  ): Promise<any> {
-    const guild = await this.prisma.guild.upsert({
-      where: { id: guildId },
-      update: {
-        ...(data.name ? { name: data.name } : {}),
-        ...(data.timezone ? { timezone: data.timezone } : {}),
-        ...(data.defaultChannelId !== undefined ? { defaultChannelId: data.defaultChannelId } : {}),
-        ...(data.defaultLineupChannelId !== undefined ? { defaultLineupChannelId: data.defaultLineupChannelId } : {}),
-        ...(data.defaultTransfersChannelId !== undefined ? { defaultTransfersChannelId: data.defaultTransfersChannelId } : {}),
-        ...(data.defaultFixturesChannelId !== undefined ? { defaultFixturesChannelId: data.defaultFixturesChannelId } : {}),
-        ...(data.defaultStandingsChannelId !== undefined ? { defaultStandingsChannelId: data.defaultStandingsChannelId } : {}),
-        ...(data.defaultLiveResultsChannelId !== undefined ? { defaultLiveResultsChannelId: data.defaultLiveResultsChannelId } : {}),
-        ...(data.defaultRyvlResultsChannelId !== undefined ? { defaultRyvlResultsChannelId: data.defaultRyvlResultsChannelId } : {}),
-        ...(data.defaultRyvlFixturesChannelId !== undefined ? { defaultRyvlFixturesChannelId: data.defaultRyvlFixturesChannelId } : {}),
-        ...(data.defaultRyvlLeaderboardChannelId !== undefined ? { defaultRyvlLeaderboardChannelId: data.defaultRyvlLeaderboardChannelId } : {}),
-        ...(data.defaultContactChannelId !== undefined ? { defaultContactChannelId: data.defaultContactChannelId } : {}),
-        ...(data.defaultRecruitmentChannelId !== undefined ? { defaultRecruitmentChannelId: data.defaultRecruitmentChannelId } : {}),
-        ...(data.ryvlTeamName !== undefined ? { ryvlTeamName: data.ryvlTeamName } : {}),
-      },
-      create: {
-        id: guildId,
-        name: data.name || 'Discord Server',
-        timezone: data.timezone || 'Europe/Bucharest',
-        defaultChannelId: data.defaultChannelId || null,
-        defaultLineupChannelId: data.defaultLineupChannelId || null,
-        defaultTransfersChannelId: data.defaultTransfersChannelId || null,
-        defaultFixturesChannelId: data.defaultFixturesChannelId || null,
-        defaultStandingsChannelId: data.defaultStandingsChannelId || null,
-        defaultLiveResultsChannelId: data.defaultLiveResultsChannelId || null,
-        defaultRyvlResultsChannelId: data.defaultRyvlResultsChannelId || null,
-        defaultRyvlFixturesChannelId: data.defaultRyvlFixturesChannelId || null,
-        defaultRyvlLeaderboardChannelId: data.defaultRyvlLeaderboardChannelId || null,
-        defaultContactChannelId: data.defaultContactChannelId || null,
-        defaultRecruitmentChannelId: data.defaultRecruitmentChannelId || null,
-        ryvlTeamName: data.ryvlTeamName || 'RYVL Esports',
-      },
-    });
+  /**
+   * Partial update: only keys present in the body change. A channel key set to null or ''
+   * clears that setting; any other value must be a text channel of this guild.
+   */
+  async updateSettings(guildId: string, data: GuildSettingsPatch): Promise<any> {
+    const patch = await this.validateSettingsPatch(guildId, data || {});
+    await this.getGuild(guildId);
+    await this.prisma.guild.update({ where: { id: guildId }, data: patch });
 
-    // If defaultTransfersChannelId is updated, synchronize vpgTransferConfig
-    if (data.defaultTransfersChannelId !== undefined) {
+    // The transfers poller reads its own config row: keep its channel in step, but never
+    // create an enabled tracker as a side effect of choosing a channel here.
+    if (patch.defaultTransfersChannelId !== undefined) {
       await this.prisma.vpgTransferConfig.upsert({
         where: { guildId },
-        update: { channelId: data.defaultTransfersChannelId },
-        create: {
-          guildId,
-          channelId: data.defaultTransfersChannelId,
-          enabled: true,
-        },
+        update: { channelId: patch.defaultTransfersChannelId },
+        create: { guildId, channelId: patch.defaultTransfersChannelId, enabled: false },
       });
     }
 
-    const clientGuild = this.discordService.client.guilds.cache.get(guildId);
-    return {
-      guildId: guild.id,
-      name: clientGuild?.name || guild.name,
-      iconUrl: clientGuild?.iconURL({ extension: 'png', size: 256 }) || guild.iconUrl,
-      timezone: guild.timezone,
-      defaultChannelId: guild.defaultChannelId,
-      defaultLineupChannelId: guild.defaultLineupChannelId,
-      defaultTransfersChannelId: guild.defaultTransfersChannelId,
-      defaultFixturesChannelId: guild.defaultFixturesChannelId,
-      defaultStandingsChannelId: guild.defaultStandingsChannelId,
-      defaultLiveResultsChannelId: guild.defaultLiveResultsChannelId,
-      botStatus: 'online',
-    };
+    return this.getSettings(guildId);
+  }
+
+  async validateSettingsPatch(guildId: string, data: GuildSettingsPatch): Promise<Partial<Record<keyof GuildSettingsPatch, any>>> {
+    const patch: Partial<Record<keyof GuildSettingsPatch, any>> = {};
+    if (data.timezone !== undefined) {
+      if (typeof data.timezone !== 'string' || !isValidTimeZone(data.timezone)) {
+        throw new BadRequestException('Unknown timezone');
+      }
+      patch.timezone = data.timezone;
+    }
+    if (data.ryvlTeamName !== undefined) {
+      const name = typeof data.ryvlTeamName === 'string' ? data.ryvlTeamName.trim() : '';
+      if (!name || name.length > 100) throw new BadRequestException('Club name must be 1-100 characters');
+      patch.ryvlTeamName = name;
+    }
+    for (const key of GUILD_CHANNEL_SETTING_KEYS) {
+      const value = data[key];
+      if (value === undefined) continue;
+      if (value === null || value === '') {
+        patch[key] = null;
+        continue;
+      }
+      await this.discordService.assertChannelInGuild(guildId, value);
+      patch[key] = value;
+    }
+    return patch;
   }
 
   async listUserGuilds(userId: string): Promise<UserGuildItem[]> {
