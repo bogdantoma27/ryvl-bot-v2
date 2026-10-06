@@ -935,21 +935,9 @@ export class ApiService {
     );
   }
 
-  addTournamentSignup(
-    guildId: string,
-    tournamentId: string,
-    body: { userId: string; displayName: string; gamertag: string; pos1: string; pos2?: string; notes?: string },
-  ): Promise<any> {
+  removeTournamentSignup(guildId: string, tournamentId: string, userId: string): Promise<TournamentInstance> {
     return firstValueFrom(
-      this.http.post<any>(`${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/signups`, body, {
-        headers: this.headers(),
-      }),
-    );
-  }
-
-  removeTournamentSignup(guildId: string, tournamentId: string, userId: string): Promise<any> {
-    return firstValueFrom(
-      this.http.delete<any>(`${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/signups/${userId}`, {
+      this.http.delete<TournamentInstance>(`${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/signups/${userId}`, {
         headers: this.headers(),
       }),
     );
@@ -958,22 +946,39 @@ export class ApiService {
   recordTournamentResult(
     guildId: string,
     tournamentId: string,
-    body: { homeTeam: string; awayTeam: string; homeScore: number; awayScore: number },
-  ): Promise<any> {
+    body: { matchId?: string; homeTeam?: string; awayTeam?: string; homeScore: number; awayScore: number },
+  ): Promise<{ tournament: TournamentInstance; completed: boolean }> {
     return firstValueFrom(
-      this.http.post<any>(`${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/results`, body, {
-        headers: this.headers(),
-      }),
+      this.http.post<{ tournament: TournamentInstance; completed: boolean }>(
+        `${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/results`,
+        body,
+        { headers: this.headers() },
+      ),
     );
   }
 
-  finalizeTournamentBracket(guildId: string, tournamentId: string): Promise<any> {
+  toggleTournamentSignups(guildId: string, tournamentId: string): Promise<TournamentInstance> {
+    return this.tournamentAction<TournamentInstance>(guildId, tournamentId, 'toggle-signups');
+  }
+
+  /** Closes signups and starts play: bracket + fixtures (standard) or the draft (draft). */
+  startTournament(guildId: string, tournamentId: string): Promise<{ tournament: TournamentInstance; message: string }> {
+    return this.tournamentAction(guildId, tournamentId, 'start');
+  }
+
+  autoDraftTournament(guildId: string, tournamentId: string): Promise<TournamentInstance> {
+    return this.tournamentAction<TournamentInstance>(guildId, tournamentId, 'draft/auto');
+  }
+
+  refreshTournamentDiscord(guildId: string, tournamentId: string): Promise<TournamentInstance> {
+    return this.tournamentAction<TournamentInstance>(guildId, tournamentId, 'refresh-discord');
+  }
+
+  private tournamentAction<T>(guildId: string, tournamentId: string, action: string): Promise<T> {
     return firstValueFrom(
-      this.http.post<any>(`${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/finalize-bracket`, {}, {
+      this.http.post<T>(`${this.baseUrl}/api/guilds/${guildId}/tournaments/${tournamentId}/${action}`, {}, {
         headers: this.headers(),
       }),
     );
   }
 }
-
-

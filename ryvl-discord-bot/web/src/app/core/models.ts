@@ -409,26 +409,90 @@ export interface TotwConfig {
   lastPostedAt?: string | null;
 }
 
+export type TournamentStatus = 'SIGNUPS_OPEN' | 'SIGNUPS_CLOSED' | 'DRAFTING' | 'ACTIVE' | 'COMPLETED';
+
+export interface TournamentSignup {
+  id: string;
+  userId: string;
+  displayName: string;
+  gamertag: string;
+  teamName?: string;
+  pos1?: string;
+  pos2?: string;
+  isManager?: boolean;
+  isBackup?: boolean;
+  notes?: string;
+  createdAt: string;
+}
+
+export interface TournamentTeam {
+  id: string;
+  name: string;
+  managerId?: string;
+  managerName?: string;
+  picks: Array<{ userId: string; displayName: string; gamertag?: string; position: string; isManager?: boolean }>;
+}
+
+export interface TournamentMatch {
+  id: string;
+  round?: number;
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  completed: boolean;
+  date?: string;
+}
+
+export interface TournamentStandingsRow {
+  rank: number;
+  team: string;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  goalDifference: number;
+  points: number;
+}
+
+export interface TournamentDraftState {
+  snakeOrder: number[];
+  currentTurn: number;
+  teamJokers: Record<number, number>;
+  currentLockedPosition?: string | null;
+  currentCandidate?: TournamentSignup | null;
+  picks: Array<{ teamIndex: number; teamName: string; userId: string; displayName: string; gamertag: string; position: string }>;
+  complete: boolean;
+}
+
+export interface TournamentChannels {
+  info: string | null;
+  announcements: string | null;
+  registration: string | null;
+  fixtures: string | null;
+  standings: string | null;
+  chat: string | null;
+  draft: string | null;
+}
+
 export interface TournamentInstance {
   id: string;
   guildId: string;
   name: string;
-  type?: 'STANDARD' | 'DRAFT';
-  status: 'DRAFT' | 'SIGNUPS' | 'ACTIVE' | 'COMPLETED';
+  type: 'STANDARD' | 'DRAFT';
+  status: TournamentStatus;
   formation: string;
-  numTeams: number;
-  categoryId?: string | null;
-  chatChannelId?: string | null;
-  resultsChannelId?: string | null;
-  standingsChannelId?: string | null;
-  rostersChannelId?: string | null;
-  signupChannelId?: string | null;
-  signupMessageId?: string | null;
+  categoryId: string | null;
+  channels: TournamentChannels;
   createdAt: string;
   updatedAt: string;
-  signups?: any[];
-  teams?: any[];
-  matches?: any[];
+  signups: TournamentSignup[];
+  teams: TournamentTeam[];
+  matches: TournamentMatch[];
+  standings: TournamentStandingsRow[];
+  draft: TournamentDraftState | null;
 }
 
 export interface SuperligaMvpMetric {

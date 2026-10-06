@@ -252,6 +252,16 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         )
         .addStringOption((opt) =>
           opt
+            .setName('type')
+            .setDescription('Tournament type (default: draft)')
+            .setRequired(false)
+            .addChoices(
+              { name: 'FC Draft Tournament (with wheel & draft)', value: 'draft' },
+              { name: 'Standard Club Tournament', value: 'standard' },
+            ),
+        )
+        .addStringOption((opt) =>
+          opt
             .setName('formation')
             .setDescription('Formation (3-5-2 or 3-1-4-2)')
             .setRequired(false)
@@ -291,6 +301,11 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     )
     .addSubcommand((sub) =>
       sub
+        .setName('start')
+        .setDescription('Close signups and start: bracket + fixtures (standard) or the draft (draft)'),
+    )
+    .addSubcommand((sub) =>
+      sub
         .setName('notify')
         .setDescription('Broadcast an announcement to the tournament announcements channel')
         .addStringOption((opt) =>
@@ -324,6 +339,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
   const createTournamentCommand = new SlashCommandBuilder()
     .setName('create_tournament')
     .setDescription('Create a tournament and auto-provision Discord category and channels')
+    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption((opt) =>
       opt.setName('name').setDescription('Tournament name').setRequired(true),
     )
@@ -346,9 +362,6 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
           { name: '3-5-2', value: '3-5-2' },
           { name: '3-1-4-2', value: '3-1-4-2' },
         ),
-    )
-    .addIntegerOption((opt) =>
-      opt.setName('max_teams').setDescription('Number of teams (e.g. 6, 8, 16)').setRequired(false),
     );
 
   const vpgTransfersCommand = new SlashCommandBuilder()

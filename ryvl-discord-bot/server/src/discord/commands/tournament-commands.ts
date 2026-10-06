@@ -3,14 +3,25 @@ import {
   ChatInputCommandInteraction,
   ButtonInteraction,
   ModalSubmitInteraction,
+  StringSelectMenuInteraction,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
+  StringSelectMenuBuilder,
   MessageFlags,
   EmbedBuilder,
+  PermissionFlagsBits,
 } from 'discord.js';
+import type { TournamentInstance } from '@prisma/client';
 import { TournamentService } from '../../tournaments/tournament.service';
+import { teamForUser } from '../../tournaments/tournament-logic';
+
+type AnyInteraction =
+  | ChatInputCommandInteraction
+  | ButtonInteraction
+  | ModalSubmitInteraction
+  | StringSelectMenuInteraction;
 
 @Injectable()
 export class TournamentCommands {
@@ -21,58 +32,125 @@ export class TournamentCommands {
     private readonly tournamentService: TournamentService,
   ) {}
 
+  // ----------------------------------------------------
+  // Helpers
+  // ----------------------------------------------------
+
+  /** Server admins (Administrator / Manage Server) or members of the tournament admin roles. */
+  private async isTournamentAdmin(interaction: AnyInteraction): Promise<boolean> {
+    const perms = interaction.memberPermissions;
+    if (perms?.has(PermissionFlagsBits.Administrator) || perms?.has(PermissionFlagsBits.ManageGuild)) {
+      return true;
+    }
+    if (!interaction.guildId) return false;
+    const config = await this.tournamentService.getOrCreateConfig(interaction.guildId);
+    if (!config.adminRoleIds?.length) return false;
+    const roles: any = interaction.member?.roles;
+    const memberRoleIds: string[] = Array.isArray(roles) ? roles : roles?.cache ? [...roles.cache.keys()] : [];
+    return config.adminRoleIds.some((id) => memberRoleIds.includes(id));
+  }
+
+  private async respond(interaction: AnyInteraction, content: string, ephemeral = true) {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply({ content, embeds: [], components: [] });
+    } else {
+      await interaction.reply({ content, ...(ephemeral ? { flags: MessageFlags.Ephemeral } : {}) });
+    }
+  }
+
+  private async requireAdmin(interaction: AnyInteraction): Promise<boolean> {
+    if (await this.isTournamentAdmin(interaction)) return true;
+    await this.respond(interaction, '⛔ Doar adminii turneului pot folosi această acțiune.');
+    return false;
+  }
+
+  private async fail(interaction: AnyInteraction, err: any, prefix = 'Eroare') {
+    const message = err?.response?.message || err?.message || String(err);
+    this.logger.warn(`${prefix}: ${message}`);
+    try {
+      await this.respond(interaction, `❌ ${prefix}: ${Array.isArray(message) ? message.join(', ') : message}`);
+    } catch {
+      // interaction already expired
+    }
+  }
+
+  private async activeTournament(interaction: AnyInteraction, type?: 'DRAFT' | 'STANDARD') {
+    const t = await this.tournamentService.findActiveTournament(interaction.guildId!, type);
+    if (!t) {
+      await this.respond(
+        interaction,
+        type === 'DRAFT' ? 'Nu există niciun turneu draft în acest server.' : 'Nu există niciun turneu în acest server.',
+      );
+    }
+    return t;
+  }
+
+  /** The manager on the clock (or an admin) may act on the draft wheel. */
+  private async canActOnDraft(interaction: AnyInteraction, t: TournamentInstance): Promise<boolean> {
+    const { team } = this.tournamentService.currentDraftTeam(t);
+    if (team?.managerId === interaction.user.id) return true;
+    if (await this.isTournamentAdmin(interaction)) return true;
+    await this.respond(
+      interaction,
+      `⛔ Este rândul echipei **${team?.name ?? '?'}**. Doar managerul ei${team?.managerId ? ` (<@${team.managerId}>)` : ''} sau un admin poate folosi roata.`,
+    );
+    return false;
+  }
+
+  private channelList(setup: { categoryId: string; channels: any }) {
+    const c = setup.channels || {};
+    return (
+      `• **Categorie**: <#${setup.categoryId}>\n` +
+      `• **Info & Regulament**: <#${c.info}>\n` +
+      `• **Anunțuri**: <#${c.announcements}>\n` +
+      `• **Înscrieri**: <#${c.registration}>\n` +
+      (c.draft ? `• **Draft Wheel**: <#${c.draft}>\n` : '') +
+      `• **Meciuri & Rezultate**: <#${c.fixtures}>\n` +
+      `• **Clasament**: <#${c.standings}>\n` +
+      `• **Chat**: <#${c.chat}>`
+    );
+  }
+
+  private async createAndProvision(
+    interaction: AnyInteraction,
+    data: { name: string; type: string; formation: string },
+  ) {
+    const tournament = await this.tournamentService.createTournament(interaction.guildId!, data);
+    const setup = await this.tournamentService.setupTournamentChannels(interaction.guildId!, tournament.id);
+    return new EmbedBuilder()
+      .setTitle(`🏆 Turneu creat: ${tournament.name}`)
+      .setColor(0x00d26a)
+      .setDescription(
+        `**Tip**: \`${tournament.type === 'DRAFT' ? 'FC Draft' : 'Standard'}\`` +
+          (tournament.type === 'DRAFT' ? ` • **Formație**: \`${tournament.formation}\`` : '') +
+          `\n\n**Canale**:\n${this.channelList(setup)}\n\n` +
+          (tournament.type === 'DRAFT'
+            ? 'Jucătorii se înscriu din canalul de înscrieri; cine completează numele echipei devine manager. Când sunt gata, apasă **Start Tournament / Draft**.'
+            : 'Căpitanii își înscriu echipele din canalul de înscrieri. Când sunt gata, apasă **Start Tournament / Draft** pentru tablou și meciuri.'),
+      )
+      .setFooter({ text: 'RYVL Esports Bot • Tournament Engine' });
+  }
+
+  // ----------------------------------------------------
+  // Slash commands
+  // ----------------------------------------------------
+
   async handleCreateTournament(interaction: ChatInputCommandInteraction): Promise<void> {
-    const guildId = interaction.guildId;
-    if (!guildId) {
-      await interaction.reply({
-        content: 'This command can only be run inside a Discord server.',
-        flags: MessageFlags.Ephemeral,
-      });
+    if (!interaction.guildId) {
+      await this.respond(interaction, 'This command can only be run inside a Discord server.');
       return;
     }
-
+    if (!(await this.requireAdmin(interaction))) return;
     await interaction.deferReply();
-    const name = interaction.options.getString('name', true);
-    const type = (interaction.options.getString('type') || 'standard').toUpperCase();
-    const formation = interaction.options.getString('formation') || '3-5-2';
-    const maxTeams = interaction.options.getInteger('max_teams') || 6;
-
     try {
-      const tournament = await this.tournamentService.createTournament(guildId, {
-        name,
-        type,
-        formation,
-        numTeams: maxTeams,
+      const embed = await this.createAndProvision(interaction, {
+        name: interaction.options.getString('name', true),
+        type: (interaction.options.getString('type') || 'standard').toUpperCase(),
+        formation: interaction.options.getString('formation') || '3-5-2',
       });
-      const setup = await this.tournamentService.setupTournamentChannels(guildId, tournament.id);
-
-      let channelsDesc =
-        `• **Category**: <#${setup.categoryId}>\n` +
-        `• **Rules & Info**: <#${setup.channels.info}>\n` +
-        `• **Announcements**: <#${setup.channels.announcements}>\n` +
-        `• **Registration Portal**: <#${setup.channels.registration}>\n` +
-        `• **Fixtures & Results**: <#${setup.channels.fixtures}>\n` +
-        `• **Standings Table**: <#${setup.channels.standings}>\n` +
-        `• **Chat Channel**: <#${setup.channels.chat}>`;
-
-      if (setup.channels.draft) {
-        channelsDesc += `\n• **Draft Wheel**: <#${setup.channels.draft}>`;
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle(`🏆 Tournament Created: ${name}`)
-        .setColor(0x00d26a)
-        .setDescription(
-          `**Type**: \`${type}\` • **Formation**: \`${formation}\` • **Teams**: \`${maxTeams}\`\n\n` +
-          `**Provisioned Channel Suite**:\n${channelsDesc}\n\n` +
-          `Participants and managers can now interact directly via buttons in the channels above.`,
-        )
-        .setFooter({ text: 'RYVL Esports Bot • Tournament Engine' });
-
       await interaction.editReply({ embeds: [embed] });
     } catch (err: any) {
-      this.logger.error(`Error creating tournament: ${err?.message || err}`);
-      await interaction.editReply(`❌ Failed to create tournament: ${err?.message || err}`);
+      await this.fail(interaction, err, 'Turneul nu a putut fi creat');
     }
   }
 
@@ -80,637 +158,602 @@ export class TournamentCommands {
     const subcommand = interaction.options.getSubcommand();
     const guildId = interaction.guildId;
     if (!guildId) {
-      await interaction.reply({
-        content: 'This command can only be run inside a Discord server.',
-        flags: MessageFlags.Ephemeral,
-      });
+      await this.respond(interaction, 'This command can only be run inside a Discord server.');
       return;
     }
 
-    if (subcommand === 'setup-admin') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
+    const adminOnly = [
+      'setup-admin',
+      'create',
+      'set-status',
+      'toggle-signups',
+      'start-draft',
+      'start',
+      'notify',
+      'generate-standings',
+    ];
+    if (adminOnly.includes(subcommand) && !(await this.requireAdmin(interaction))) return;
+
+    try {
+      if (subcommand === 'setup-admin') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         await this.tournamentService.postAdminPanel(guildId, interaction.channelId);
         await this.tournamentService.updateConfig(guildId, { adminChannelId: interaction.channelId });
-        await interaction.editReply('✅ Tournament Admin Control Panel has been initialized in this channel!');
-      } catch (err: any) {
-        this.logger.error(`Error posting admin panel: ${err?.message || err}`);
-        await interaction.editReply(`❌ Error posting admin panel: ${err?.message || err}`);
-      }
-    } else if (subcommand === 'create') {
-      await interaction.deferReply();
-      const name = interaction.options.getString('name', true);
-      const formation = interaction.options.getString('formation') || '3-5-2';
-
-      try {
-        const tournament = await this.tournamentService.createTournament(guildId, {
-          name,
-          type: 'DRAFT',
-          formation,
+        await interaction.editReply('✅ Panoul de administrare a turneelor a fost publicat în acest canal.');
+      } else if (subcommand === 'create') {
+        await interaction.deferReply();
+        const embed = await this.createAndProvision(interaction, {
+          name: interaction.options.getString('name', true),
+          type: (interaction.options.getString('type') || 'draft').toUpperCase(),
+          formation: interaction.options.getString('formation') || '3-5-2',
         });
-        const setup = await this.tournamentService.setupTournamentChannels(guildId, tournament.id);
-        await interaction.editReply(
-          `🏆 **Draft Tournament "${name}" Created Successfully!**\n\n` +
-          `• Category: <#${setup.categoryId}>\n` +
-          `• Info & Rules: <#${setup.channels.info}>\n` +
-          `• Registration: <#${setup.channels.registration}>\n` +
-          `• Draft Wheel: <#${setup.channels.draft || setup.channels.registration}>\n` +
-          `• Fixtures & Results: <#${setup.channels.fixtures}>\n` +
-          `• Standings: <#${setup.channels.standings}>\n` +
-          `• Tournament Chat: <#${setup.channels.chat}>`,
-        );
-      } catch (err: any) {
-        this.logger.error(`Error creating tournament: ${err?.message || err}`);
-        await interaction.editReply(`❌ Failed to create tournament: ${err?.message || err}`);
-      }
-    } else if (subcommand === 'spin') {
-      await interaction.deferReply();
-      try {
-        const tournaments = await this.tournamentService.listTournaments(guildId);
-        const activeDraft = tournaments.find((t) => t.type === 'DRAFT' && t.status !== 'COMPLETED');
-        if (!activeDraft) {
-          await interaction.editReply('No active draft tournament found in this server.');
-          return;
-        }
-
-        const draft: any = (activeDraft.draftState as any) || {};
-        if (draft.complete) {
-          await interaction.editReply('Draft is already complete!');
-          return;
-        }
-
-        const teams: any[] = (activeDraft.teamsData as any) || [];
-        const currentTeamIdx = draft.snakeOrder[draft.currentTurn] ?? 0;
-        const currentTeam = teams[currentTeamIdx] || { name: `Team ${currentTeamIdx + 1}` };
-
-        await interaction.editReply(
-          `🎰 **Active Draft Turn**: **${currentTeam.name}**\n` +
-          `Navigate to the <#${(activeDraft.discordChannels as any)?.draft || interaction.channelId}> channel and click **Spin Wheel** to select a position!`,
-        );
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error: ${err?.message || err}`);
-      }
-    } else if (subcommand === 'draft-status') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournaments = await this.tournamentService.listTournaments(guildId);
-        const activeDraft = tournaments.find((t) => t.type === 'DRAFT');
-        if (!activeDraft) {
-          await interaction.editReply('No draft tournament found in this server.');
-          return;
-        }
-
-        const draft: any = (activeDraft.draftState as any) || {};
-        const teams: any[] = (activeDraft.teamsData as any) || [];
-        const currentTeamIdx = draft.snakeOrder?.[draft.currentTurn] ?? 0;
-        const currentTeam = teams[currentTeamIdx] || { name: `Team ${currentTeamIdx + 1}` };
-        const roundNum = Math.min(10, Math.floor((draft.currentTurn || 0) / (teams.length || 6)) + 1);
-
-        const embed = new EmbedBuilder()
-          .setTitle(`🎡 Draft Status — ${activeDraft.name}`)
-          .setColor(draft.complete ? 0x5865f2 : 0xf1c40f)
-          .setDescription(
-            `Status: **${draft.complete ? 'COMPLETE' : 'IN PROGRESS'}**\n` +
-            `Round: **${roundNum} / 10** • Current Turn: **${currentTeam.name}**\n\n` +
-            `**Total Picks Made**: ${draft.picks?.length || 0} / ${(teams.length || 6) * 10}\n\n` +
-            teams
-              .map(
-                (t, idx) =>
-                  `• **${t.name}**: ${t.picks?.length || 0}/10 picks (${draft.teamJokers?.[idx] ?? 4} Jokers left)`,
-              )
-              .join('\n'),
-          )
-          .setFooter({ text: 'RYVL Esports Bot • Draft Engine' });
-
         await interaction.editReply({ embeds: [embed] });
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error: ${err?.message || err}`);
-      }
-    } else if (subcommand === 'status') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournaments = await this.tournamentService.listTournaments(guildId);
-        const active = tournaments[0];
-        if (!active) {
-          await interaction.editReply('No active tournaments found in this server.');
+      } else if (subcommand === 'spin') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const t = await this.activeTournament(interaction, 'DRAFT');
+        if (!t) return;
+        const draft = this.tournamentService.draft(t);
+        if (t.status !== 'DRAFTING' || draft.complete) {
+          await interaction.editReply(draft.complete ? 'Draftul s-a încheiat.' : 'Draftul nu a început încă.');
           return;
         }
-
-        const signups: any[] = (active.signupsData as any) || [];
-        const embed = new EmbedBuilder()
-          .setTitle(`📋 Signup Status — ${active.name}`)
-          .setColor(0x00d26a)
-          .setDescription(
-            `Total Registrations: **${signups.length}** / 66 spots\n` +
-            `Status: **${active.status}**\n\n` +
-            (signups.length > 0
-              ? signups.map((s, i) => `${i + 1}. <@${s.userId}> • \`${s.gamertag}\` (${s.pos1})`).join('\n')
-              : 'No signups yet.'),
-          );
-
-        await interaction.editReply({ embeds: [embed] });
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error fetching status: ${err?.message || err}`);
-      }
-    } else if (subcommand === 'set-status') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournaments = await this.tournamentService.listTournaments(guildId);
-        const active = tournaments[0];
-        if (!active) {
-          await interaction.editReply('No active tournament found in this server.');
-          return;
-        }
+        const { team } = this.tournamentService.currentDraftTeam(t);
+        const draftChannel = this.tournamentService.channels(t).draft;
+        await interaction.editReply(
+          `🎰 **La rând**: **${team?.name}**${team?.managerId ? ` (<@${team.managerId}>)` : ''}\n` +
+            `Mergi în ${draftChannel ? `<#${draftChannel}>` : 'canalul de draft'} și apasă **Spin Wheel**.`,
+        );
+      } else if (subcommand === 'draft-status') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const t = await this.activeTournament(interaction, 'DRAFT');
+        if (!t) return;
+        await interaction.editReply({ embeds: [this.draftStatusEmbed(t)] });
+      } else if (subcommand === 'status') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const t = await this.activeTournament(interaction);
+        if (!t) return;
+        await interaction.editReply({ embeds: [this.signupStatusEmbed(t)] });
+      } else if (subcommand === 'set-status') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const t = await this.activeTournament(interaction);
+        if (!t) return;
         const status = interaction.options.getString('status', true);
-        const updated = await this.tournamentService.updateTournamentStatus(active.id, status);
-        await interaction.editReply(`✅ Tournament **${updated.name}** status updated to \`${status}\`.`);
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error updating status: ${err?.message || err}`);
-      }
-    } else if (subcommand === 'toggle-signups') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournaments = await this.tournamentService.listTournaments(guildId);
-        const active = tournaments[0];
-        if (!active) {
-          await interaction.editReply('No active tournament found in this server.');
-          return;
-        }
-        const updated = await this.tournamentService.toggleSignups(active.id);
-        await interaction.editReply(`⚡ Tournament **${updated.name}** signups are now: \`${updated.status}\`.`);
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error toggling signups: ${err?.message || err}`);
-      }
-    } else if (subcommand === 'start-draft') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournaments = await this.tournamentService.listTournaments(guildId);
-        const activeDraft = tournaments.find((t) => t.type === 'DRAFT');
-        if (!activeDraft) {
-          await interaction.editReply('No draft tournament found in this server.');
-          return;
-        }
-        const updated = await this.tournamentService.updateTournamentStatus(activeDraft.id, 'DRAFTING');
-        const draftChannelId = (updated.discordChannels as any)?.draft;
-        if (draftChannelId) {
-          await this.tournamentService.postDraftWheelEmbed(draftChannelId, updated);
-        }
-        await interaction.editReply(`🎡 Draft phase has been initiated for **${updated.name}**! Check <#${draftChannelId || interaction.channelId}>.`);
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error starting draft: ${err?.message || err}`);
-      }
-    } else if (subcommand === 'notify') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournaments = await this.tournamentService.listTournaments(guildId);
-        const active = tournaments[0];
-        if (!active) {
-          await interaction.editReply('No active tournament found in this server.');
-          return;
-        }
-        const title = interaction.options.getString('title', true);
-        const message = interaction.options.getString('message', true);
-        await this.tournamentService.broadcastNotification(active.id, title, message, interaction.user.username);
-        await interaction.editReply(`📢 Announcement broadcasted to tournament channels!`);
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error broadcasting announcement: ${err?.message || err}`);
-      }
-    } else if (subcommand === 'generate-standings') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournaments = await this.tournamentService.listTournaments(guildId);
-        const active = tournaments[0];
-        const config = await this.tournamentService.getOrCreateConfig(guildId);
-        if (!active || !config.standingsChannelId) {
-          await interaction.editReply('No active tournament or standings channel configured.');
-          return;
-        }
-        await this.tournamentService.postStandingsAndRosters(
-          config.standingsChannelId,
-          config.rostersChannelId || config.standingsChannelId,
-          active,
+        const updated = await this.tournamentService.updateTournamentStatus(t.id, status, guildId);
+        await interaction.editReply(`✅ Statusul turneului **${updated.name}** este acum \`${updated.status}\`.`);
+      } else if (subcommand === 'toggle-signups') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const t = await this.activeTournament(interaction);
+        if (!t) return;
+        const updated = await this.tournamentService.toggleSignups(t.id, guildId);
+        await interaction.editReply(`⚡ Înscrierile pentru **${updated.name}** sunt acum \`${updated.status}\`.`);
+      } else if (subcommand === 'start-draft' || subcommand === 'start') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const t = await this.activeTournament(interaction, subcommand === 'start-draft' ? 'DRAFT' : undefined);
+        if (!t) return;
+        await interaction.editReply(await this.startMessage(t));
+      } else if (subcommand === 'notify') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const t = await this.activeTournament(interaction);
+        if (!t) return;
+        await this.tournamentService.broadcastNotification(
+          t.id,
+          interaction.options.getString('title', true),
+          interaction.options.getString('message', true),
+          interaction.user.username,
         );
-        await interaction.editReply('✅ Standings graphic generated and posted to standings channel!');
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error: ${err?.message || err}`);
+        await interaction.editReply('📢 Anunțul a fost publicat.');
+      } else if (subcommand === 'generate-standings') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const t = await this.activeTournament(interaction);
+        if (!t) return;
+        if (!this.tournamentService.channels(t).standings) {
+          await interaction.editReply('Turneul nu are canal de clasament. Folosește „Provision Discord Channels” din dashboard.');
+          return;
+        }
+        await this.tournamentService.postStandings(t);
+        await interaction.editReply('✅ Clasamentul a fost actualizat în canalul de clasament.');
       }
+    } catch (err: any) {
+      await this.fail(interaction, err);
     }
   }
+
+  private async startMessage(t: TournamentInstance): Promise<string> {
+    const res = await this.tournamentService.startTournament(t.id, t.guildId);
+    const channels = this.tournamentService.channels(res.tournament);
+    const where = t.type === 'DRAFT' ? channels.draft : channels.fixtures;
+    return `🚀 **${res.tournament.name}**: ${res.message}${where ? ` Vezi <#${where}>.` : ''}`;
+  }
+
+  private signupStatusEmbed(t: TournamentInstance) {
+    const signups = this.tournamentService.signups(t);
+    const isDraft = t.type === 'DRAFT';
+    const managers = signups.filter((s) => s.isManager);
+    const lines = signups.map(
+      (s, i) =>
+        `${i + 1}. <@${s.userId}> • \`${s.gamertag}\`` +
+        (isDraft ? ` (${s.pos1}${s.pos2 ? `/${s.pos2}` : ''})${s.isManager ? ` • 👔 ${s.teamName}` : ''}` : ` • **${s.teamName}**`),
+    );
+    let list = lines.join('\n') || 'Nimeni înscris încă.';
+    if (list.length > 3500) list = `${list.slice(0, 3500)}\n…`;
+    return new EmbedBuilder()
+      .setTitle(`📋 Înscrieri — ${t.name}`)
+      .setColor(0x00d26a)
+      .setDescription(
+        (isDraft
+          ? `Manageri: **${managers.length}** • Jucători: **${signups.length - managers.length}**\n`
+          : `Echipe înscrise: **${signups.length}** / 32\n`) +
+          `Status: **${t.status}**\n\n${list}`,
+      );
+  }
+
+  private draftStatusEmbed(t: TournamentInstance) {
+    const draft = this.tournamentService.draft(t);
+    const teams = this.tournamentService.teams(t);
+    if (teams.length === 0) {
+      return new EmbedBuilder()
+        .setTitle(`🎡 Draft — ${t.name}`)
+        .setColor(0x95a5a6)
+        .setDescription('Draftul nu a început încă.');
+    }
+    const { team } = this.tournamentService.currentDraftTeam(t);
+    return new EmbedBuilder()
+      .setTitle(`🎡 Draft — ${t.name}`)
+      .setColor(draft.complete ? 0x5865f2 : 0xf1c40f)
+      .setDescription(
+        `Status: **${draft.complete ? 'ÎNCHEIAT' : 'ÎN DESFĂȘURARE'}**` +
+          (draft.complete ? '' : ` • La rând: **${team?.name}**`) +
+          `\nAlegeri: **${draft.picks.length} / ${draft.snakeOrder.length}**\n\n` +
+          teams
+            .map((tm, idx) => `• **${tm.name}**: ${tm.picks.map((p) => `${p.position} ${p.displayName}`).join(', ')} (🃏 ${draft.teamJokers[idx] ?? 0})`)
+            .join('\n')
+            .slice(0, 3800),
+      );
+  }
+
+  // ----------------------------------------------------
+  // Buttons
+  // ----------------------------------------------------
 
   async handleButton(interaction: ButtonInteraction): Promise<void> {
     const customId = interaction.customId;
+    const idAfter = (prefix: string) => customId.slice(prefix.length);
 
-    if (customId === 'tourney:admin:create') {
-      const modal = new ModalBuilder()
-        .setCustomId('tourney:modal:create')
-        .setTitle('Create Tournament');
-
-      const nameInput = new TextInputBuilder()
-        .setCustomId('tournament_name')
-        .setLabel('Tournament Name')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('e.g. Cupa Primăverii 2026')
-        .setRequired(true);
-
-      const formationInput = new TextInputBuilder()
-        .setCustomId('formation')
-        .setLabel('Formation (3-5-2 or 3-1-4-2)')
-        .setStyle(TextInputStyle.Short)
-        .setValue('3-5-2')
-        .setRequired(false);
-
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(nameInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(formationInput),
-      );
-
-      await interaction.showModal(modal);
-    } else if (customId === 'tourney:admin:status') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const tournaments = await this.tournamentService.listTournaments(interaction.guildId!);
-      const active = tournaments[0];
-      if (!active) {
-        await interaction.editReply('No tournaments found.');
-        return;
-      }
-      const signups: any[] = (active.signupsData as any) || [];
-      await interaction.editReply(`📋 **${active.name}**: ${signups.length} signed up.`);
-    } else if (customId === 'tourney:admin:toggle_signups') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournaments = await this.tournamentService.listTournaments(interaction.guildId!);
-        const active = tournaments[0];
-        if (!active) {
-          await interaction.editReply('No tournaments found.');
+    try {
+      if (customId.startsWith('tourney:admin:')) {
+        await this.handleAdminButton(interaction);
+      } else if (customId.startsWith('tourney:signup:') || customId.startsWith('tourney:register:')) {
+        const tournamentId = customId.replace('tourney:signup:', '').replace('tourney:register:', '');
+        const tournament = await this.tournamentService.getTournament(tournamentId, interaction.guildId!);
+        if (tournament.status !== 'SIGNUPS_OPEN') {
+          await this.respond(interaction, '🔒 Înscrierile sunt închise pentru acest turneu.');
           return;
         }
-        const updated = await this.tournamentService.toggleSignups(active.id);
-        await interaction.editReply(`⚡ Signups for **${updated.name}** are now \`${updated.status}\`.`);
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error toggling signups: ${err?.message || err}`);
-      }
-    } else if (customId === 'tourney:admin:start_draft') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournaments = await this.tournamentService.listTournaments(interaction.guildId!);
-        const activeDraft = tournaments.find((t) => t.type === 'DRAFT');
-        if (!activeDraft) {
-          await interaction.editReply('No draft tournament found.');
+        await interaction.showModal(this.signupModal(tournament));
+      } else if (customId.startsWith('tourney:pullout:') || customId.startsWith('tourney:unregister:')) {
+        const tournamentId = customId.replace('tourney:pullout:', '').replace('tourney:unregister:', '');
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        await this.tournamentService.removeSignup(tournamentId, interaction.user.id, interaction.guildId!);
+        await interaction.editReply('✅ Te-ai retras cu succes din turneu.');
+      } else if (customId.startsWith('tourney:view_roster:')) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const t = await this.tournamentService.getTournament(idAfter('tourney:view_roster:'), interaction.guildId!);
+        await interaction.editReply({ embeds: [this.signupStatusEmbed(t)] });
+      } else if (customId.startsWith('tourney:draft:spin_modal:')) {
+        const t = await this.tournamentService.getTournament(idAfter('tourney:draft:spin_modal:'), interaction.guildId!);
+        if (!(await this.canActOnDraft(interaction, t))) return;
+        const slots = Array.from(new Set(this.tournamentService.currentOpenSlots(t)));
+        if (slots.length === 0) {
+          await this.respond(interaction, 'Echipa nu mai are poziții libere.');
           return;
         }
-        const updated = await this.tournamentService.updateTournamentStatus(activeDraft.id, 'DRAFTING');
-        const draftChannelId = (updated.discordChannels as any)?.draft;
-        if (draftChannelId) {
-          await this.tournamentService.postDraftWheelEmbed(draftChannelId, updated);
-        }
-        await interaction.editReply(`🎡 Draft phase started for **${updated.name}**! Draft wheel posted to <#${draftChannelId || interaction.channelId}>.`);
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error starting draft: ${err?.message || err}`);
-      }
-    } else if (customId === 'tourney:admin:notify') {
-      const modal = new ModalBuilder()
-        .setCustomId('tourney:modal:notify')
-        .setTitle('Broadcast Tournament Notification');
-
-      const titleInput = new TextInputBuilder()
-        .setCustomId('notify_title')
-        .setLabel('Title')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('e.g. Schedule Update / Round 1 Fixtures')
-        .setRequired(true);
-
-      const msgInput = new TextInputBuilder()
-        .setCustomId('notify_message')
-        .setLabel('Message')
-        .setStyle(TextInputStyle.Paragraph)
-        .setPlaceholder('Write your announcement here...')
-        .setRequired(true);
-
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(titleInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(msgInput),
-      );
-
-      await interaction.showModal(modal);
-    } else if (customId === 'tourney:admin:refresh') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournaments = await this.tournamentService.listTournaments(interaction.guildId!);
-        const active = tournaments[0];
-        if (!active) {
-          await interaction.editReply('No tournaments found.');
-          return;
-        }
-        await this.tournamentService.refreshTournamentEmbeds(active.id);
-        await interaction.editReply(`🔄 All embeds refreshed for **${active.name}**!`);
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error refreshing embeds: ${err?.message || err}`);
-      }
-    } else if (customId.startsWith('tourney:signup:') || customId.startsWith('tourney:register:')) {
-      const tournamentId = customId.replace('tourney:signup:', '').replace('tourney:register:', '');
-      const tournament = await this.tournamentService.getTournament(tournamentId);
-
-      const modal = new ModalBuilder()
-        .setCustomId(`tourney:modal:signup:${tournamentId}`)
-        .setTitle(tournament.type === 'DRAFT' ? 'Înscriere Jucător Draft' : 'Înscriere Echipă Turneu');
-
-      if (tournament.type === 'DRAFT') {
-        const gamertagInput = new TextInputBuilder()
-          .setCustomId('gamertag')
-          .setLabel('Gamertag (PSN/Xbox/PC ID)')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('Numele exact din joc')
-          .setRequired(true);
-
-        const pos1Input = new TextInputBuilder()
-          .setCustomId('pos1')
-          .setLabel('Poziție Principală (ex: ST, CAM, CB, GK)')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true);
-
-        const pos2Input = new TextInputBuilder()
-          .setCustomId('pos2')
-          .setLabel('Poziție Secundară (opțional)')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false);
-
-        modal.addComponents(
-          new ActionRowBuilder<TextInputBuilder>().addComponents(gamertagInput),
-          new ActionRowBuilder<TextInputBuilder>().addComponents(pos1Input),
-          new ActionRowBuilder<TextInputBuilder>().addComponents(pos2Input),
-        );
-      } else {
-        const teamNameInput = new TextInputBuilder()
-          .setCustomId('team_name')
-          .setLabel('Nume Echipă')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('ex: RYVL Esports')
-          .setRequired(true);
-
-        const gamertagInput = new TextInputBuilder()
-          .setCustomId('gamertag')
-          .setLabel('Gamertag Căpitan')
-          .setStyle(TextInputStyle.Short)
-          .setPlaceholder('ID PSN/Xbox/PC al căpitanului')
-          .setRequired(true);
-
-        const notesInput = new TextInputBuilder()
-          .setCustomId('notes')
-          .setLabel('Detalii / Discord Căpitan')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false);
-
-        modal.addComponents(
-          new ActionRowBuilder<TextInputBuilder>().addComponents(teamNameInput),
-          new ActionRowBuilder<TextInputBuilder>().addComponents(gamertagInput),
-          new ActionRowBuilder<TextInputBuilder>().addComponents(notesInput),
-        );
-      }
-
-      await interaction.showModal(modal);
-    } else if (customId.startsWith('tourney:pullout:') || customId.startsWith('tourney:unregister:')) {
-      const tournamentId = customId.replace('tourney:pullout:', '').replace('tourney:unregister:', '');
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      const updated = await this.tournamentService.removeSignup(tournamentId, interaction.user.id);
-      const channels = (updated.discordChannels as any) || {};
-      if (channels.registration) {
-        await this.tournamentService.postRegistrationEmbed(channels.registration, updated);
-      }
-      await interaction.editReply('✅ Te-ai retras cu succes din turneu.');
-    } else if (customId.startsWith('tourney:view_roster:')) {
-      const tournamentId = customId.replace('tourney:view_roster:', '');
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournament = await this.tournamentService.getTournament(tournamentId);
-        const signups: any[] = (tournament.signupsData as any) || [];
-        const embed = new EmbedBuilder()
-          .setTitle(`📋 Roster & Registrations — ${tournament.name}`)
-          .setColor(0x5865f2)
-          .setDescription(
-            `Total Signups: **${signups.length}**\n\n` +
-            (signups.length > 0
-              ? signups.map((s, idx) => `${idx + 1}. **${s.displayName}** (\`${s.gamertag}\` - ${s.pos1})`).join('\n')
-              : 'No players registered yet.'),
-          );
-        await interaction.editReply({ embeds: [embed] });
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error: ${err?.message || err}`);
-      }
-    } else if (customId.startsWith('tourney:draft:spin_modal:')) {
-      const tournamentId = customId.replace('tourney:draft:spin_modal:', '');
-      const modal = new ModalBuilder()
-        .setCustomId(`tourney:modal:draft_spin:${tournamentId}`)
-        .setTitle('Spin Draft Wheel');
-
-      const positionInput = new TextInputBuilder()
-        .setCustomId('draft_position')
-        .setLabel('Select Position to Spin')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('e.g. ST, CAM, LM, RM, CM, CDM, CB, GK')
-        .setRequired(true);
-
-      modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(positionInput));
-      await interaction.showModal(modal);
-    } else if (customId.startsWith('tourney:draft:confirm:')) {
-      const tournamentId = customId.replace('tourney:draft:confirm:', '');
-      await interaction.deferReply();
-      try {
-        const result = await this.tournamentService.confirmDraftPick(tournamentId);
-        if (interaction.channelId) {
-          await this.tournamentService.postDraftWheelEmbed(interaction.channelId, result.tournament);
-        }
+        const { team } = this.tournamentService.currentDraftTeam(t);
+        const select = new StringSelectMenuBuilder()
+          .setCustomId(`tourney:draft:spin_select:${t.id}`)
+          .setPlaceholder('Alege poziția pentru care se învârte roata')
+          .addOptions(slots.map((s) => ({ label: s, value: s })));
+        await interaction.reply({
+          content: `🎰 **${team?.name}** — alege poziția:`,
+          components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
+          flags: MessageFlags.Ephemeral,
+        });
+      } else if (customId.startsWith('tourney:draft:confirm:')) {
+        const t = await this.tournamentService.getTournament(idAfter('tourney:draft:confirm:'), interaction.guildId!);
+        if (!(await this.canActOnDraft(interaction, t))) return;
+        await interaction.deferReply();
+        const result = await this.tournamentService.confirmDraftPick(t.id, interaction.guildId!);
         await interaction.editReply(
-          `✅ **Pick Confirmed!** **${result.pick.displayName}** (\`${result.pick.gamertag}\`) joins **${result.pick.teamName}** as ${result.pick.position}!${result.complete ? '\n\n🎉 **The draft is complete!**' : ''}`,
+          `✅ **${result.pick.teamName}** l-a ales pe <@${result.pick.userId}> (\`${result.pick.gamertag}\`) pe **${result.pick.position}**.` +
+            (result.complete ? '\n\n🎉 **Draftul s-a încheiat!** Loturile și meciurile au fost publicate.' : ''),
         );
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error confirming pick: ${err?.message || err}`);
-      }
-    } else if (customId.startsWith('tourney:draft:joker:')) {
-      const tournamentId = customId.replace('tourney:draft:joker:', '');
-      await interaction.deferReply();
-      try {
-        const result = await this.tournamentService.useDraftJoker(tournamentId);
-        if (interaction.channelId) {
-          await this.tournamentService.postDraftWheelEmbed(interaction.channelId, result.tournament);
-        }
+      } else if (customId.startsWith('tourney:draft:joker:')) {
+        const t = await this.tournamentService.getTournament(idAfter('tourney:draft:joker:'), interaction.guildId!);
+        if (!(await this.canActOnDraft(interaction, t))) return;
+        await interaction.deferReply();
+        const result = await this.tournamentService.useDraftJoker(t.id, interaction.guildId!);
         await interaction.editReply(
-          `🃏 **Joker Used!** New candidate: **${result.candidate?.displayName}** (\`${result.candidate?.gamertag}\`). Jokers left: **${result.jokersLeft}**.`,
+          `🃏 **Joker folosit!** Noul jucător: **${result.candidate.displayName}** (\`${result.candidate.gamertag}\`). Jokeri rămași: **${result.jokersLeft}**.`,
         );
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error using joker: ${err?.message || err}`);
+      } else if (customId.startsWith('tourney:draft:autodraft:')) {
+        if (!(await this.requireAdmin(interaction))) return;
+        await interaction.deferReply();
+        await this.tournamentService.autoDraftRemaining(idAfter('tourney:draft:autodraft:'), interaction.guildId!);
+        await interaction.editReply('⚡ **Auto-draft complet!** Toate pozițiile rămase au fost completate, iar meciurile au fost generate.');
+      } else if (customId.startsWith('tourney:result:enter:')) {
+        await this.showFixturePicker(interaction, idAfter('tourney:result:enter:'));
+      } else if (customId.startsWith('tourney:result:call_admin:')) {
+        const config = await this.tournamentService.getOrCreateConfig(interaction.guildId!);
+        const ping = config.adminRoleIds?.length ? config.adminRoleIds.map((r) => `<@&${r}>`).join(' ') + ' ' : '';
+        await interaction.reply({
+          content: `🚨 ${ping}<@${interaction.user.id}> a solicitat un administrator în <#${interaction.channelId}>.`,
+          allowedMentions: { roles: config.adminRoleIds || [], users: [interaction.user.id] },
+        });
+      } else if (customId.startsWith('tourney:refresh_signup:') || customId.startsWith('tourney:result:refresh:')) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const id = customId.replace('tourney:refresh_signup:', '').replace('tourney:result:refresh:', '');
+        await this.tournamentService.refreshTournamentEmbeds(id, interaction.guildId!);
+        await interaction.editReply('🔄 Date reîmprospătate!');
       }
-    } else if (customId.startsWith('tourney:draft:autodraft:')) {
-      const tournamentId = customId.replace('tourney:draft:autodraft:', '');
-      await interaction.deferReply();
-      try {
-        const updated = await this.tournamentService.autoDraftRemaining(tournamentId);
-        if (interaction.channelId) {
-          await this.tournamentService.postDraftWheelEmbed(interaction.channelId, updated);
-        }
-        await interaction.editReply(`⚡ **Auto-Draft Complete!** All remaining squad positions have been allocated.`);
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error running auto-draft: ${err?.message || err}`);
-      }
-    } else if (customId.startsWith('tourney:result:enter:')) {
-      const tournamentId = customId.replace('tourney:result:enter:', '');
-      const modal = new ModalBuilder()
-        .setCustomId(`tourney:modal:result:${tournamentId}`)
-        .setTitle('Introduce Scor Meci');
-
-      const homeInput = new TextInputBuilder()
-        .setCustomId('home_team')
-        .setLabel('Echipa Gazdă (ex: Echipa 1)')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const homeScoreInput = new TextInputBuilder()
-        .setCustomId('home_score')
-        .setLabel('Scor Gazdă')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const awayInput = new TextInputBuilder()
-        .setCustomId('away_team')
-        .setLabel('Echipa Oaspete (ex: Echipa 2)')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const awayScoreInput = new TextInputBuilder()
-        .setCustomId('away_score')
-        .setLabel('Scor Oaspete')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      modal.addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(homeInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(homeScoreInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(awayInput),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(awayScoreInput),
-      );
-
-      await interaction.showModal(modal);
-    } else if (customId.startsWith('tourney:result:call_admin:')) {
-      await interaction.reply({
-        content: `🚨 <@${interaction.user.id}> a solicitat prezența unui administrator în <#${interaction.channelId}> pentru verificarea rezultatelor.`,
-      });
-    } else if (customId.startsWith('tourney:refresh_signup:') || customId.startsWith('tourney:result:refresh:')) {
-      await interaction.reply({ content: '🔄 Date reîmprospătate!', flags: MessageFlags.Ephemeral });
+    } catch (err: any) {
+      await this.fail(interaction, err);
     }
   }
 
-  async handleModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  private async handleAdminButton(interaction: ButtonInteraction) {
+    if (!(await this.requireAdmin(interaction))) return;
     const customId = interaction.customId;
 
-    if (customId === 'tourney:modal:create') {
-      await interaction.deferReply();
-      const name = interaction.fields.getTextInputValue('tournament_name').trim();
-      const formation = interaction.fields.getTextInputValue('formation')?.trim() || '3-5-2';
+    if (customId === 'tourney:admin:create') {
+      const modal = new ModalBuilder().setCustomId('tourney:modal:create').setTitle('Create Tournament');
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('tournament_name')
+            .setLabel('Tournament Name')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('e.g. Cupa Primăverii 2026')
+            .setMaxLength(80)
+            .setRequired(true),
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('tournament_type')
+            .setLabel('Type: standard or draft')
+            .setStyle(TextInputStyle.Short)
+            .setValue('standard')
+            .setRequired(true),
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('formation')
+            .setLabel('Draft formation (3-5-2 or 3-1-4-2)')
+            .setStyle(TextInputStyle.Short)
+            .setValue('3-5-2')
+            .setRequired(false),
+        ),
+      );
+      await interaction.showModal(modal);
+      return;
+    }
 
-      const tournament = await this.tournamentService.createTournament(interaction.guildId!, {
-        name,
-        type: 'DRAFT',
-        formation,
-      });
-      const setup = await this.tournamentService.setupTournamentChannels(interaction.guildId!, tournament.id);
+    if (customId === 'tourney:admin:notify') {
+      const modal = new ModalBuilder().setCustomId('tourney:modal:notify').setTitle('Broadcast Tournament Notification');
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('notify_title')
+            .setLabel('Title')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('e.g. Schedule Update / Round 1 Fixtures')
+            .setRequired(true),
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('notify_message')
+            .setLabel('Message')
+            .setStyle(TextInputStyle.Paragraph)
+            .setPlaceholder('Write your announcement here...')
+            .setRequired(true),
+        ),
+      );
+      await interaction.showModal(modal);
+      return;
+    }
 
-      await interaction.editReply(`✅ Turneul **${name}** a fost inițializat în categoria <#${setup.categoryId}>!`);
-    } else if (customId === 'tourney:modal:notify') {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-      try {
-        const tournaments = await this.tournamentService.listTournaments(interaction.guildId!);
-        const active = tournaments[0];
-        if (!active) {
-          await interaction.editReply('No active tournament found.');
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const t = await this.activeTournament(interaction);
+    if (!t) return;
+
+    if (customId === 'tourney:admin:status') {
+      await interaction.editReply({ embeds: [this.signupStatusEmbed(t)] });
+    } else if (customId === 'tourney:admin:toggle_signups') {
+      const updated = await this.tournamentService.toggleSignups(t.id, t.guildId);
+      await interaction.editReply(`⚡ Înscrierile pentru **${updated.name}** sunt acum \`${updated.status}\`.`);
+    } else if (customId === 'tourney:admin:start_draft') {
+      await interaction.editReply(await this.startMessage(t));
+    } else if (customId === 'tourney:admin:refresh') {
+      await this.tournamentService.refreshTournamentEmbeds(t.id, t.guildId);
+      await interaction.editReply(`🔄 Panourile pentru **${t.name}** au fost reîmprospătate.`);
+    }
+  }
+
+  private signupModal(tournament: TournamentInstance) {
+    const isDraft = tournament.type === 'DRAFT';
+    const modal = new ModalBuilder()
+      .setCustomId(`tourney:modal:signup:${tournament.id}`)
+      .setTitle(isDraft ? 'Înscriere Draft' : 'Înscriere Echipă Turneu');
+
+    const gamertag = new TextInputBuilder()
+      .setCustomId('gamertag')
+      .setLabel(isDraft ? 'Gamertag (PSN/Xbox/PC ID)' : 'Gamertag Căpitan')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Numele exact din joc')
+      .setMaxLength(40)
+      .setRequired(true);
+
+    if (isDraft) {
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(gamertag),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('pos1')
+            .setLabel('Poziție principală (GK, CB, CDM, CM, LM, ST...)')
+            .setStyle(TextInputStyle.Short)
+            .setMaxLength(5)
+            .setRequired(true),
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('pos2')
+            .setLabel('Poziție secundară (opțional)')
+            .setStyle(TextInputStyle.Short)
+            .setMaxLength(5)
+            .setRequired(false),
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('team_name')
+            .setLabel('Nume echipă (DOAR dacă vrei să fii manager)')
+            .setStyle(TextInputStyle.Short)
+            .setMaxLength(40)
+            .setRequired(false),
+        ),
+      );
+    } else {
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('team_name')
+            .setLabel('Nume Echipă')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('ex: RYVL Esports')
+            .setMaxLength(40)
+            .setRequired(true),
+        ),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(gamertag),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('notes')
+            .setLabel('Detalii / Discord Căpitan')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false),
+        ),
+      );
+    }
+    return modal;
+  }
+
+  /** Report Score: offers the pending fixtures the user may report (all of them for admins). */
+  private async showFixturePicker(interaction: ButtonInteraction, tournamentId: string) {
+    const t = await this.tournamentService.getTournament(tournamentId, interaction.guildId!);
+    if (t.status !== 'ACTIVE') {
+      await this.respond(interaction, 'Scorurile se pot raporta doar cât timp turneul este în desfășurare.');
+      return;
+    }
+    const isAdmin = await this.isTournamentAdmin(interaction);
+    const myTeam = teamForUser(this.tournamentService.teams(t), interaction.user.id);
+    if (!isAdmin && !myTeam) {
+      await this.respond(interaction, '⛔ Doar managerii/căpitanii echipelor și adminii pot raporta scoruri.');
+      return;
+    }
+    const pending = this.tournamentService
+      .pendingFixtures(t)
+      .filter((m) => isAdmin || m.homeTeamId === myTeam?.id || m.awayTeamId === myTeam?.id);
+    if (pending.length === 0) {
+      await this.respond(interaction, 'Nu ai niciun meci de raportat.');
+      return;
+    }
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(`tourney:result:pick:${t.id}`)
+      .setPlaceholder('Alege meciul')
+      .addOptions(
+        pending.slice(0, 25).map((m) => ({
+          label: `${m.homeTeam} vs ${m.awayTeam}`.slice(0, 100),
+          description: m.round ? `Etapa ${m.round}` : undefined,
+          value: m.id,
+        })),
+      );
+    await interaction.reply({
+      content: `⚽ Alege meciul pentru care raportezi scorul${pending.length > 25 ? ' (primele 25 de meciuri nejucate)' : ''}:`,
+      components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select)],
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  // ----------------------------------------------------
+  // Select menus
+  // ----------------------------------------------------
+
+  async handleSelect(interaction: StringSelectMenuInteraction): Promise<void> {
+    const customId = interaction.customId;
+    try {
+      if (customId.startsWith('tourney:draft:spin_select:')) {
+        const t = await this.tournamentService.getTournament(
+          customId.slice('tourney:draft:spin_select:'.length),
+          interaction.guildId!,
+        );
+        if (!(await this.canActOnDraft(interaction, t))) return;
+        await interaction.deferUpdate();
+        const res = await this.tournamentService.spinDraftWheel(t.id, interaction.values[0], interaction.guildId!);
+        await interaction.editReply({ content: `🎰 Roata s-a învârtit pentru **${res.position}**.`, components: [] });
+        await interaction.followUp({
+          content:
+            `🎰 **${res.team.name}** a învârtit roata pentru **${res.position}**: **${res.candidate.displayName}** (\`${res.candidate.gamertag}\`)` +
+            (res.wildcard ? ` — nimeni nu mai juca pe ${res.position}, așa că a fost ales din tot lotul.` : '') +
+            `\nApasă **Confirm Pick** sau **Use Joker** pe panoul draftului.`,
+        });
+      } else if (customId.startsWith('tourney:result:pick:')) {
+        const t = await this.tournamentService.getTournament(
+          customId.slice('tourney:result:pick:'.length),
+          interaction.guildId!,
+        );
+        const match = this.tournamentService.matches(t).find((m) => m.id === interaction.values[0]);
+        if (!match || match.completed) {
+          await this.respond(interaction, 'Meciul a fost deja raportat.');
           return;
         }
-        const title = interaction.fields.getTextInputValue('notify_title').trim();
-        const message = interaction.fields.getTextInputValue('notify_message').trim();
-        await this.tournamentService.broadcastNotification(active.id, title, message, interaction.user.username);
-        await interaction.editReply('📢 Announcement has been posted to the tournament channel!');
-      } catch (err: any) {
-        await interaction.editReply(`❌ Error sending announcement: ${err?.message || err}`);
-      }
-    } else if (customId.startsWith('tourney:modal:draft_spin:')) {
-      const tournamentId = customId.replace('tourney:modal:draft_spin:', '');
-      await interaction.deferReply();
-      try {
-        const position = interaction.fields.getTextInputValue('draft_position').trim().toUpperCase();
-        const res = await this.tournamentService.spinDraftWheel(tournamentId, position);
-        if (interaction.channelId) {
-          await this.tournamentService.postDraftWheelEmbed(interaction.channelId, res.tournament);
-        }
-        await interaction.editReply(
-          `🎰 **Roata a selectat**: **${res.candidate.displayName}** (\`${res.candidate.gamertag}\`) pentru poziția **${res.position}**!\n` +
-          `Apasă **Confirm Pick** pentru a accepta sau **Use Joker** pentru a roti din nou.`,
+        const modal = new ModalBuilder()
+          .setCustomId(`tourney:modal:result:${t.id}:${match.id}`)
+          .setTitle('Scor final'.slice(0, 45));
+        modal.addComponents(
+          new ActionRowBuilder<TextInputBuilder>().addComponents(
+            new TextInputBuilder()
+              .setCustomId('home_score')
+              .setLabel(`Goluri ${match.homeTeam}`.slice(0, 45))
+              .setStyle(TextInputStyle.Short)
+              .setMaxLength(2)
+              .setRequired(true),
+          ),
+          new ActionRowBuilder<TextInputBuilder>().addComponents(
+            new TextInputBuilder()
+              .setCustomId('away_score')
+              .setLabel(`Goluri ${match.awayTeam}`.slice(0, 45))
+              .setStyle(TextInputStyle.Short)
+              .setMaxLength(2)
+              .setRequired(true),
+          ),
         );
-      } catch (err: any) {
-        await interaction.editReply(`❌ Eroare la rotirea roții: ${err?.message || err}`);
+        await interaction.showModal(modal);
       }
-    } else if (customId.startsWith('tourney:modal:signup:')) {
-      const tournamentId = customId.replace('tourney:modal:signup:', '');
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    } catch (err: any) {
+      await this.fail(interaction, err);
+    }
+  }
 
-      try {
-        const tournament = await this.tournamentService.getTournament(tournamentId);
-        const isDraft = tournament.type === 'DRAFT';
+  // ----------------------------------------------------
+  // Modals
+  // ----------------------------------------------------
 
-        let teamName: string | undefined;
-        let pos1 = 'ALL';
-        let pos2: string | undefined;
-        const gamertag = interaction.fields.getTextInputValue('gamertag').trim();
-
-        if (isDraft) {
-          pos1 = interaction.fields.getTextInputValue('pos1').trim().toUpperCase();
-          pos2 = interaction.fields.getTextInputValue('pos2')?.trim()?.toUpperCase() || undefined;
-        } else {
-          try {
-            teamName = interaction.fields.getTextInputValue('team_name').trim();
-          } catch {
-            // fallback
-          }
-        }
-
-        const updated = await this.tournamentService.addSignup(tournamentId, {
-          userId: interaction.user.id,
-          displayName: interaction.user.username,
-          gamertag,
-          teamName,
-          pos1,
-          pos2,
+  async handleModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+    const customId = interaction.customId;
+    try {
+      if (customId === 'tourney:modal:create') {
+        if (!(await this.requireAdmin(interaction))) return;
+        await interaction.deferReply();
+        const typeRaw = interaction.fields.getTextInputValue('tournament_type').trim().toLowerCase();
+        const embed = await this.createAndProvision(interaction, {
+          name: interaction.fields.getTextInputValue('tournament_name').trim(),
+          type: typeRaw.startsWith('d') ? 'DRAFT' : 'STANDARD',
+          formation: interaction.fields.getTextInputValue('formation')?.trim() || '3-5-2',
         });
-
-        const channels = (updated.discordChannels as any) || {};
-        if (channels.registration) {
-          await this.tournamentService.postRegistrationEmbed(channels.registration, updated);
+        await interaction.editReply({ embeds: [embed] });
+      } else if (customId === 'tourney:modal:notify') {
+        if (!(await this.requireAdmin(interaction))) return;
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const t = await this.activeTournament(interaction);
+        if (!t) return;
+        await this.tournamentService.broadcastNotification(
+          t.id,
+          interaction.fields.getTextInputValue('notify_title').trim(),
+          interaction.fields.getTextInputValue('notify_message').trim(),
+          interaction.user.username,
+        );
+        await interaction.editReply('📢 Anunțul a fost publicat.');
+      } else if (customId.startsWith('tourney:modal:draft_spin:')) {
+        // Panels posted before the position menu existed still open this modal.
+        const t = await this.tournamentService.getTournament(
+          customId.slice('tourney:modal:draft_spin:'.length),
+          interaction.guildId!,
+        );
+        if (!(await this.canActOnDraft(interaction, t))) return;
+        await interaction.deferReply();
+        const position = interaction.fields.getTextInputValue('draft_position').trim().toUpperCase();
+        const res = await this.tournamentService.spinDraftWheel(t.id, position, interaction.guildId!);
+        await interaction.editReply(
+          `🎰 **${res.team.name}** a învârtit roata pentru **${res.position}**: **${res.candidate.displayName}** (\`${res.candidate.gamertag}\`).`,
+        );
+      } else if (customId.startsWith('tourney:modal:signup:')) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const tournamentId = customId.slice('tourney:modal:signup:'.length);
+        const tournament = await this.tournamentService.getTournament(tournamentId, interaction.guildId!);
+        const isDraft = tournament.type === 'DRAFT';
+        const field = (id: string) => {
+          try {
+            return interaction.fields.getTextInputValue(id)?.trim() || undefined;
+          } catch {
+            return undefined;
+          }
+        };
+        const gamertag = field('gamertag') || '';
+        const teamName = field('team_name');
+        const pos1 = isDraft ? field('pos1')?.toUpperCase() : undefined;
+        await this.tournamentService.addSignup(
+          tournamentId,
+          {
+            userId: interaction.user.id,
+            displayName: (interaction.member as any)?.displayName || interaction.user.globalName || interaction.user.username,
+            gamertag,
+            teamName,
+            pos1,
+            pos2: isDraft ? field('pos2')?.toUpperCase() : undefined,
+            notes: field('notes'),
+          },
+          { guildId: interaction.guildId! },
+        );
+        await interaction.editReply(
+          isDraft
+            ? teamName
+              ? `✅ Te-ai înscris ca **manager** al echipei **${teamName}** (\`${gamertag}\`, ${pos1}).`
+              : `✅ Te-ai înscris în draft cu gamertag-ul **${gamertag}** (${pos1}).`
+            : `✅ Echipa **${teamName}** (Căpitan: \`${gamertag}\`) a fost înscrisă cu succes!`,
+        );
+      } else if (customId.startsWith('tourney:modal:result:')) {
+        const [tournamentId, matchId] = customId.slice('tourney:modal:result:'.length).split(':');
+        const t = await this.tournamentService.getTournament(tournamentId, interaction.guildId!);
+        const isAdmin = await this.isTournamentAdmin(interaction);
+        const myTeam = teamForUser(this.tournamentService.teams(t), interaction.user.id);
+        const match = matchId ? this.tournamentService.matches(t).find((m) => m.id === matchId) : undefined;
+        const involved = match && myTeam && (match.homeTeamId === myTeam.id || match.awayTeamId === myTeam.id);
+        if (!isAdmin && !involved) {
+          await this.respond(interaction, '⛔ Doar managerii celor două echipe sau un admin pot raporta acest scor.');
+          return;
         }
-
-        const msg = isDraft
-          ? `✅ Te-ai înscris cu succes cu gamertag-ul **${gamertag}** (${pos1})!`
-          : `✅ Echipa **${teamName || 'Ta'}** (Căpitan: \`${gamertag}\`) a fost înscrisă cu succes în turneu!`;
-
-        await interaction.editReply(msg);
-      } catch (err: any) {
-        await interaction.editReply(`❌ Eroare la înscriere: ${err?.message || err}`);
+        if (match?.completed && !isAdmin) {
+          await this.respond(interaction, 'Meciul a fost deja raportat. Cere unui admin să corecteze scorul.');
+          return;
+        }
+        await interaction.deferReply();
+        const parseScore = (id: string) => Number(interaction.fields.getTextInputValue(id).trim());
+        const res = await this.tournamentService.recordMatchResult(
+          t.id,
+          matchId
+            ? { matchId, homeScore: parseScore('home_score'), awayScore: parseScore('away_score'), reportedBy: interaction.user.id }
+            : {
+                homeTeam: interaction.fields.getTextInputValue('home_team').trim(),
+                awayTeam: interaction.fields.getTextInputValue('away_team').trim(),
+                homeScore: parseScore('home_score'),
+                awayScore: parseScore('away_score'),
+                reportedBy: interaction.user.id,
+              },
+          interaction.guildId!,
+        );
+        await interaction.editReply(
+          `⚽ **Rezultat**: **${res.match.homeTeam}** ${res.match.homeScore} - ${res.match.awayScore} **${res.match.awayTeam}** (raportat de <@${interaction.user.id}>)` +
+            (res.completed ? '\n\n🏁 Toate meciurile s-au jucat. Turneul s-a încheiat!' : ''),
+        );
       }
-    } else if (customId.startsWith('tourney:modal:result:')) {
-      const tournamentId = customId.replace('tourney:modal:result:', '');
-      await interaction.deferReply();
-
-      const homeTeam = interaction.fields.getTextInputValue('home_team').trim();
-      const awayTeam = interaction.fields.getTextInputValue('away_team').trim();
-      const homeScore = parseInt(interaction.fields.getTextInputValue('home_score').trim(), 10) || 0;
-      const awayScore = parseInt(interaction.fields.getTextInputValue('away_score').trim(), 10) || 0;
-
-      await this.tournamentService.recordMatchResult(tournamentId, {
-        homeTeam,
-        awayTeam,
-        homeScore,
-        awayScore,
-      });
-
-      await interaction.editReply(
-        `⚽ **Rezultat Înregistrat**: **${homeTeam}** ${homeScore} - ${awayScore} **${awayTeam}** (înregistrat de <@${interaction.user.id}>)`,
-      );
+    } catch (err: any) {
+      await this.fail(interaction, err);
     }
   }
 }

@@ -261,6 +261,10 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
           } else if (interaction.customId.startsWith('tourney:')) {
             await this.tournamentCommands.handleModalSubmit(interaction);
           }
+        } else if (interaction.isStringSelectMenu()) {
+          if (interaction.customId.startsWith('tourney:')) {
+            await this.tournamentCommands.handleSelect(interaction);
+          }
         } else if (interaction.isUserSelectMenu()) {
           if (interaction.customId.startsWith('lineup:user:')) {
             await this.lineupPostCommand.handleUserSelect(interaction);
