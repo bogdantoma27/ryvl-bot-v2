@@ -406,8 +406,11 @@ model TotwConfig {
   communitySlug  String    @default("VPGRoPS5") @map("community_slug")
   leagueSlug     String    @default("Superliga-Romania") @map("league_slug")
   formation      String    @default("3-5-2")
-  cronSchedule   String?   @default("0 18 * * 1") @map("cron_schedule")
+  // 5-field cron, evaluated in the guild's time zone (default Saturdays 20:00).
+  cronSchedule   String?   @default("0 20 * * 6") @map("cron_schedule")
   enabled        Boolean   @default(false)
+  // When the scheduler last posted this TOTW; stops a week from being posted twice.
+  lastPostedAt   DateTime? @map("last_posted_at")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 

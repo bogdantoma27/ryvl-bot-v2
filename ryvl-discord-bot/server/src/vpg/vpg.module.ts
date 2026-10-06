@@ -11,8 +11,7 @@ import { TotwRendererService } from './totw-renderer.service';
 import { VpgController } from './vpg.controller';
 import { VpgNotificationsController } from './vpg-notifications.controller';
 import { TotwController } from './totw.controller';
-
-import { MatchResultRendererService } from './match-result-renderer.service';
+import { VpgRetentionService } from './vpg-retention.service';
 
 @Module({
   imports: [
@@ -27,7 +26,7 @@ import { MatchResultRendererService } from './match-result-renderer.service';
     VpgSuperligaPollerService,
     TotwService,
     TotwRendererService,
-    MatchResultRendererService,
+    VpgRetentionService,
   ],
   controllers: [VpgController, VpgNotificationsController, TotwController],
   exports: [
@@ -36,7 +35,6 @@ import { MatchResultRendererService } from './match-result-renderer.service';
     VpgSuperligaPollerService,
     TotwService,
     TotwRendererService,
-    MatchResultRendererService,
   ],
 })
 export class VpgModule {}

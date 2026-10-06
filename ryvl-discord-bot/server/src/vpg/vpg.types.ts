@@ -96,6 +96,7 @@ export interface VpgMatchItem {
 export interface VpgLeaderboardEntry {
   rank: number;
   username: string;
+  displayName?: string | null;
   userAvatarUrl?: string | null;
   nationality?: string | null;
   teamName: string;

@@ -73,16 +73,14 @@ export class RyvlCommands {
     await interaction.deferReply();
 
     try {
+      if (subcommand === 'results') {
+        await interaction.editReply({ embeds: [await this.ryvlResultsEmbed(guildId, compOpt)] });
+        return;
+      }
       const performance = await this.vpgService.getRyvlPerformance(guildId, compOpt);
 
       if (subcommand === 'performance') {
         const embed = RyvlEmbedBuilder.buildPerformanceOverviewEmbed(performance);
-        await interaction.editReply({ embeds: [embed] });
-      } else if (subcommand === 'results') {
-        const embed = RyvlEmbedBuilder.buildRyvlResultsEmbed(
-          performance.recentResults,
-          performance.stats.competitionName,
-        );
         await interaction.editReply({ embeds: [embed] });
       } else if (subcommand === 'fixtures') {
         const embed = RyvlEmbedBuilder.buildRyvlFixturesEmbed(
@@ -120,11 +118,20 @@ export class RyvlCommands {
       return { success: false, message: 'No target ryvl-results channel configured.' };
     }
 
-    const performance = await this.vpgService.getRyvlPerformance(guildId);
-    const embed = RyvlEmbedBuilder.buildRyvlResultsEmbed(performance.recentResults, performance.stats.competitionName);
-
-    await channel.send({ embeds: [embed] });
+    await channel.send({ embeds: [await this.ryvlResultsEmbed(guildId)] });
     return { success: true, message: `Posted RYVL results to #${channel.name}` };
+  }
+
+  /** RYVL's latest results in a competition; the same results query `/superliga results` uses. */
+  async ryvlResultsEmbed(guildId: string, competitionSlug?: string) {
+    const { competition } = await this.vpgService.resolveCompetition(guildId, competitionSlug);
+    const { results } = await this.vpgService.getResults({
+      leagueSlug: competition.slug,
+      season: competition.season,
+      ryvlOnly: true,
+      limit: 10,
+    });
+    return RyvlEmbedBuilder.buildRyvlResultsEmbed(results, competition.name);
   }
 
   async postRyvlFixturesToChannel(guildId: string, channelId?: string): Promise<{ success: boolean; message: string }> {

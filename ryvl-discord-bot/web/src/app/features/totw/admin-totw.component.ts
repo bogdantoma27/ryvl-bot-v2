@@ -13,6 +13,9 @@ import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 import { TotwConfig } from '../../core/models';
 
+const SUPERLIGA_LEAGUE_SLUG = 'Superliga-Romania';
+const DEFAULT_TOTW_CRON = '0 20 * * 6';
+
 @Component({
   selector: 'app-admin-totw',
   standalone: true,
@@ -187,29 +190,42 @@ import { TotwConfig } from '../../core/models';
               }
             </div>
 
-            <!-- Tactical Formation -->
-            <div>
-              <label class="block text-xs font-semibold text-slate-300 mb-1.5">Pitch Formation</label>
-              <select
-                [(ngModel)]="editFormation"
-                class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400 cursor-pointer"
-              >
-                <option value="3-5-2">3-5-2 (Twin Strikers, CAM & Midfield)</option>
-                <option value="3-1-4-2">3-1-4-2 (Holding CDM & Twin Strikers)</option>
-              </select>
-            </div>
+            @if (selectedLeague() !== superligaSlug) {
+              <p class="text-[11px] text-slate-400">
+                Only Superliga Team of the Week picks count toward the Superliga Awards tiebreaker.
+              </p>
+            }
 
             <!-- Enable Automated Weekly Post -->
             <div class="flex items-center justify-between p-3 rounded-xl bg-[#11192e] border border-slate-800">
               <div>
-                <div class="text-xs font-bold text-white">Automated Weekly Cron</div>
-                <div class="text-[11px] text-slate-400">Posts automatically every Saturday at 20:00 (Romania time)</div>
+                <div class="text-xs font-bold text-white">Automated Weekly Post</div>
+                <div class="text-[11px] text-slate-400">Posts the Team of the Week on the schedule below</div>
               </div>
               <input
                 type="checkbox"
                 [(ngModel)]="editEnabled"
                 class="w-4 h-4 accent-amber-500 rounded cursor-pointer"
               />
+            </div>
+
+            <!-- Schedule -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1.5" for="totw-cron">Schedule (cron)</label>
+              <input
+                id="totw-cron"
+                type="text"
+                [(ngModel)]="editCron"
+                placeholder="0 20 * * 6"
+                class="w-full bg-[#11192e] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+              />
+              <p class="text-[11px] text-slate-400 mt-1">
+                minute hour day-of-month month day-of-week, in the server's time zone.
+                Default <span class="font-mono">0 20 * * 6</span> = Saturdays 20:00.
+                @if (config()?.lastPostedAt) {
+                  Last automatic post: {{ config()?.lastPostedAt | date: 'medium' }}.
+                }
+              </p>
             </div>
 
             <!-- Save Button -->
@@ -380,7 +396,8 @@ export class AdminTotwComponent implements OnInit {
     return [];
   });
 
-  readonly selectedLeague = signal<string>('Superliga-Romania');
+  readonly superligaSlug = SUPERLIGA_LEAGUE_SLUG;
+  readonly selectedLeague = signal<string>(SUPERLIGA_LEAGUE_SLUG);
   readonly selectedLeagueTitle = signal<string>('Superliga România');
   readonly isTots = signal<boolean>(false);
 
@@ -389,7 +406,7 @@ export class AdminTotwComponent implements OnInit {
   readonly isSearchingLeagues = signal<boolean>(false);
 
   readonly editChannelId = signal<string | null>(null);
-  readonly editFormation = signal<string>('3-5-2');
+  readonly editCron = signal<string>(DEFAULT_TOTW_CRON);
   readonly editEnabled = signal<boolean>(false);
 
   async onSearchLeagues(): Promise<void> {
@@ -457,7 +474,7 @@ export class AdminTotwComponent implements OnInit {
       const cfg = await this.api.getTotwConfig(guildId, this.selectedLeague());
       this.config.set(cfg);
       this.editChannelId.set(cfg.channelId || null);
-      this.editFormation.set(cfg.formation || '4-3-3');
+      this.editCron.set(cfg.cronSchedule || DEFAULT_TOTW_CRON);
       this.editEnabled.set(cfg.enabled || false);
     } catch (err) {
       console.error('Failed to load TOTW config:', err);
@@ -506,13 +523,13 @@ export class AdminTotwComponent implements OnInit {
     try {
       const updated = await this.api.updateTotwConfig(guildId, this.selectedLeague(), {
         channelId: this.editChannelId(),
-        formation: this.editFormation(),
         enabled: this.editEnabled(),
+        cronSchedule: this.editCron().trim() || DEFAULT_TOTW_CRON,
       });
       this.config.set(updated);
       this.showToast('TOTW settings saved successfully!', 'success');
     } catch (err: any) {
-      this.showToast(err.message || 'Failed to save settings.', 'error');
+      this.showToast(err?.error?.message || err.message || 'Failed to save settings.', 'error');
     } finally {
       this.isSaving.set(false);
     }
@@ -527,6 +544,7 @@ export class AdminTotwComponent implements OnInit {
       await this.api.postTotw(guildId, {
         channelId: this.editChannelId() || undefined,
         isTots: this.isTots(),
+        leagueSlug: this.selectedLeague(),
       });
       this.showToast('Official TOTW graphic card posted to Discord!', 'success');
     } catch (err: any) {

@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const safeDatabase = process.env.RUN_DATABASE_TESTS === '1' && /^postgres(?:ql)?:\/\/[^@]+@(?:localhost|127\.0\.0\.1):5432\/ryvl_ci(?:\?|$)/.test(process.env.DATABASE_URL || '');
+const safeDatabase = process.env.RUN_DATABASE_TESTS === '1' && /^postgres(?:ql)?:\/\/[^@]+@(?:localhost|127\.0\.0\.1):\d+\/ryvl_[a-z0-9_]+(?:\?|$)/.test(process.env.DATABASE_URL || '');
 test('additive notification schema preserves guild channels and persists independent receipts', {skip: !safeDatabase}, async()=>{
   const { PrismaClient }=require('@prisma/client');const prisma=new PrismaClient();
   const guildId='999999999999900001';

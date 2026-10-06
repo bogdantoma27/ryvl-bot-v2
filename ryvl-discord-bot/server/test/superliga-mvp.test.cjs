@@ -117,7 +117,7 @@ test('a rescheduled game played days after the original kickoff is found up to w
   assert.equal(pickEaMatch([earlierSameScore, replayed], { ...vpg, reportedAt }).raw.matchId, 'played-a-week-later');
 });
 
-const safeDatabase = process.env.RUN_DATABASE_TESTS === '1' && /^postgres(?:ql)?:\/\/[^@]+@(?:localhost|127\.0\.0\.1):5432\/ryvl_ci(?:\?|$)/.test(process.env.DATABASE_URL || '');
+const safeDatabase = process.env.RUN_DATABASE_TESTS === '1' && /^postgres(?:ql)?:\/\/[^@]+@(?:localhost|127\.0\.0\.1):\d+\/ryvl_[a-z0-9_]+(?:\?|$)/.test(process.env.DATABASE_URL || '');
 test('sync links a VPG result to its EA match and stores every player stat', { skip: !safeDatabase }, async () => {
   const { PrismaClient } = require('@prisma/client');
   const prisma = new PrismaClient();

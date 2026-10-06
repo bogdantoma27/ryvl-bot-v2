@@ -132,7 +132,7 @@ import { SuperligaMvpEntry, SuperligaMvpLeaderboard, SuperligaMvpMatches, Superl
             <h2 class="text-sm font-bold text-white">🧮 How the score works</h2>
             <p class="text-xs text-slate-300 leading-relaxed">{{ board()?.formula }}</p>
             @if (board(); as b) {
-              <p class="text-xs text-slate-300 leading-relaxed">Team of the Week picks are saved each time the weekly TOTW is posted, from the Team of the Week tab or automatically.</p>
+              <p class="text-xs text-slate-300 leading-relaxed">Team of the Week picks are saved every Saturday evening from the VPG weekly leaderboards, whether or not a TOTW is posted. When a Superliga TOTW is posted, the posted line-up replaces that week's picks.</p>
               <p class="text-xs text-slate-400">Minimum to qualify right now: <span class="text-white font-bold">{{ b.minMatches }}</span> tracked matches.</p>
             }
           </div>

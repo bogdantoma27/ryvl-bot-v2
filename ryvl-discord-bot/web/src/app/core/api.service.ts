@@ -583,58 +583,6 @@ export class ApiService {
     );
   }
 
-  pollSuperligaNow(guildId: string): Promise<{ success: boolean; postedCount: number }> {
-    return firstValueFrom(
-      this.http.post<{ success: boolean; postedCount: number }>(
-        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/poll-now`,
-        {},
-        { headers: this.headers() },
-      ),
-    );
-  }
-
-  postSuperligaStandings(
-    guildId: string,
-    channelId?: string,
-    season?: number,
-  ): Promise<{ success: boolean; messageId?: string }> {
-    return firstValueFrom(
-      this.http.post<{ success: boolean; messageId?: string }>(
-        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/post-standings`,
-        { channelId, season },
-        { headers: this.headers() },
-      ),
-    );
-  }
-
-  postSuperligaFixtures(
-    guildId: string,
-    channelId?: string,
-    season?: number,
-  ): Promise<{ success: boolean; messageId?: string }> {
-    return firstValueFrom(
-      this.http.post<{ success: boolean; messageId?: string }>(
-        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/post-fixtures`,
-        { channelId, season },
-        { headers: this.headers() },
-      ),
-    );
-  }
-
-  postSuperligaResults(
-    guildId: string,
-    channelId?: string,
-    season?: number,
-  ): Promise<{ success: boolean; messageId?: string }> {
-    return firstValueFrom(
-      this.http.post<{ success: boolean; messageId?: string }>(
-        `${this.baseUrl}/api/guilds/${guildId}/vpg/superliga/post-results`,
-        { channelId, season },
-        { headers: this.headers() },
-      ),
-    );
-  }
-
   // ----------------------------------------------------
   // RYVL Team Performance & Multi-Competition Methods
   // ----------------------------------------------------
@@ -841,7 +789,7 @@ export class ApiService {
   updateTotwConfig(
     guildId: string,
     leagueSlug: string,
-    body: { channelId?: string | null; formation?: string; enabled?: boolean; cronSchedule?: string },
+    body: { channelId?: string | null; enabled?: boolean; cronSchedule?: string | null },
   ): Promise<TotwConfig> {
     return firstValueFrom(
       this.http.patch<TotwConfig>(`${this.baseUrl}/api/guilds/${guildId}/vpg/totw/config`, body, {
@@ -860,7 +808,7 @@ export class ApiService {
     );
   }
 
-  postTotw(guildId: string, body: { channelId?: string; isTots?: boolean }): Promise<{ success: boolean; messageId?: string }> {
+  postTotw(guildId: string, body: { channelId?: string; isTots?: boolean; leagueSlug?: string }): Promise<{ success: boolean; messageId?: string }> {
     return firstValueFrom(
       this.http.post<{ success: boolean; messageId?: string }>(`${this.baseUrl}/api/guilds/${guildId}/vpg/totw/post`, body, {
         headers: this.headers(),
