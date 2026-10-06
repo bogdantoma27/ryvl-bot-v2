@@ -179,10 +179,10 @@ export interface RecruitmentFormPayload {
   gamertag: string;
   discordTag: string;
   primaryPosition: string;
-  secondaryPosition?: string;
+  secondaryPosition?: string | null;
   platform: string;
-  age: number;
-  experience?: string;
+  age?: number | null;
+  experience?: string | null;
   guildId?: string;
 }
 

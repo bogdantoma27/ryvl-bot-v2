@@ -9,6 +9,12 @@ export const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   FRONTEND_URL: z.string().url('FRONTEND_URL must be a valid URL'),
   PORT: z.coerce.number().default(3000),
+  // Discord server that receives the public website's contact and trial forms. When unset,
+  // the oldest registered server with the matching channel configured is used.
+  RYVL_GUILD_ID: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().regex(/^\d{17,20}$/, 'RYVL_GUILD_ID must be a Discord server id').optional(),
+  ),
 });
 
 export type EnvConfig = z.infer<typeof envSchema>;

@@ -1,14 +1,9 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
-import {
-  ChatInputCommandInteraction,
-  ChannelType,
-  TextChannel,
-} from 'discord.js';
+import { ChatInputCommandInteraction } from 'discord.js';
 import { VpgService } from '../../vpg/vpg.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DiscordService } from '../discord.service';
 import { RyvlEmbedBuilder } from '../embeds/ryvl-embed.builder';
-import { ContactFormPayload, RecruitmentFormPayload } from '../../vpg/vpg.types';
 
 @Injectable()
 export class RyvlCommands {
@@ -156,77 +151,5 @@ export class RyvlCommands {
 
     await channel.send({ embeds: [embed] });
     return { success: true, message: `Posted RYVL performance & leaderboard overview to #${channel.name}` };
-  }
-
-  async dispatchContactNotification(payload: ContactFormPayload): Promise<{ success: boolean; message?: string }> {
-    try {
-      const guilds = await this.prisma.guild.findMany();
-      if (!guilds || guilds.length === 0) {
-        return { success: false, message: 'No registered Discord server found.' };
-      }
-
-      const targetGuild =
-        (payload.guildId && guilds.find((g) => g.id === payload.guildId)) ||
-        guilds.find((g) => g.defaultContactChannelId) ||
-        guilds[0];
-
-      const channelId = targetGuild?.defaultContactChannelId;
-      if (!channelId) {
-        this.logger.warn('Contact submission received but no defaultContactChannelId is configured in server settings.');
-        return {
-          success: false,
-          message: 'Contact management channel is not configured in Admin Settings. Please configure it under Settings.',
-        };
-      }
-
-      const channel = (await this.discordService.client.channels.fetch(channelId).catch(() => null)) as TextChannel;
-      if (!channel || channel.type !== ChannelType.GuildText) {
-        return { success: false, message: `Could not access configured contact channel ${channelId}` };
-      }
-
-      const embed = RyvlEmbedBuilder.buildContactSubmissionEmbed(payload);
-      await channel.send({ embeds: [embed] });
-      this.logger.log(`Dispatched website contact transmission to #${channel.name} (${channelId})`);
-      return { success: true };
-    } catch (err: any) {
-      this.logger.error(`Failed to dispatch contact notification: ${err.message}`);
-      return { success: false, message: err.message };
-    }
-  }
-
-  async dispatchRecruitmentNotification(payload: RecruitmentFormPayload): Promise<{ success: boolean; message?: string }> {
-    try {
-      const guilds = await this.prisma.guild.findMany();
-      if (!guilds || guilds.length === 0) {
-        return { success: false, message: 'No registered Discord server found.' };
-      }
-
-      const targetGuild =
-        (payload.guildId && guilds.find((g) => g.id === payload.guildId)) ||
-        guilds.find((g) => g.defaultRecruitmentChannelId || g.defaultContactChannelId) ||
-        guilds[0];
-
-      const channelId = targetGuild?.defaultRecruitmentChannelId || targetGuild?.defaultContactChannelId;
-      if (!channelId) {
-        this.logger.warn('Recruitment submission received but no defaultRecruitmentChannelId is configured in server settings.');
-        return {
-          success: false,
-          message: 'Recruitment channel is not configured in Admin Settings. Please configure it under Settings.',
-        };
-      }
-
-      const channel = (await this.discordService.client.channels.fetch(channelId).catch(() => null)) as TextChannel;
-      if (!channel || channel.type !== ChannelType.GuildText) {
-        return { success: false, message: `Could not access configured recruitment channel ${channelId}` };
-      }
-
-      const embed = RyvlEmbedBuilder.buildRecruitmentSubmissionEmbed(payload);
-      await channel.send({ embeds: [embed] });
-      this.logger.log(`Dispatched trial application for ${payload.gamertag} to #${channel.name} (${channelId})`);
-      return { success: true };
-    } catch (err: any) {
-      this.logger.error(`Failed to dispatch recruitment notification: ${err.message}`);
-      return { success: false, message: err.message };
-    }
   }
 }

@@ -156,7 +156,7 @@ export class RyvlEmbedBuilder {
         { name: '🕹️ Platform', value: rec.platform, inline: true },
         { name: '⚽ Primary Position', value: rec.primaryPosition, inline: true },
         { name: '🔄 Secondary Position', value: rec.secondaryPosition || 'None', inline: true },
-        { name: '🎂 Age', value: String(rec.age), inline: true },
+        { name: '🎂 Age', value: rec.age != null ? String(rec.age) : 'Not specified', inline: true },
         { name: '📜 Prior Experience', value: rec.experience || 'Not specified', inline: false },
       )
       .setFooter({ text: 'RYVL Esports Recruitment Desk' })
