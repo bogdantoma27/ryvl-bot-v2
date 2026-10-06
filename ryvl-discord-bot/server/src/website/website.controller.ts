@@ -22,6 +22,7 @@ import {
   validateRecruitmentForm,
 } from './website-forms';
 import { WebsiteSubmissionsService } from './website-submissions.service';
+import { BotCommandDoc, describeSlashCommands } from './bot-commands';
 
 const TEN_MINUTES = 10 * 60 * 1000;
 
@@ -32,7 +33,16 @@ export class WebsiteController {
   private readonly perIp = new FixedWindowRateLimiter(3, TEN_MINUTES);
   private readonly overall = new FixedWindowRateLimiter(60, TEN_MINUTES);
 
+  private commandDocs: BotCommandDoc[] | null = null;
+
   constructor(private readonly submissions: WebsiteSubmissionsService) {}
+
+  /** The slash commands exactly as registered with Discord, for the public docs page. */
+  @Get('api/public/bot-commands')
+  listBotCommands(): BotCommandDoc[] {
+    this.commandDocs ??= describeSlashCommands();
+    return this.commandDocs;
+  }
 
   private rateLimit(kind: SubmissionKind, req: Request): void {
     const key = `${kind}:${clientIp(req)}`;

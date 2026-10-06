@@ -22,6 +22,8 @@ import {
   RyvlCompetition,
   ContactSubmission,
   RecruitmentSubmission,
+  WebsiteSubmissionItem,
+  BotCommandDoc,
   RosterPlayer,
   RegisteredDiscordPlayer,
   PlayerRegistrationAudit,
@@ -739,6 +741,19 @@ export class ApiService {
         payload,
       ),
     );
+  }
+
+  getWebsiteSubmissions(guildId: string, limit = 50): Promise<WebsiteSubmissionItem[]> {
+    return firstValueFrom(
+      this.http.get<WebsiteSubmissionItem[]>(`${this.baseUrl}/api/guilds/${guildId}/website-submissions`, {
+        headers: this.headers(),
+        params: { limit: String(limit) },
+      }),
+    );
+  }
+
+  getBotCommands(): Promise<BotCommandDoc[]> {
+    return firstValueFrom(this.http.get<BotCommandDoc[]>(`${this.baseUrl}/api/public/bot-commands`));
   }
 
   getPublicRoster(): Promise<RosterPlayer[]> {
