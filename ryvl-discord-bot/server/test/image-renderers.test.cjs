@@ -48,6 +48,21 @@ test('TOTW card shows every player once and escapes names', () => {
   assert.equal(legacy.match(/>\s*B\s*</g).length, 1, 'LCM plate only');
 });
 
+test('the public TOTW image is rendered once per league and kind, not per request', async () => {
+  const { TotwController } = require('../dist/vpg/totw.controller');
+  const renders = [];
+  const controller = new TotwController({
+    generateTotw: async (slug, tots) => { renders.push([slug, tots]); return { imageBuffer: Buffer.from(`${slug}:${tots}`) }; },
+  });
+  const res = () => ({ headers: {}, setHeader(k, v) { this.headers[k] = v; }, send(body) { this.body = body; return this; } });
+  const [a, b] = await Promise.all([controller.getImage('g', 'Superliga-Romania', 'false', res()), controller.getImage('g', 'Superliga-Romania', 'false', res())]);
+  await controller.getImage('g', 'Superliga-Romania', 'true', res());
+  assert.equal(String(a.body), 'Superliga-Romania:false');
+  assert.equal(String(b.body), 'Superliga-Romania:false');
+  assert.equal(a.headers['Content-Type'], 'image/png');
+  assert.deepEqual(renders, [['Superliga-Romania', false], ['Superliga-Romania', true]]);
+});
+
 test('a long lineup title is shortened instead of running under the formation pill', () => {
   assert.equal(truncateText('short', 10), 'short');
   assert.equal(truncateText('abcdefghij', 5), 'abcd…');
