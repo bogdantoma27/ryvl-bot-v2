@@ -209,6 +209,7 @@ export class EaPollerService implements OnModuleInit, OnModuleDestroy {
       const now = Date.now();
       for (const target of targets) {
         if (!isPollDue(target, now)) continue;
+        if (!this.discordService.isInGuild(target.guildId)) continue;
         try {
           await this.pollClub(target);
         } catch (err: any) {

@@ -143,19 +143,25 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
       try {
         const guilds = await this.client.guilds.fetch();
         for (const [id, oAuthGuild] of guilds) {
-          const fetchedGuild = await oAuthGuild.fetch();
-          await this.prisma.guild.upsert({
-            where: { id },
-            update: {
-              name: fetchedGuild.name,
-              iconUrl: fetchedGuild.iconURL(),
-            },
-            create: {
-              id,
-              name: fetchedGuild.name,
-              iconUrl: fetchedGuild.iconURL(),
-            },
-          });
+          // One unavailable guild must not stop the others from syncing, nor skip the
+          // slash command registration below.
+          try {
+            const fetchedGuild = await oAuthGuild.fetch();
+            await this.prisma.guild.upsert({
+              where: { id },
+              update: {
+                name: fetchedGuild.name,
+                iconUrl: fetchedGuild.iconURL(),
+              },
+              create: {
+                id,
+                name: fetchedGuild.name,
+                iconUrl: fetchedGuild.iconURL(),
+              },
+            });
+          } catch (guildErr) {
+            this.logger.warn(`Could not sync guild ${id} on startup: ${guildErr}`);
+          }
         }
         this.logger.log(`Synchronized ${guilds.size} guilds with database.`);
         await this.registerGuildSlashCommands();
@@ -601,6 +607,16 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     if (message) {
       await message.delete();
     }
+  }
+
+  /**
+   * False when the bot is connected but no longer a member of the guild (it was kicked
+   * or the server was deleted). Pollers skip such guilds instead of calling EA/VPG and
+   * failing to post on every tick. Before the gateway is ready, every guild counts.
+   */
+  isInGuild(guildId: string): boolean {
+    if (!this.client.isReady()) return true;
+    return this.client.guilds.cache.has(guildId);
   }
 
   /** Resolves a postable channel only if it belongs to guildId; throws 400 otherwise. */

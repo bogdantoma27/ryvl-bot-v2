@@ -55,12 +55,11 @@ export class EaController {
     return this.getMembers(config.guildId);
   }
 
+  // Always the website's own club: an anonymous caller must not be able to make the
+  // server spawn an EA bridge process for any club ID it likes.
   @Get('api/public/roster')
-  async getPublicRoster(
-    @Query('clubId') clubId?: string,
-    @Query('platform') platform = 'common-gen5',
-  ) {
-    return this.eaService.getPublicRoster(platform, clubId);
+  async getPublicRoster() {
+    return this.eaService.getPublicRoster();
   }
 
   @Get('api/guilds/:guildId/ea/config')

@@ -193,8 +193,9 @@ export class TeamComponent implements OnInit {
       const roster = await this.api.getPublicRoster();
       this.players.set(roster);
     } catch (err: any) {
-      console.error('Failed to load roster:', err);
-      this.error.set(err.message || 'Error connecting to EA Pro Clubs API.');
+      // Show the API's explanation, never the raw "Http failure response for <url>" text.
+      const apiMessage = err?.error?.message;
+      this.error.set(typeof apiMessage === 'string' && apiMessage ? apiMessage : 'The EA Pro Clubs roster could not be loaded. Please try again.');
     } finally {
       this.isLoading.set(false);
     }

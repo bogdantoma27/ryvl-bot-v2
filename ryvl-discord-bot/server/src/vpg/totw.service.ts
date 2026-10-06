@@ -142,6 +142,7 @@ export class TotwService {
       gk: [],
       cb: [],
       cdm: [],
+      cm: [],
       cam: [],
       lm: [],
       rm: [],
@@ -174,10 +175,13 @@ export class TotwService {
       }
     };
 
-    // Greedy allocation for the 3-4-3 card; a player fills the first position that lists them.
+    // Greedy allocation for the 12 nameplates of the card; a player fills the first
+    // position that lists them. The CDM board also supplies the two central midfielders,
+    // so every plate shows a different player.
     fillSlot('gk', 'gk', 1);
     fillSlot('cb', 'cb', 3);
-    fillSlot('cdm', 'cdm', 2);
+    fillSlot('cdm', 'cdm', 1);
+    fillSlot('cm', 'cdm', 2);
     fillSlot('cam', 'cam', 1);
     fillSlot('lm', 'wingers', 1);
     fillSlot('rm', 'wingers', 1);
@@ -284,6 +288,7 @@ export class TotwService {
       });
       for (const config of configs) {
         const due = dueTotwOccurrence(config.cronSchedule, config.guild?.timezone, now, config.lastPostedAt);
+        if (!this.discordService.isInGuild(config.guildId)) continue;
         if (!due || (this.retryAfter.get(config.id) ?? 0) > now.getTime()) continue;
         const claimed = await this.prisma.totwConfig.updateMany({
           where: { id: config.id, OR: [{ lastPostedAt: null }, { lastPostedAt: { lt: due } }] },

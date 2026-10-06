@@ -123,6 +123,7 @@ export class VpgPollerService implements OnModuleInit, OnModuleDestroy {
 
       for (const config of activeConfigs) {
         if (!intervalDue(config.lastPolledAt, transferPollIntervalSec(config.pollIntervalSec), now)) continue;
+        if (!this.discordService.isInGuild(config.guildId)) continue;
         try {
           await this.pollGuild(config);
         } catch (guildErr: any) {

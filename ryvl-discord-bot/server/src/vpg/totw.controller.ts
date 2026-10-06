@@ -14,9 +14,17 @@ import { AuthGuard } from '../auth/auth.guard';
 import { GuildAdminGuard } from '../auth/guild-admin.guard';
 import { TotwService } from './totw.service';
 import { SUPERLIGA_LEAGUE_SLUG } from './league.constants';
+import { TtlCache } from './ttl-cache';
+
+/** How long a rendered public TOTW image is reused (VPG league data is cached 45 s). */
+export const TOTW_IMAGE_CACHE_TTL_MS = 60 * 1000;
 
 @Controller('api/guilds/:guildId/vpg/totw')
 export class TotwController {
+  // The image route is public: without this, every anonymous request rendered a new
+  // PNG with sharp and downloaded twelve avatars. Concurrent requests share one render.
+  private readonly imageCache = new TtlCache<Buffer>(TOTW_IMAGE_CACHE_TTL_MS, 20);
+
   constructor(private readonly totwService: TotwService) {}
 
   @Get('config')
@@ -91,12 +99,16 @@ export class TotwController {
     @Query('isTots') isTots: string,
     @Res() res: Response,
   ) {
-    const data = await this.totwService.generateTotw(leagueSlug, isTots === 'true');
+    const tots = isTots === 'true';
+    const slug = leagueSlug || SUPERLIGA_LEAGUE_SLUG;
+    const image = await this.imageCache.getOrLoad(`${slug}:${tots}`, async () =>
+      (await this.totwService.generateTotw(slug, tots)).imageBuffer,
+    );
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    return res.send(data.imageBuffer);
+    return res.send(image);
   }
 
   @Post('post')

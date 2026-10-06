@@ -28,3 +28,19 @@ test('one unavailable match type does not discard a successful match type', asyn
   const value = controller(async (_club, type) => { if (type === 'leagueMatch') throw new Error('fixture failure'); return [match]; });
   assert.deepEqual(await value.getRecentMatches('fixture'), [match]);
 });
+test('public roster: an EA outage is a 503, and only the default club can be requested', async () => {
+  const ea = new EaService({});
+  const requested = [];
+  Object.assign(ea, {
+    getDefaultTrackerConfig: async () => ({ clubId: '654321', platform: 'common-gen5' }),
+    fetchMemberStats: async (clubId, platform) => { requested.push([clubId, platform]); throw new Error('simulated upstream failure'); },
+  });
+  const value = new EaController(ea, {});
+  await assert.rejects(() => value.getPublicRoster('999', 'nx'), error => error.getStatus?.() === 503);
+  assert.deepEqual(requested, [['654321', 'common-gen5']], 'query parameters cannot pick another club');
+
+  ea.fetchMemberStats = async () => ({ members: [{ name: 'Nine', proPos: 25, proOverall: '88' }] });
+  const roster = await value.getPublicRoster();
+  assert.equal(roster.length, 1);
+  assert.equal(roster[0].proOverall, 88);
+});

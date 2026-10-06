@@ -11,7 +11,7 @@ async function originPolicy(frontendUrl) {
   const noop = class { log() {} error(e) { errors.push(e); } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../dist/main.js'), 'utf8'), {
     exports: {}, URL,
-    process: { env: {}, exit: code => { errors.push(`exit ${code}`); } },
+    process: { env: {}, on() {}, exit: code => { errors.push(`exit ${code}`); } },
     require(name) {
       if (name === '@nestjs/core') return { NestFactory: { create: async () => app } };
       if (name === '@nestjs/common') return { Logger: noop, ValidationPipe: noop };

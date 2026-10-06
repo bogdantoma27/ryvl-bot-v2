@@ -126,6 +126,7 @@ function setup({ feeds = {}, failSend = () => false } = {}) {
   };
   const sent = [];
   const discord = {
+    isInGuild: () => true,
     sendMessageToChannel: async (channel, embed) => {
       if (failSend(channel, sent.length)) throw new Error('Missing Access');
       sent.push({ channel, description: embed.toJSON().description });

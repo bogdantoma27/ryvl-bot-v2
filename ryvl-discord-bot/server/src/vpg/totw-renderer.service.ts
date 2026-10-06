@@ -87,6 +87,17 @@ export class TotwRendererService {
     { key: 'gk', label: 'GK', cx: 409, cy: 790, r: 38, py: 847, idx: 0 },
   ];
 
+  /**
+   * The player shown on one nameplate. Line-ups without central midfielders (older
+   * data) fill LCM/RCM with the CDM players that are not already on the CDM plate.
+   */
+  private playerForSlot(slot: { key: string; idx: number }, players: TotwPositionsMap): TotwPlayer | undefined {
+    const list = players[slot.key as keyof TotwPositionsMap];
+    if (list && list.length > slot.idx) return list[slot.idx];
+    if (slot.key === 'cm' && !list?.length) return (players.cdm || []).slice(1)[slot.idx];
+    return undefined;
+  }
+
   private async createAvatarMask(r: number): Promise<Buffer> {
     const D = r * 2;
     // Transparent SVG mask where black produces 0 alpha cutout around bottom arch badge
@@ -156,14 +167,7 @@ export class TotwRendererService {
     let playerNamesSvg = '';
 
     for (const slot of this.pitchSlots) {
-      let player: TotwPlayer | undefined;
-      const list = options.players[slot.key as keyof TotwPositionsMap];
-      if (list && list.length > slot.idx) {
-        player = list[slot.idx];
-      } else if (slot.key === 'cm' && (!list || list.length <= slot.idx)) {
-        const alt = options.players.cdm || options.players.cam || [];
-        player = alt[slot.idx];
-      }
+      const player = this.playerForSlot(slot, options.players);
 
       // If no player has been selected for this position, do not render any placeholder label
       if (!player) continue;
@@ -213,8 +217,7 @@ export class TotwRendererService {
 
     // Parallel avatar fetching for slots
     for (const slot of this.pitchSlots) {
-      const list = options.players[slot.key as keyof TotwPositionsMap];
-      const player = list && list.length > slot.idx ? list[slot.idx] : undefined;
+      const player = this.playerForSlot(slot, options.players);
 
       let avatarBuf: Buffer | null = null;
       if (player?.avatar_url) {
@@ -245,7 +248,9 @@ export class TotwRendererService {
 
     if (templatePath) {
       try {
-        return sharp(templatePath)
+        // Awaited here so a broken template or overlay falls back below instead of
+        // rejecting the whole post.
+        return await sharp(templatePath)
           .composite([...avatarOverlays, svgOverlay])
           .png({ quality: 100, compressionLevel: 6 })
           .toBuffer();
