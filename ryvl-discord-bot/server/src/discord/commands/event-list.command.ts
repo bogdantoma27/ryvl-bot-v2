@@ -43,9 +43,8 @@ export class EventListCommand {
       .setTimestamp();
 
     for (const event of events) {
-      const nextOcc =
-        event.occurrences.find((o) => new Date(o.startsAt) >= new Date()) ||
-        event.occurrences[0];
+      // Skip cancelled/closed dates: the view already knows the next open one.
+      const nextOcc = event.nextOccurrence;
 
       const startUnix = nextOcc
         ? Math.floor(new Date(nextOcc.startsAt).getTime() / 1000)

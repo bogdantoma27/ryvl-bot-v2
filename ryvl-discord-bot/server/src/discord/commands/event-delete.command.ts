@@ -7,6 +7,7 @@ import {
   ButtonStyle,
   EmbedBuilder,
   MessageFlags,
+  PermissionFlagsBits,
 } from 'discord.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { EventsService } from '../../events/events.service';
@@ -20,6 +21,21 @@ export class EventDeleteCommand {
     private readonly eventsService: EventsService,
     private readonly prisma: PrismaService,
   ) {}
+
+  /** Same rule as editing: the creator, or members who can manage events or the server. */
+  private mayDelete(
+    interaction: ChatInputCommandInteraction | ButtonInteraction,
+    event: { guildId: string; createdById: string },
+  ): boolean {
+    return interaction.guildId === event.guildId && (interaction.user.id === event.createdById ||
+      Boolean(interaction.memberPermissions?.has(PermissionFlagsBits.ManageEvents)) ||
+      Boolean(interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)));
+  }
+
+  private async findEvent(guildId: string | null, eventId: string) {
+    if (!guildId) return null;
+    return this.prisma.event.findFirst({ where: { id: eventId, guildId } });
+  }
 
   async handleAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
     const guildId = interaction.guildId;
@@ -68,13 +84,11 @@ export class EventDeleteCommand {
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    const event = await this.prisma.event.findUnique({
-      where: { id: eventId },
-    });
+    const event = await this.findEvent(guildId, eventId);
 
-    if (!event || event.guildId !== guildId) {
+    if (!event || !this.mayDelete(interaction, event)) {
       await interaction.editReply({
-        content: `Event not found or belongs to a different server.`,
+        content: `Event not found or you do not have permission to delete it.`,
       });
       return;
     }
@@ -82,7 +96,7 @@ export class EventDeleteCommand {
     const confirmEmbed = new EmbedBuilder()
       .setTitle('⚠️ Confirm Deletion')
       .setDescription(
-        `Are you sure you want to permanently delete event **"${event.title}"**?\nThis will remove all associated occurrences and RSVPs.`,
+        `Are you sure you want to permanently delete event **"${event.title}"**?\nIts announcements will be marked as cancelled and all occurrences and RSVPs removed.`,
       )
       .setColor(0xed4245);
 
@@ -115,9 +129,15 @@ export class EventDeleteCommand {
       await interaction.deferUpdate();
 
       try {
-        await this.eventsService.deleteEvent(eventId);
+        const event = await this.findEvent(interaction.guildId, eventId);
+        if (!event || !this.mayDelete(interaction, event)) {
+          throw new Error('Event not found or you do not have permission to delete it.');
+        }
+        const deleted = await this.eventsService.deleteEvent(event.guildId, eventId);
         await interaction.editReply({
-          content: '✅ Event deleted successfully.',
+          content: deleted.discordSync.failed
+            ? '✅ Event deleted. Some announcements could not be marked as cancelled; check the bot can read message history there.'
+            : '✅ Event deleted and its announcements marked as cancelled.',
           embeds: [],
           components: [],
         });
@@ -141,13 +161,11 @@ export class EventDeleteCommand {
   async promptDelete(interaction: ButtonInteraction, eventId: string): Promise<void> {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-    const event = await this.prisma.event.findUnique({
-      where: { id: eventId },
-    });
+    const event = await this.findEvent(interaction.guildId, eventId);
 
-    if (!event) {
+    if (!event || !this.mayDelete(interaction, event)) {
       await interaction.editReply({
-        content: 'Event not found or already deleted.',
+        content: 'Event not found, already deleted, or you do not have permission to delete it.',
       });
       return;
     }
@@ -155,7 +173,7 @@ export class EventDeleteCommand {
     const confirmEmbed = new EmbedBuilder()
       .setTitle('⚠️ Confirm Deletion')
       .setDescription(
-        `Are you sure you want to permanently delete event **"${event.title}"**?\nThis will remove all associated occurrences and RSVPs.`,
+        `Are you sure you want to permanently delete event **"${event.title}"**?\nIts announcements will be marked as cancelled and all occurrences and RSVPs removed.`,
       )
       .setColor(0xed4245);
 

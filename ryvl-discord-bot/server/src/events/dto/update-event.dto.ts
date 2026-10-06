@@ -19,4 +19,5 @@ export class UpdateEventDto {
   duration?: number;
   startsAt?: string;
   status?: EventStatus;
+  publishLeadMinutes?: number;
 }

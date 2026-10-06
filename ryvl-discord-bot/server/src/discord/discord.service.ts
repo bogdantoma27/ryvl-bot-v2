@@ -529,6 +529,31 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** Replaces the image (and mention line) of a message the bot posted earlier. */
+  async editImageMessage(
+    channelId: string,
+    messageId: string,
+    imageBuffer: Buffer,
+    fileName: string,
+    content?: string,
+  ): Promise<Message> {
+    const channel = await this.client.channels.fetch(channelId).catch(() => null);
+    if (!channel || !('messages' in channel)) {
+      throw new NotFoundException(`Channel with ID "${channelId}" not found`);
+    }
+    const message = await (channel as TextChannel).messages.fetch(messageId).catch(() => null);
+    if (!message) {
+      throw new NotFoundException(`Message with ID "${messageId}" not found in channel "${channelId}"`);
+    }
+    return message.edit({
+      content: content && content.trim() ? content : null,
+      files: [new AttachmentBuilder(imageBuffer, { name: fileName })],
+      attachments: [],
+      // Editing must not ping the roles again.
+      allowedMentions: { parse: [] },
+    });
+  }
+
   async editMessage(
     channelId: string,
     messageId: string,

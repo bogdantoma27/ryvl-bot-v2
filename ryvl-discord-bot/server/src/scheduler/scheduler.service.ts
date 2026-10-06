@@ -1,222 +1,122 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { OccurrenceStatus, EventStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { DiscordService } from '../discord/discord.service';
-import { RecurrenceService } from '../events/recurrence.service';
-import { buildEventEmbed } from '../discord/embeds/event-embed.builder';
+import { EventsService } from '../events/events.service';
+import { EventPublisher } from '../events/event-publisher.service';
+import { occurrenceEnd } from '../events/event-view';
 
 @Injectable()
 export class SchedulerService {
   private readonly logger = new Logger(SchedulerService.name);
+  private closing = false;
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly discordService: DiscordService,
-    private readonly recurrenceService: RecurrenceService,
+    private readonly publisher: EventPublisher,
+    private readonly eventsService: EventsService,
   ) {}
 
+  /** Announces due occurrences. Claims are atomic, and overlapping runs coalesce in the publisher. */
+  // Cron handlers take no arguments: the cron library passes its own callback to onTick.
   @Cron('*/15 * * * * *')
-  async processScheduledEvents(): Promise<void> {
-    const threshold = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes in the future
+  async onPublishTick(): Promise<void> { await this.processScheduledEvents(); }
 
+  @Cron('*/60 * * * * *')
+  async onCloseTick(): Promise<void> { await this.closeExpiredEvents(); }
+
+  @Cron('0 0 * * *')
+  async onNightlyTopUp(): Promise<void> { await this.generateRecurringBatches(); }
+
+  @Cron('0 30 3 * * *')
+  async onRetentionTick(): Promise<void> { await this.purgeArchivedEvents(); }
+
+  async processScheduledEvents(now?: Date): Promise<void> {
     try {
-      const scheduledOccurrences = await this.prisma.eventOccurrence.findMany({
-        where: {
-          status: OccurrenceStatus.SCHEDULED,
-          event: {
-            status: EventStatus.ACTIVE,
-          },
-          OR: [
-            { index: 0 },
-            { startsAt: { lte: threshold } },
-          ],
-        },
-        include: {
-          event: true,
-          rsvps: true,
-        },
-        orderBy: { startsAt: 'asc' },
-      });
-
-      if (scheduledOccurrences.length > 0) {
-        this.logger.log(`Processing ${scheduledOccurrences.length} scheduled occurrences...`);
+      const result = await this.publisher.publishDue(now);
+      if (result.published || result.closed || result.failed) {
+        this.logger.log(`Publish run: ${result.published} published, ${result.closed} skipped as already ended, ${result.failed} failed (will retry)`);
       }
-
-      for (const occ of scheduledOccurrences) {
-        const channelId = occ.channelId || occ.event.channelId;
-        if (!channelId) continue;
-
-        try {
-          const { embed, row } = buildEventEmbed({
-            event: occ.event,
-            occurrence: occ,
-            rsvps: occ.rsvps,
-          });
-
-          const mentionContent =
-            occ.event.mentionRoleIds && occ.event.mentionRoleIds.length > 0
-              ? occ.event.mentionRoleIds.map((rId) => `<@&${rId}>`).join(' ')
-              : undefined;
-
-          const sentMessage = await this.discordService.sendMessageToChannel(
-            channelId,
-            embed,
-            [row],
-            mentionContent,
-          );
-
-          await this.prisma.eventOccurrence.update({
-            where: { id: occ.id },
-            data: {
-              status: OccurrenceStatus.PUBLISHED,
-              messageId: sentMessage.id,
-              channelId,
-              publishedAt: new Date(),
-            },
-          });
-
-          this.logger.log(`Published occurrence ${occ.id} to channel ${channelId}`);
-        } catch (error) {
-          this.logger.error(`Failed to publish scheduled occurrence ${occ.id}: ${error}`);
-        }
-      }
-    } catch (dbError) {
-      this.logger.error(`Database error during processScheduledEvents: ${dbError}`);
+    } catch (error) {
+      this.logger.error(`Database error during processScheduledEvents: ${error}`);
     }
   }
 
-  @Cron('*/60 * * * * *')
-  async closeExpiredEvents(): Promise<void> {
-    const now = new Date();
-
+  /** Closes ended occurrences, then archives events that have nothing left to run. */
+  async closeExpiredEvents(now: Date = new Date()): Promise<void> {
+    if (this.closing) return;
+    this.closing = true;
     try {
-      const expiredOccurrences = await this.prisma.eventOccurrence.findMany({
+      // endsAt may be missing on old rows: those end after the event's duration.
+      const candidates = await this.prisma.eventOccurrence.findMany({
         where: {
           status: OccurrenceStatus.PUBLISHED,
-          endsAt: { lte: now },
+          OR: [{ endsAt: { lte: now } }, { endsAt: null, startsAt: { lte: now } }],
         },
-        include: {
-          event: true,
-          rsvps: true,
-        },
+        include: { event: { select: { duration: true } } },
       });
-
-      if (expiredOccurrences.length > 0) {
-        this.logger.log(`Closing ${expiredOccurrences.length} expired occurrences...`);
+      const expired = candidates.filter((occ) => occurrenceEnd(occ, occ.event.duration).getTime() <= now.getTime());
+      if (expired.length > 0) {
+        this.logger.log(`Closing ${expired.length} expired occurrences...`);
       }
 
-      for (const occ of expiredOccurrences) {
+      const touchedEvents = new Set<string>();
+      for (const occ of expired) {
         try {
-          await this.prisma.eventOccurrence.update({
-            where: { id: occ.id },
-            data: {
-              status: OccurrenceStatus.CLOSED,
-              closedAt: now,
-            },
-          });
-
-          if (occ.channelId && occ.messageId) {
-            const { embed } = buildEventEmbed({
-              event: occ.event,
-              occurrence: {
-                ...occ,
-                status: OccurrenceStatus.CLOSED,
-              },
-              rsvps: occ.rsvps,
-            });
-
-            // Edit Discord message to remove action buttons
-            await this.discordService.editMessage(
-              occ.channelId,
-              occ.messageId,
-              embed,
-              [],
-            );
-          }
-
-          this.logger.log(`Closed occurrence ${occ.id}`);
-
-          // If the event is one-off, delete the finished event from database
-          if (!occ.event.rrule) {
-            await this.prisma.event.delete({ where: { id: occ.eventId } }).catch(() => {});
-            this.logger.log(`Deleted finished event ${occ.eventId}`);
-          }
+          if (await this.publisher.closeOccurrence(occ.id, now)) touchedEvents.add(occ.eventId);
         } catch (error) {
           this.logger.error(`Failed to close occurrence ${occ.id}: ${error}`);
         }
       }
+
+      // Occurrences closed without ever being posted (skipped after downtime) also finish events.
+      const silentlyClosed = await this.prisma.event.findMany({
+        where: { status: EventStatus.ACTIVE, occurrences: { none: { status: { in: [OccurrenceStatus.SCHEDULED, OccurrenceStatus.PUBLISHED] } } } },
+        select: { id: true },
+        take: 100,
+      });
+      for (const { id } of silentlyClosed) touchedEvents.add(id);
+
+      for (const eventId of touchedEvents) {
+        try {
+          await this.eventsService.archiveIfFinished(eventId, now);
+        } catch (error) {
+          this.logger.error(`Failed to archive event ${eventId}: ${error}`);
+        }
+      }
     } catch (dbError) {
       this.logger.error(`Database error during closeExpiredEvents: ${dbError}`);
+    } finally {
+      this.closing = false;
     }
   }
 
-  @Cron('0 0 * * *')
-  async generateRecurringBatches(): Promise<void> {
-    const now = new Date();
+  async generateRecurringBatches(now: Date = new Date()): Promise<void> {
     this.logger.log('Running daily batch generation for recurring events...');
-
     try {
       const recurringEvents = await this.prisma.event.findMany({
-        where: {
-          status: EventStatus.ACTIVE,
-          rrule: { not: null },
-        },
-        include: {
-          occurrences: {
-            where: {
-              startsAt: { gte: now },
-            },
-            orderBy: { startsAt: 'desc' },
-          },
-        },
+        where: { status: EventStatus.ACTIVE, rrule: { not: null } },
+        select: { id: true },
       });
-
       for (const event of recurringEvents) {
-        if (!event.rrule) continue;
-
-        // If fewer than 5 future occurrences exist, generate next batch
-        if (event.occurrences.length < 5) {
-          const latestOccurrence = event.occurrences[0];
-          const fromDate = latestOccurrence ? new Date(latestOccurrence.startsAt.getTime() + 1000) : now;
-
-          const newOccurrences = this.recurrenceService.generateOccurrences(
-            {
-              id: event.id,
-              rrule: event.rrule,
-              duration: event.duration,
-            },
-            fromDate,
-            10,
-            fromDate,
-          );
-
-          const maxIndexResult = await this.prisma.eventOccurrence.aggregate({
-            where: { eventId: event.id },
-            _max: { index: true },
-          });
-          const startIndex = (maxIndexResult._max.index ?? -1) + 1;
-
-          if (newOccurrences.length > 0) {
-            await this.prisma.eventOccurrence.createMany({
-              data: newOccurrences.map((occ, i) => ({
-                eventId: event.id,
-                index: startIndex + i,
-                startsAt: occ.startsAt,
-                endsAt: occ.endsAt,
-                status: OccurrenceStatus.SCHEDULED,
-                channelId: event.channelId,
-              })),
-            });
-
-            this.logger.log(
-              `Generated ${newOccurrences.length} new occurrences for event "${event.title}" (${event.id})`,
-            );
-          }
+        try {
+          await this.eventsService.topUpOccurrences(event.id, now);
+        } catch (error) {
+          this.logger.error(`Error generating occurrences for event ${event.id}: ${error}`);
         }
       }
     } catch (error) {
       this.logger.error(`Error during recurring batch generation: ${error}`);
+    }
+  }
+
+  /** Retention: archived events are removed 180 days after archiving. */
+  async purgeArchivedEvents(now: Date = new Date()): Promise<void> {
+    try {
+      const removed = await this.eventsService.purgeArchivedEvents(now);
+      if (removed > 0) this.logger.log(`Removed ${removed} events archived more than 180 days ago`);
+    } catch (error) {
+      this.logger.error(`Error during archived event retention: ${error}`);
     }
   }
 }

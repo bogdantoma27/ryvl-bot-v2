@@ -71,7 +71,13 @@ model LineupDraft {
   kickoffAt          DateTime? @map("kickoff_at")
   timezone           String    @default("Europe/Bucharest")
   mentionRoleIds     String[]  @default([]) @map("mention_role_ids")
+  // { [slot]: { discordUserId?: string, name: string } }; legacy rows hold { [slot]: name }.
   assignments        Json      @default("{}")
+  occurrenceId       String?   @map("occurrence_id")
+  showEaNames        Boolean   @default(false) @map("show_ea_names")
+  lastPostedMessageId String?  @map("last_posted_message_id")
+  lastPostedChannelId String?  @map("last_posted_channel_id")
+  lastPostedAt       DateTime? @map("last_posted_at")
   createdByDiscordId String    @map("created_by_discord_id")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
@@ -95,10 +101,16 @@ model Event {
   rrule          String?     // RFC 5545 RRULE string, null = one-off
   duration       Int         @default(60) // Duration in minutes
   status         EventStatus @default(ACTIVE)
+  // Minutes before kickoff at which later occurrences are announced.
+  publishLeadMinutes Int     @default(2880) @map("publish_lead_minutes")
+  vpgMatchId     Int?        @map("vpg_match_id")
+  archivedAt     DateTime?   @map("archived_at")
   createdAt      DateTime    @default(now()) @map("created_at")
   updatedAt      DateTime    @updatedAt @map("updated_at")
   occurrences    EventOccurrence[]
 
+  @@unique([guildId, vpgMatchId])
+  @@index([status, archivedAt])
   @@map("events")
 }
 
@@ -114,11 +126,15 @@ model EventOccurrence {
   channelId   String?          @map("channel_id")
   publishedAt DateTime?        @map("published_at")
   closedAt    DateTime?        @map("closed_at")
+  // Publishing lease: set atomically before sending so only one worker posts.
+  publishClaimToken String?    @map("publish_claim_token")
+  publishClaimedAt  DateTime?  @map("publish_claimed_at")
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
   rsvps       Rsvp[]
 
   @@unique([eventId, index])
+  @@index([status, startsAt])
   @@map("event_occurrences")
 }
 
