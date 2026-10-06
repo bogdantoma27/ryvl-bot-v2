@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject, forwardRef } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject, forwardRef } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Guild, VpgNotificationConfig } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -257,7 +257,8 @@ export class VpgSuperligaPollerService implements OnModuleInit, OnModuleDestroy 
   async postStandingsToChannel(guildId: string, targetChannelId?: string, season?: number): Promise<{ success: boolean; messageId?: string }> {
     const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
     const channelId = targetChannelId || guild?.defaultStandingsChannelId;
-    if (!channelId) throw new Error('No standings channel configured');
+    if (!channelId) throw new BadRequestException('No standings channel configured');
+    await this.discordService.assertChannelInGuild(guildId, channelId);
     const selected = season || await this.vpgService.fetchLatestSeason();
     const sent = await this.discordService.sendMessageToChannel(channelId, buildSuperligaStandingsEmbed(await this.vpgService.fetchStandings(selected), selected));
     return { success: true, messageId: sent.id };
@@ -265,7 +266,8 @@ export class VpgSuperligaPollerService implements OnModuleInit, OnModuleDestroy 
   async postFixturesToChannel(guildId: string, targetChannelId?: string, season?: number): Promise<{ success: boolean; messageId?: string }> {
     const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
     const channelId = targetChannelId || guild?.defaultFixturesChannelId;
-    if (!channelId) throw new Error('No fixtures channel configured');
+    if (!channelId) throw new BadRequestException('No fixtures channel configured');
+    await this.discordService.assertChannelInGuild(guildId, channelId);
     const selected = season || await this.vpgService.fetchLatestSeason();
     const today = fixturesOnDay(await this.vpgService.fetchAllMatches('scheduled', selected), romaniaClock(new Date()).date);
     if (!today.length) return { success: true };
@@ -276,7 +278,8 @@ export class VpgSuperligaPollerService implements OnModuleInit, OnModuleDestroy 
   async postResultsToChannel(guildId: string, targetChannelId?: string, season?: number): Promise<{ success: boolean; messageId?: string }> {
     const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
     const channelId = targetChannelId || guild?.defaultLiveResultsChannelId;
-    if (!channelId) throw new Error('No results channel configured');
+    if (!channelId) throw new BadRequestException('No results channel configured');
+    await this.discordService.assertChannelInGuild(guildId, channelId);
     const selected = season || await this.vpgService.fetchLatestSeason();
     const results = await this.vpgService.fetchMatches('complete', selected, 12);
     const sent = await this.discordService.sendMessageToChannel(channelId, buildSuperligaResultsEmbed(results, selected, 12));

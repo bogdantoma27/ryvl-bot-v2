@@ -70,27 +70,31 @@ export class TotwService {
     return withNames.length;
   }
 
-  async getOrCreateConfig(guildId: string, leagueSlug = 'Superliga-Romania') {
+  // Unsaved defaults for a guild that never configured TOTW. Reads must not create rows,
+  // and nothing is posted until an admin picks a channel and enables the schedule.
+  defaultConfig(guildId: string, leagueSlug = 'Superliga-Romania') {
+    const now = new Date();
+    return {
+      id: '',
+      guildId,
+      leagueSlug,
+      communitySlug: 'VPGRoPS5',
+      channelId: null as string | null,
+      formation: '3-5-2',
+      cronSchedule: '0 20 * * 6', // Saturdays at 20:00 Romania time
+      enabled: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  async getConfig(guildId: string, leagueSlug = 'Superliga-Romania') {
     const existing = await this.prisma.totwConfig.findUnique({
       where: {
         guildId_leagueSlug: { guildId, leagueSlug },
       },
     });
-    if (existing) return existing;
-
-    const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
-
-    return this.prisma.totwConfig.create({
-      data: {
-        guildId,
-        leagueSlug,
-        communitySlug: 'VPGRoPS5',
-        channelId: guild?.defaultChannelId || null,
-        formation: '3-5-2',
-        cronSchedule: '0 20 * * 6', // Saturdays at 20:00 Romania time
-        enabled: true,
-      },
-    });
+    return existing ?? this.defaultConfig(guildId, leagueSlug);
   }
 
   async updateConfig(
@@ -98,6 +102,7 @@ export class TotwService {
     leagueSlug: string,
     data: { channelId?: string | null; formation?: string; enabled?: boolean; cronSchedule?: string },
   ) {
+    if (data.channelId) await this.discordService.assertChannelInGuild(guildId, data.channelId);
     return this.prisma.totwConfig.upsert({
       where: {
         guildId_leagueSlug: { guildId, leagueSlug },
@@ -115,7 +120,7 @@ export class TotwService {
         channelId: data.channelId || null,
         formation: data.formation || '3-5-2',
         cronSchedule: data.cronSchedule || '0 20 * * 6',
-        enabled: data.enabled !== undefined ? data.enabled : true,
+        enabled: data.enabled !== undefined ? data.enabled : false,
       },
     });
   }
@@ -292,12 +297,13 @@ export class TotwService {
   }
 
   async postTotwToDiscord(guildId: string, channelId?: string, isTots = false) {
-    const config = await this.getOrCreateConfig(guildId);
+    const config = await this.getConfig(guildId);
     const targetChannelId = channelId || config.channelId;
 
     if (!targetChannelId) {
       throw new NotFoundException('No channel configured for Team of the Week announcements.');
     }
+    await this.discordService.assertChannelInGuild(guildId, targetChannelId);
 
     const totwData = await this.generateTotw(config.leagueSlug, isTots);
 

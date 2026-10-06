@@ -35,9 +35,11 @@ export class EaCommands {
     }
 
     const teamName = interaction.options.getString('name', true).trim();
-    const channel = interaction.options.getChannel('channel', true);
+    // The channel option is optional: default to the channel the command was run in.
+    const channel = interaction.options.getChannel('channel') ?? interaction.channel;
 
     if (
+      !channel ||
       channel.type !== ChannelType.GuildText &&
       channel.type !== ChannelType.GuildAnnouncement
     ) {
@@ -224,7 +226,7 @@ export class EaCommands {
       return;
     }
 
-    const config = await this.eaService.getOrCreateTrackerConfig(guildId);
+    const config = await this.eaService.findTrackerConfigOrDefault(guildId);
     const customClubName = interaction.options.getString('club_name')?.trim();
 
     let targetClubId = config.clubId;

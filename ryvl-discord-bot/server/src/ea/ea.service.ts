@@ -317,25 +317,43 @@ export class EaService {
     };
   }
 
+  // Unsaved defaults for a guild without a tracker row. New trackers start disabled with
+  // no channel, so nothing posts anywhere until an admin configures it.
+  defaultTrackerConfig(guildId: string) {
+    const now = new Date();
+    return {
+      id: '',
+      guildId,
+      clubId: '128199',
+      clubName: 'RYVL Esports',
+      platform: 'common-gen5',
+      channelId: null as string | null,
+      enabled: false,
+      matchTypes: ['leagueMatch', 'friendlyMatch', 'playoffMatch'],
+      pollIntervalSec: 90,
+      lastPolledAt: null as Date | null,
+      lastMatchId: null as string | null,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  /** Read-only lookup for public and admin GETs: never creates a row. */
+  async findTrackerConfigOrDefault(guildId: string) {
+    const existing = await this.prisma.clubTrackerConfig.findUnique({
+      where: { guildId },
+    });
+    return existing ?? this.defaultTrackerConfig(guildId);
+  }
+
   async getOrCreateTrackerConfig(guildId: string) {
     const existing = await this.prisma.clubTrackerConfig.findUnique({
       where: { guildId },
     });
     if (existing) return existing;
 
-    const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
-    return this.prisma.clubTrackerConfig.create({
-      data: {
-        guildId,
-        clubId: '128199',
-        clubName: 'RYVL Esports',
-        platform: 'common-gen5',
-        channelId: guild?.defaultChannelId || null,
-        enabled: true,
-        matchTypes: ['leagueMatch', 'friendlyMatch', 'playoffMatch'],
-        pollIntervalSec: 90,
-      },
-    });
+    const { id: _id, createdAt: _c, updatedAt: _u, ...data } = this.defaultTrackerConfig(guildId);
+    return this.prisma.clubTrackerConfig.create({ data });
   }
 
   async updateTrackerConfig(guildId: string, data: any) {
@@ -358,7 +376,7 @@ export class EaService {
         clubName: data.clubName ? String(data.clubName) : 'RYVL Esports',
         platform: data.platform ? String(data.platform) : 'common-gen5',
         channelId: data.channelId || null,
-        enabled: data.enabled !== undefined ? Boolean(data.enabled) : true,
+        enabled: data.enabled !== undefined ? Boolean(data.enabled) : false,
         matchTypes: data.matchTypes || ['leagueMatch', 'friendlyMatch', 'playoffMatch'],
         pollIntervalSec: data.pollIntervalSec ? Number(data.pollIntervalSec) : 90,
         lastMatchId: data.lastMatchId || null,
@@ -366,30 +384,14 @@ export class EaService {
     });
   }
 
+  // Public website default: the first enabled tracker, else the oldest one, else the
+  // built-in RYVL club. A public read must never create rows.
   async getDefaultTrackerConfig() {
-    const existing = await this.prisma.clubTrackerConfig.findFirst({
-      where: { enabled: true },
-    });
+    const existing =
+      (await this.prisma.clubTrackerConfig.findFirst({ where: { enabled: true }, orderBy: { createdAt: 'asc' } })) ||
+      (await this.prisma.clubTrackerConfig.findFirst({ orderBy: { createdAt: 'asc' } }));
     if (existing) return existing;
-
-    const firstGuild = await this.prisma.guild.findFirst();
-    if (firstGuild) return this.getOrCreateTrackerConfig(firstGuild.id);
-
-    return {
-      id: 'default',
-      guildId: 'default',
-      clubId: '128199',
-      clubName: 'RYVL Esports',
-      platform: 'common-gen5',
-      channelId: null,
-      enabled: true,
-      matchTypes: ['leagueMatch', 'friendlyMatch', 'playoffMatch'],
-      pollIntervalSec: 90,
-      lastPolledAt: null,
-      lastMatchId: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
+    return this.defaultTrackerConfig('default');
   }
 
   async recordMatchPlayerStats(matchId: string, clubId: string, raw: EaRawMatch): Promise<void> {
@@ -703,7 +705,7 @@ export class EaService {
       });
     }
 
-    const defaultCfg = await this.getOrCreateTrackerConfig(guildId);
+    const defaultCfg = await this.findTrackerConfigOrDefault(guildId);
     const targetClubId = trackedClub ? trackedClub.clubId : defaultCfg.clubId;
     const targetClubName = trackedClub ? trackedClub.clubName : defaultCfg.clubName;
     const elo = trackedClub ? trackedClub.elo : 1200;

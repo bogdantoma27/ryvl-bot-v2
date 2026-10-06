@@ -7,6 +7,7 @@ import {
   ButtonStyle,
   EmbedBuilder,
   MessageFlags,
+  PermissionFlagsBits,
 } from 'discord.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { EventsService } from '../../events/events.service';
@@ -20,6 +21,17 @@ export class EventDeleteCommand {
     private readonly eventsService: EventsService,
     private readonly prisma: PrismaService,
   ) {}
+
+  // The Delete button sits on the public event message, so anyone can click it: only the
+  // event's creator or members who can manage events/the server may delete (same rule as edit).
+  private mayDelete(
+    interaction: ButtonInteraction,
+    event: { guildId: string; createdById: string },
+  ): boolean {
+    return interaction.guildId === event.guildId && (interaction.user.id === event.createdById ||
+      Boolean(interaction.memberPermissions?.has(PermissionFlagsBits.ManageEvents)) ||
+      Boolean(interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)));
+  }
 
   async handleAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
     const guildId = interaction.guildId;
@@ -114,6 +126,16 @@ export class EventDeleteCommand {
       // button immediately before doing the work.
       await interaction.deferUpdate();
 
+      const event = await this.prisma.event.findUnique({ where: { id: eventId } });
+      if (!event || !this.mayDelete(interaction, event)) {
+        await interaction.editReply({
+          content: '⛔ You can only delete events you created, unless you can manage events.',
+          embeds: [],
+          components: [],
+        });
+        return;
+      }
+
       try {
         await this.eventsService.deleteEvent(eventId);
         await interaction.editReply({
@@ -148,6 +170,13 @@ export class EventDeleteCommand {
     if (!event) {
       await interaction.editReply({
         content: 'Event not found or already deleted.',
+      });
+      return;
+    }
+
+    if (!this.mayDelete(interaction, event)) {
+      await interaction.editReply({
+        content: '⛔ You can only delete events you created, unless you can manage events.',
       });
       return;
     }

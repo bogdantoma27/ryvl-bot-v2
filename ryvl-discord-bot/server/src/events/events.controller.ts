@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, ParseBoolPipe, DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, UseGuards, ParseBoolPipe, DefaultValuePipe, ParseIntPipe, NotFoundException } from '@nestjs/common';
 import { EventStatus } from '@prisma/client';
 import { EventsService, EventWithOccurrences } from './events.service';
 import { RsvpService, RsvpGrouped } from './rsvp.service';
@@ -15,6 +15,20 @@ import { JwtPayload } from '../auth/auth.service';
 export class EventsController {
   constructor(private readonly eventsService: EventsService, private readonly rsvpService: RsvpService) {}
 
+  // GuildAdminGuard only proves admin rights in :guildId. Every event/occurrence id in
+  // the path must also belong to that guild, or one server's admin could edit another's.
+  private async ownedEvent(guildId: string, eventId: string): Promise<EventWithOccurrences> {
+    const event = await this.eventsService.getEvent(eventId);
+    if (event.guildId !== guildId) throw new NotFoundException(`Event with ID "${eventId}" not found`);
+    return event;
+  }
+  private async ownedOccurrence(guildId: string, occurrenceId: string, eventId?: string): Promise<void> {
+    const occurrence = await this.eventsService.getOccurrence(occurrenceId);
+    if (occurrence.event.guildId !== guildId || (eventId && occurrence.eventId !== eventId)) {
+      throw new NotFoundException(`Occurrence with ID "${occurrenceId}" not found`);
+    }
+  }
+
   // Zod in EventsService validates these bodies. An undecorated DTO class would
   // cause the global class-validator whitelist to discard every submitted field.
   @Post()
@@ -26,15 +40,31 @@ export class EventsController {
     return this.eventsService.listEvents(guildId, { status, upcoming, page, limit });
   }
   @Get(':eventId')
-  async getEvent(@Param('eventId') eventId: string): Promise<EventWithOccurrences> { return this.eventsService.getEvent(eventId); }
+  async getEvent(@Param('guildId') guildId: string, @Param('eventId') eventId: string): Promise<EventWithOccurrences> { return this.ownedEvent(guildId, eventId); }
   @Patch(':eventId')
-  async updateEvent(@Param('eventId') eventId: string, @Body() body: Record<string, unknown>): Promise<EventWithOccurrences> { return this.eventsService.updateEvent(eventId, body as UpdateEventDto); }
+  async updateEvent(@Param('guildId') guildId: string, @Param('eventId') eventId: string, @Body() body: Record<string, unknown>): Promise<EventWithOccurrences> {
+    await this.ownedEvent(guildId, eventId);
+    return this.eventsService.updateEvent(eventId, body as UpdateEventDto);
+  }
   @Delete(':eventId')
-  async deleteEvent(@Param('eventId') eventId: string) { return this.eventsService.deleteEvent(eventId); }
+  async deleteEvent(@Param('guildId') guildId: string, @Param('eventId') eventId: string) {
+    await this.ownedEvent(guildId, eventId);
+    return this.eventsService.deleteEvent(eventId);
+  }
   @Post(':eventId/occurrences/:occurrenceId/cancel')
-  async cancelOccurrence(@Param('occurrenceId') occurrenceId: string) { return this.eventsService.cancelOccurrence(occurrenceId); }
+  async cancelOccurrence(@Param('guildId') guildId: string, @Param('eventId') eventId: string, @Param('occurrenceId') occurrenceId: string) {
+    await this.ownedOccurrence(guildId, occurrenceId, eventId);
+    return this.eventsService.cancelOccurrence(occurrenceId);
+  }
   @Get(':eventId/occurrences/:occurrenceId/rsvps')
-  async getOccurrenceRsvps(@Param('occurrenceId') occurrenceId: string): Promise<RsvpGrouped> { return this.rsvpService.getRsvps(occurrenceId); }
+  async getOccurrenceRsvps(@Param('guildId') guildId: string, @Param('eventId') eventId: string, @Param('occurrenceId') occurrenceId: string): Promise<RsvpGrouped> {
+    await this.ownedOccurrence(guildId, occurrenceId, eventId);
+    return this.rsvpService.getRsvps(occurrenceId);
+  }
   @Get(':eventId/rsvps')
-  async getEventRsvps(@Param('eventId') eventId: string, @Query('occurrenceId') occurrenceId?: string): Promise<any[]> { return this.rsvpService.getFlatRsvps(occurrenceId); }
+  async getEventRsvps(@Param('guildId') guildId: string, @Param('eventId') eventId: string, @Query('occurrenceId') occurrenceId?: string): Promise<any[]> {
+    if (!occurrenceId) return [];
+    await this.ownedOccurrence(guildId, occurrenceId, eventId);
+    return this.rsvpService.getFlatRsvps(occurrenceId);
+  }
 }

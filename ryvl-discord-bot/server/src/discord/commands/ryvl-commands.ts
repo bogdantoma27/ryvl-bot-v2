@@ -107,18 +107,22 @@ export class RyvlCommands {
     }
   }
 
-  async postRyvlResultsToChannel(guildId: string, channelId?: string): Promise<{ success: boolean; message: string }> {
+  /** Body channel ids and stored defaults alike must resolve to a text channel of guildId. */
+  private async resolveRyvlChannel(
+    guildId: string,
+    channelId: string | undefined,
+    setting: 'defaultRyvlResultsChannelId' | 'defaultRyvlFixturesChannelId' | 'defaultRyvlLeaderboardChannelId',
+  ) {
     const targetChannelId =
-      channelId ||
-      (await this.prisma.guild.findUnique({ where: { id: guildId } }))?.defaultRyvlResultsChannelId;
+      channelId || (await this.prisma.guild.findUnique({ where: { id: guildId } }))?.[setting];
+    if (!targetChannelId) return null;
+    return this.discordService.assertChannelInGuild(guildId, targetChannelId);
+  }
 
-    if (!targetChannelId) {
+  async postRyvlResultsToChannel(guildId: string, channelId?: string): Promise<{ success: boolean; message: string }> {
+    const channel = await this.resolveRyvlChannel(guildId, channelId, 'defaultRyvlResultsChannelId');
+    if (!channel) {
       return { success: false, message: 'No target ryvl-results channel configured.' };
-    }
-
-    const channel = (await this.discordService.client.channels.fetch(targetChannelId).catch(() => null)) as TextChannel;
-    if (!channel || channel.type !== ChannelType.GuildText) {
-      return { success: false, message: `Could not access text channel ${targetChannelId}` };
     }
 
     const performance = await this.vpgService.getRyvlPerformance(guildId);
@@ -129,17 +133,9 @@ export class RyvlCommands {
   }
 
   async postRyvlFixturesToChannel(guildId: string, channelId?: string): Promise<{ success: boolean; message: string }> {
-    const targetChannelId =
-      channelId ||
-      (await this.prisma.guild.findUnique({ where: { id: guildId } }))?.defaultRyvlFixturesChannelId;
-
-    if (!targetChannelId) {
+    const channel = await this.resolveRyvlChannel(guildId, channelId, 'defaultRyvlFixturesChannelId');
+    if (!channel) {
       return { success: false, message: 'No target ryvl-fixtures channel configured.' };
-    }
-
-    const channel = (await this.discordService.client.channels.fetch(targetChannelId).catch(() => null)) as TextChannel;
-    if (!channel || channel.type !== ChannelType.GuildText) {
-      return { success: false, message: `Could not access text channel ${targetChannelId}` };
     }
 
     const performance = await this.vpgService.getRyvlPerformance(guildId);
@@ -150,17 +146,9 @@ export class RyvlCommands {
   }
 
   async postRyvlLeaderboardToChannel(guildId: string, channelId?: string): Promise<{ success: boolean; message: string }> {
-    const targetChannelId =
-      channelId ||
-      (await this.prisma.guild.findUnique({ where: { id: guildId } }))?.defaultRyvlLeaderboardChannelId;
-
-    if (!targetChannelId) {
+    const channel = await this.resolveRyvlChannel(guildId, channelId, 'defaultRyvlLeaderboardChannelId');
+    if (!channel) {
       return { success: false, message: 'No target ryvl-leaderboard channel configured.' };
-    }
-
-    const channel = (await this.discordService.client.channels.fetch(targetChannelId).catch(() => null)) as TextChannel;
-    if (!channel || channel.type !== ChannelType.GuildText) {
-      return { success: false, message: `Could not access text channel ${targetChannelId}` };
     }
 
     const performance = await this.vpgService.getRyvlPerformance(guildId);

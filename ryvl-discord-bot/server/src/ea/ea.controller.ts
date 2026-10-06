@@ -19,6 +19,7 @@ import { CurrentUser } from '../auth/user.decorator';
 import { JwtPayload } from '../auth/auth.service';
 import { EaService } from './ea.service';
 import { EaPollerService } from './ea-poller.service';
+import { DiscordService } from '../discord/discord.service';
 
 @Controller()
 export class EaController {
@@ -27,7 +28,12 @@ export class EaController {
   constructor(
     private readonly eaService: EaService,
     private readonly eaPollerService: EaPollerService,
+    private readonly discordService: DiscordService,
   ) {}
+
+  private async checkChannel(guildId: string, channelId: unknown): Promise<void> {
+    if (channelId) await this.discordService.assertChannelInGuild(guildId, channelId);
+  }
 
   // ----------------------------------------------------
   // Public Endpoints (Accessible by all users on web)
@@ -64,7 +70,7 @@ export class EaController {
     const config =
       guildId === 'default'
         ? await this.eaService.getDefaultTrackerConfig()
-        : await this.eaService.getOrCreateTrackerConfig(guildId);
+        : await this.eaService.findTrackerConfigOrDefault(guildId);
 
     let clubInfo = null;
     let overallStats = null;
@@ -102,7 +108,7 @@ export class EaController {
     const config =
       guildId === 'default'
         ? await this.eaService.getDefaultTrackerConfig()
-        : await this.eaService.getOrCreateTrackerConfig(guildId);
+        : await this.eaService.findTrackerConfigOrDefault(guildId);
 
     const limit = Math.min(Math.max(parseInt(count, 10) || 10, 1), 20);
 
@@ -151,7 +157,7 @@ export class EaController {
     const config =
       guildId === 'default'
         ? await this.eaService.getDefaultTrackerConfig()
-        : await this.eaService.getOrCreateTrackerConfig(guildId);
+        : await this.eaService.findTrackerConfigOrDefault(guildId);
 
     return this.eaService.fetchMemberStats(
       config.clubId,
@@ -178,6 +184,7 @@ export class EaController {
       pollIntervalSec?: number;
     },
   ) {
+    await this.checkChannel(guildId, body?.channelId);
     return this.eaService.updateTrackerConfig(guildId, body);
   }
 
@@ -197,7 +204,8 @@ export class EaController {
     @Param('guildId') guildId: string,
     @Body() body: { channelId?: string },
   ) {
-    return this.eaPollerService.postLatestMatch(guildId, body.channelId);
+    await this.checkChannel(guildId, body?.channelId);
+    return this.eaPollerService.postLatestMatch(guildId, body?.channelId);
   }
 
   @Post('api/guilds/:guildId/ea/poll-now')
@@ -219,6 +227,7 @@ export class EaController {
     @Param('guildId') guildId: string,
     @Body() body: { clubId: string; clubName: string; channelId?: string; platform?: string },
   ) {
+    await this.checkChannel(guildId, body?.channelId);
     return this.eaService.addTrackedClub(
       guildId,
       body.clubId,
@@ -235,6 +244,7 @@ export class EaController {
     @Param('clubId') clubId: string,
     @Body() body: { enabled?: boolean; channelId?: string; platform?: string; clubName?: string },
   ) {
+    await this.checkChannel(guildId, body?.channelId);
     return this.eaService.updateTrackedClub(guildId, clubId, body);
   }
 
@@ -284,7 +294,7 @@ export class EaController {
   }
 
   @Get('api/guilds/:guildId/ea/players/:identifier/stats')
-  @UseGuards(AuthGuard)
+  @UseGuards(AuthGuard, GuildAdminGuard)
   async getPlayerStats(
     @Param('guildId') guildId: string,
     @Param('identifier') identifier: string,

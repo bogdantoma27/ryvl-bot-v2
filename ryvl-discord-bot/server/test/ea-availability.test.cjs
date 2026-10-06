@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const { EaController } = require('../dist/ea/ea.controller');
 function controller(fetchMatchesRaw) {
   const config = { clubId: '654321', guildId: 'fixture', platform: 'common-gen5', matchTypes: ['leagueMatch', 'friendlyMatch'] };
-  return new EaController({ getOrCreateTrackerConfig: async () => config, getDefaultTrackerConfig: async () => config, fetchMatchesRaw, parseMatch: match => match }, {});
+  return new EaController({ findTrackerConfigOrDefault: async () => config, getDefaultTrackerConfig: async () => config, fetchMatchesRaw, parseMatch: match => match }, {});
 }
 test('total EA match outage returns 503 instead of an empty successful feed', async () => {
   const value = controller(async () => { throw new Error('simulated upstream failure'); });

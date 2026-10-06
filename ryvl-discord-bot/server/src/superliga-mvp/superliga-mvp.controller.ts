@@ -1,5 +1,4 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
-import { ChannelType } from 'discord.js';
 import { AuthGuard } from '../auth/auth.guard';
 import { GuildAdminGuard } from '../auth/guild-admin.guard';
 import { DiscordService } from '../discord/discord.service';
@@ -41,15 +40,8 @@ export class SuperligaMvpController {
     @Body() body: { channelId?: string; season?: number; minMatches?: number; count?: number },
   ) {
     if (!body?.channelId) throw new BadRequestException('Choose a channel to post in');
-    const channel = await this.discord.client.channels.fetch(body.channelId).catch(() => null);
     // Only channels of this guild: being admin here must not allow posting elsewhere.
-    if (
-      !channel ||
-      (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement) ||
-      channel.guildId !== guildId
-    ) {
-      throw new BadRequestException('That channel is not a text channel in this server');
-    }
+    const channel = await this.discord.assertChannelInGuild(guildId, body.channelId);
     const board = await this.mvp.getLeaderboard({ season: optInt(body.season), minMatches: optInt(body.minMatches) });
     const message = await channel.send({ embeds: [buildSuperligaMvpEmbed(board, optInt(body.count) ?? 15)] });
     return { success: true, messageId: message.id };

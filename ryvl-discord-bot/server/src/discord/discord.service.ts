@@ -42,6 +42,8 @@ import { RyvlCommands } from './commands/ryvl-commands';
 import { TotwCommands } from './commands/totw-commands';
 import { TournamentCommands } from './commands/tournament-commands';
 import { RsvpButtonHandler } from './interactions/rsvp-button.handler';
+import { assertChannelInGuild, GuildPostableChannel } from './channel-guard';
+import { ensureManageGuild, isAdminSubcommand } from './commands/command-permissions';
 
 
 export interface DiscordChannelInfo {
@@ -187,6 +189,10 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     this.client.on(Events.InteractionCreate, async (interaction) => {
       try {
         if (interaction.isChatInputCommand()) {
+          const sub = interaction.options.getSubcommand(false);
+          if (isAdminSubcommand(interaction.commandName, sub) && !(await ensureManageGuild(interaction))) {
+            return;
+          }
           if (interaction.commandName === 'event') {
             const subcommand = interaction.options.getSubcommand();
             if (subcommand === 'create') {
@@ -563,6 +569,11 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     if (message) {
       await message.delete();
     }
+  }
+
+  /** Resolves a postable channel only if it belongs to guildId; throws 400 otherwise. */
+  assertChannelInGuild(guildId: string, channelId: unknown): Promise<GuildPostableChannel> {
+    return assertChannelInGuild(this.client, guildId, channelId);
   }
 
   async checkUserIsAdmin(guildId: string, userId: string): Promise<boolean> {
