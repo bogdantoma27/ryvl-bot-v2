@@ -1,6 +1,6 @@
 import { VpgNotificationSettings, VpgNotificationResponse } from './models';
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, isDevMode } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import {
   AuthState,
@@ -43,9 +43,12 @@ export class ApiService {
     if (typeof window !== 'undefined' && window.location) {
       const { hostname, port } = window.location;
 
-      const customApi =
-        (window as unknown as { __RYVL_API_URL__?: string }).__RYVL_API_URL__ ||
-        localStorage.getItem('ryvl_api_url');
+      // Development builds only: a production build must never send the session token
+      // to an API origin taken from page globals or localStorage.
+      const customApi = isDevMode()
+        ? (window as unknown as { __RYVL_API_URL__?: string }).__RYVL_API_URL__ ||
+          localStorage.getItem('ryvl_api_url')
+        : null;
       if (customApi) {
         return customApi.replace(/\/+$/, '');
       }

@@ -16,6 +16,13 @@ import { AuthGuard } from './auth.guard';
 import { CurrentUser } from './user.decorator';
 import { ConfigService } from '../config/config.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  OAUTH_STATE_COOKIE,
+  createOAuthState,
+  parseCookies,
+  stateCookieOptions,
+  verifyOAuthState,
+} from './oauth-state';
 
 @Controller('api/auth')
 export class AuthController {
@@ -35,22 +42,34 @@ export class AuthController {
   ): void {
     const ref = origin || req.headers.referer || '';
     const isBot = origin === 'bot' || ref.includes('bot.') || (req.headers.host || '').startsWith('bot.');
-    const state = isBot ? 'bot' : undefined;
-    const authUrl = this.authService.getDiscordAuthUrl(state);
-    res.redirect(authUrl);
+    const { state, nonce } = createOAuthState(isBot ? 'bot' : 'web');
+    res.cookie(
+      OAUTH_STATE_COOKIE,
+      nonce,
+      stateCookieOptions(this.configService.discordOauthRedirectUri, req.headers.host),
+    );
+    res.redirect(this.authService.getDiscordAuthUrl(state));
   }
 
   @Get('discord/callback')
   async handleDiscordCallback(
     @Query('code') code: string | undefined,
     @Query('error') error: string | undefined,
-    @Res() resOrState: any,
-    @Query('state') maybeStateOrRes?: any,
+    @Query('state') state: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
   ): Promise<void> {
-    const res: Response = resOrState?.redirect ? resOrState : maybeStateOrRes;
-    const state: string | undefined = resOrState?.redirect ? (typeof maybeStateOrRes === 'string' ? maybeStateOrRes : undefined) : resOrState;
+    const origin = verifyOAuthState(state, parseCookies(req.headers.cookie)[OAUTH_STATE_COOKIE]);
+    // One-time nonce: clear it whatever happens next (host-only and parent-domain variants).
+    const { maxAge: _maxAge, domain: _domain, ...cookieOptions } = stateCookieOptions(
+      this.configService.discordOauthRedirectUri,
+      req.headers.host,
+    );
+    res.clearCookie(OAUTH_STATE_COOKIE, cookieOptions);
+    res.clearCookie(OAUTH_STATE_COOKIE, { ...cookieOptions, domain: new URL(this.configService.discordOauthRedirectUri).hostname });
+
     let frontendUrl = this.configService.frontendUrl;
-    if (state === 'bot') {
+    if (origin === 'bot') {
       frontendUrl = frontendUrl.replace('://', '://bot.');
     }
     // OAuth belongs to the staff console, not the public homepage. These are
@@ -61,6 +80,12 @@ export class AuthController {
     if (error || !code) {
       this.logger.warn(`Discord OAuth error: ${error || 'missing_code'}`);
       res.redirect(`${loginUrl}?error=${encodeURIComponent(error || 'missing_code')}`);
+      return;
+    }
+
+    if (!origin) {
+      this.logger.warn('Discord OAuth callback rejected: state does not match this browser');
+      res.redirect(`${loginUrl}?error=invalid_state`);
       return;
     }
 
