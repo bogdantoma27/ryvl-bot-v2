@@ -202,7 +202,7 @@ test('scheduled TOTW posts each due config once, in its league, and retries a fa
   const prisma = new PrismaClient();
   const { TotwService } = require('../dist/vpg/totw.service.js');
   const guildId = '999999999999920001';
-  const discord = { client: { isReady: () => true } };
+  const discord = { client: { isReady: () => true }, isInGuild: () => true };
   const service = new TotwService(prisma, null, discord, null);
   const posts = [];
   let fail = true;

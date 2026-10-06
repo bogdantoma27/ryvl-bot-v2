@@ -60,7 +60,7 @@ test('Sunday 10:00 job is not delayed by a recent results poll', {skip: !safeDat
     {position:1,teamName:'RYVL Esports',teamSlug:'ryvl',played:1,wins:1,draws:0,losses:0,points:3,scoreFor:2,scoreAgainst:1,goalDifference:1},
   ]};
   const channel={guildId,type:0,send:async()=>({id:String(++sends)})};
-  const discord={client:{isReady:()=>true,user:{id:'bot-test'},channels:{fetch:async()=>channel}}};
+  const discord={client:{isReady:()=>true,user:{id:'bot-test'},channels:{fetch:async()=>channel}},isInGuild:()=>true};
   const poller=new VpgSuperligaPollerService(prisma,vpg,discord);
   try {
     await prisma.guild.create({data:{id:guildId,name:'CI Sunday',defaultStandingsChannelId:channelId}});

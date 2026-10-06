@@ -44,6 +44,7 @@ import { TournamentCommands } from './commands/tournament-commands';
 import { RsvpButtonHandler } from './interactions/rsvp-button.handler';
 import { assertChannelInGuild, GuildPostableChannel } from './channel-guard';
 import { ensureManageGuild, isAdminSubcommand } from './commands/command-permissions';
+import { answerFailedInteraction } from './interaction-errors';
 
 
 export interface DiscordChannelInfo {
@@ -297,6 +298,7 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
         }
       } catch (error) {
         this.logger.error(`Error handling interaction: ${error}`);
+        await answerFailedInteraction(interaction);
       }
     });
   }
@@ -594,6 +596,16 @@ export class DiscordService implements OnModuleInit, OnModuleDestroy {
     if (message) {
       await message.delete();
     }
+  }
+
+  /**
+   * False when the bot is connected but no longer a member of the guild (it was kicked
+   * or the server was deleted). Pollers skip such guilds instead of calling EA/VPG and
+   * failing to post on every tick. Before the gateway is ready, every guild counts.
+   */
+  isInGuild(guildId: string): boolean {
+    if (!this.client.isReady()) return true;
+    return this.client.guilds.cache.has(guildId);
   }
 
   /** Resolves a postable channel only if it belongs to guildId; throws 400 otherwise. */

@@ -284,6 +284,7 @@ export class TotwService {
       });
       for (const config of configs) {
         const due = dueTotwOccurrence(config.cronSchedule, config.guild?.timezone, now, config.lastPostedAt);
+        if (!this.discordService.isInGuild(config.guildId)) continue;
         if (!due || (this.retryAfter.get(config.id) ?? 0) > now.getTime()) continue;
         const claimed = await this.prisma.totwConfig.updateMany({
           where: { id: config.id, OR: [{ lastPostedAt: null }, { lastPostedAt: { lt: due } }] },

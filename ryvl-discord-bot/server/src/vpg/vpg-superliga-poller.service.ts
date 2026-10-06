@@ -42,6 +42,7 @@ export class VpgSuperligaPollerService implements OnModuleInit, OnModuleDestroy 
       { defaultStandingsChannelId: { not: null } }, { defaultRyvlLeaderboardChannelId: { not: null } },
     ] } });
     for (const guild of guilds) {
+      if (!this.discordService.isInGuild(guild.id)) continue;
       try { await this.runGuild(guild); } catch (error) { this.logger.error(`VPG guild ${guild.id}: ${error instanceof Error ? error.message : error}`); }
     }
   }
