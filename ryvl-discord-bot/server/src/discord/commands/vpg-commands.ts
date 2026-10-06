@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   EmbedBuilder,
   ChannelType,
+  MessageFlags,
 } from 'discord.js';
 import { VpgService } from '../../vpg/vpg.service';
 import { VpgPollerService } from '../../vpg/vpg-poller.service';
@@ -21,7 +22,7 @@ export class VpgCommands {
   ) {}
 
   async handleSetup(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const guildId = interaction.guildId;
     if (!guildId) {
@@ -99,7 +100,7 @@ export class VpgCommands {
   }
 
   async handleCheck(interaction: ChatInputCommandInteraction): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const guildId = interaction.guildId;
     if (!guildId) {

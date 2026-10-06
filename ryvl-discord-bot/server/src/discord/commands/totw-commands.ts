@@ -30,7 +30,8 @@ export class TotwCommands {
     }
 
     if (subcommand === 'post') {
-      await interaction.deferReply();
+      // The image goes to the TOTW channel; the confirmation is only for the admin.
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const channel = interaction.options.getChannel('channel');
       const leagueSlug = interaction.options.getString('league')?.trim() || SUPERLIGA_LEAGUE_SLUG;
       const isTots = interaction.options.getBoolean('is_tots') || false;

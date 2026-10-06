@@ -13,6 +13,22 @@ export const ADMIN_SUBCOMMANDS: Readonly<Record<string, readonly string[]>> = {
   vpg_transfers: ['setup', 'check'],
 };
 
+/**
+ * Tournament subcommands check their own admin rule (Manage Server or a tournament admin
+ * role) inside tournament-commands.ts. Listed here so the docs label them and the tests
+ * can compare this list with that handler.
+ */
+export const TOURNAMENT_ADMIN_SUBCOMMANDS: readonly string[] = [
+  'setup-admin',
+  'create',
+  'set-status',
+  'toggle-signups',
+  'start-draft',
+  'start',
+  'notify',
+  'generate-standings',
+];
+
 export function isAdminSubcommand(commandName: string, subcommand: string | null | undefined): boolean {
   return !!subcommand && (ADMIN_SUBCOMMANDS[commandName] || []).includes(subcommand);
 }

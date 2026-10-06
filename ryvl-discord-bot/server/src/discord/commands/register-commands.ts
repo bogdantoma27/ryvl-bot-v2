@@ -27,7 +27,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .addStringOption((option) =>
           option
             .setName('title')
-            .setDescription('Select the event title to delete')
+            .setDescription('Event to delete (pick it from the list)')
             .setRequired(true)
             .setAutocomplete(true),
         ),
@@ -40,7 +40,8 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addChannelOption((option) =>
       option
         .setName('channel')
-        .setDescription('Target Discord text channel (optional if default lineup channel is configured)')
+        .setDescription('Target text channel (optional if a default lineup channel is configured)')
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(false),
     )
     .addStringOption((option) =>
@@ -77,6 +78,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
       option
         .setName('channel')
         .setDescription('Channel where match stats should be published')
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(true),
     )
     .addStringOption((option) =>
@@ -88,17 +90,17 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
 
   const eaStatsCommand = new SlashCommandBuilder()
     .setName('ea_stats')
-    .setDescription('View club stats, records, and ratings')
+    .setDescription('Live EA stats for the configured club, or any club by name')
     .addStringOption((option) =>
       option
         .setName('club_name')
-        .setDescription('Club name on EA (defaults to configured club)')
+        .setDescription('Club name on EA (defaults to the club set with /ea_setup)')
         .setRequired(false),
     );
 
   const eaLatestCommand = new SlashCommandBuilder()
     .setName('ea_latest')
-    .setDescription('Post the most recent EA Pro Clubs match results immediately')
+    .setDescription("Post the configured club's latest EA Pro Clubs match in this channel")
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
   const statsCommand = new SlashCommandBuilder()
@@ -113,7 +115,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addStringOption((opt) =>
       opt
         .setName('name')
-        .setDescription('Pro Clubs player gamertag alias')
+        .setDescription('Same as player (kept for older usage)')
         .setRequired(false),
     )
     .addUserOption((opt) =>
@@ -125,7 +127,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
 
   const trackTeamCommand = new SlashCommandBuilder()
     .setName('track_team')
-    .setDescription('Track an EA Pro Clubs team for auto match results and ELO ratings (Admin only)')
+    .setDescription('Track an EA Pro Clubs team for automatic match results and ELO ratings')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption((opt) =>
       opt
@@ -136,7 +138,8 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addChannelOption((opt) =>
       opt
         .setName('channel')
-        .setDescription('Channel where match results will be posted (optional)')
+        .setDescription('Channel for its match results (default: the live results channel)')
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
         .setRequired(false),
     )
     .addStringOption((opt) =>
@@ -153,11 +156,11 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
 
   const teamStatsCommand = new SlashCommandBuilder()
     .setName('team_stats')
-    .setDescription('View stats, ELO rating, record and top performers for a tracked EA club')
+    .setDescription('Record, ELO and top performers of a club tracked with /track_team')
     .addStringOption((opt) =>
       opt
         .setName('name')
-        .setDescription('Tracked club name')
+        .setDescription('Tracked club name or ID (default: the club set with /ea_setup)')
         .setRequired(false),
     );
 
@@ -193,6 +196,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
           opt
             .setName('channel')
             .setDescription('Target text channel (optional; uses configured channel by default)')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
             .setRequired(false),
         )
         .addStringOption((opt) =>
@@ -211,7 +215,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addSubcommand((sub) =>
       sub
         .setName('preview')
-        .setDescription('Preview the generated TOTW visual graphic')
+        .setDescription('Preview the Team of the Week image privately (nothing is posted)')
         .addStringOption((opt) =>
           opt
             .setName('league')
@@ -228,11 +232,12 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addSubcommand((sub) =>
       sub
         .setName('setup')
-        .setDescription('Configure default channel for TOTW posts')
+        .setDescription('Set the TOTW channel and enable the scheduled weekly post')
         .addChannelOption((opt) =>
           opt
             .setName('channel')
             .setDescription('Announcement text channel')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
             .setRequired(true),
         )
         .addStringOption((opt) =>
@@ -274,7 +279,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .addStringOption((opt) =>
           opt
             .setName('formation')
-            .setDescription('Formation (3-5-2 or 3-1-4-2)')
+            .setDescription('Draft formation (3-5-2 or 3-1-4-2; draft tournaments only)')
             .setRequired(false)
             .addChoices(
               { name: '3-5-2', value: '3-5-2' },
@@ -329,7 +334,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addSubcommand((sub) =>
       sub
         .setName('spin')
-        .setDescription('Spin the draft wheel for your turn (Managers only)'),
+        .setDescription('Show whose turn it is to spin the draft wheel'),
     )
     .addSubcommand((sub) =>
       sub
@@ -349,7 +354,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
 
   const createTournamentCommand = new SlashCommandBuilder()
     .setName('create_tournament')
-    .setDescription('Create a tournament and auto-provision Discord category and channels')
+    .setDescription('Same as /tournament create, but the type defaults to Standard')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption((opt) =>
       opt.setName('name').setDescription('Tournament name').setRequired(true),
@@ -357,7 +362,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addStringOption((opt) =>
       opt
         .setName('type')
-        .setDescription('Tournament type: draft or standard')
+        .setDescription('Tournament type (default: standard)')
         .setRequired(false)
         .addChoices(
           { name: 'FC Draft Tournament (with wheel & draft)', value: 'draft' },
@@ -367,7 +372,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addStringOption((opt) =>
       opt
         .setName('formation')
-        .setDescription('Formation for draft (3-5-2 or 3-1-4-2)')
+        .setDescription('Draft formation (3-5-2 or 3-1-4-2; draft tournaments only)')
         .setRequired(false)
         .addChoices(
           { name: '3-5-2', value: '3-5-2' },
@@ -386,12 +391,13 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
           option
             .setName('channel')
             .setDescription('Channel where transfers should be published')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
             .setRequired(true),
         )
         .addBooleanOption((option) =>
           option
             .setName('enabled')
-            .setDescription('Enable auto-posting transfers')
+            .setDescription('Enable auto-posting transfers (default: true)')
             .setRequired(false),
         ),
     )
@@ -402,14 +408,16 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .addIntegerOption((option) =>
           option
             .setName('count')
-            .setDescription('Number of transfers to display (1-5)')
+            .setDescription('Number of transfers to display (1-5, default 3)')
+            .setMinValue(1)
+            .setMaxValue(5)
             .setRequired(false),
         ),
     )
     .addSubcommand((sub) =>
       sub
         .setName('check')
-        .setDescription('Check for new VPG transfers right now'),
+        .setDescription('Check for new VPG transfers now and post them to the configured channel'),
     );
 
   const superligaCommand = new SlashCommandBuilder()
@@ -422,7 +430,8 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .addIntegerOption((opt) =>
           opt
             .setName('season')
-            .setDescription('Season number (e.g. 2)')
+            .setDescription('Season number (default: current)')
+            .setMinValue(1)
             .setRequired(false),
         ),
     )
@@ -433,30 +442,36 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .addIntegerOption((opt) =>
           opt
             .setName('count')
-            .setDescription('Number of fixtures to show (default 10)')
+            .setDescription('Number of fixtures to show (1-25, default 10)')
+            .setMinValue(1)
+            .setMaxValue(25)
             .setRequired(false),
         )
         .addIntegerOption((opt) =>
           opt
             .setName('season')
-            .setDescription('Season number (e.g. 2)')
+            .setDescription('Season number (default: current)')
+            .setMinValue(1)
             .setRequired(false),
         ),
     )
     .addSubcommand((sub) =>
       sub
         .setName('results')
-        .setDescription('Display recent completed match results')
+        .setDescription('Display the latest completed match results')
         .addIntegerOption((opt) =>
           opt
             .setName('count')
-            .setDescription('Number of results to show (default 10)')
+            .setDescription('Number of results to show (1-25, default 10)')
+            .setMinValue(1)
+            .setMaxValue(25)
             .setRequired(false),
         )
         .addIntegerOption((opt) =>
           opt
             .setName('season')
-            .setDescription('Season number (e.g. 2)')
+            .setDescription('Season number (default: current)')
+            .setMinValue(1)
             .setRequired(false),
         ),
     )
@@ -481,7 +496,8 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
         .addIntegerOption((opt) =>
           opt
             .setName('season')
-            .setDescription('Season number (e.g. 2)')
+            .setDescription('Season number (default: current)')
+            .setMinValue(1)
             .setRequired(false),
         ),
     );
@@ -492,21 +508,22 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addSubcommand((sub) =>
       sub
         .setName('today')
-        .setDescription('Show all completed matches played today in Bucharest time'),
+        .setDescription("Show today's Superliga results (Bucharest time), else the latest five"),
     )
     .addSubcommand((sub) =>
       sub
         .setName('check')
-        .setDescription('Manually trigger a check for new completed matches'),
+        .setDescription('Check for new Superliga results now and post them to the configured channel'),
     )
     .addSubcommand((sub) =>
       sub
         .setName('setup')
-        .setDescription('Configure default channel for live results')
+        .setDescription('Set the channel for automatic Superliga result posts')
         .addChannelOption((opt) =>
           opt
             .setName('channel')
             .setDescription('Text channel for auto-posting completed match results')
+            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
             .setRequired(true),
         ),
     );
@@ -550,7 +567,7 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addSubcommand((sub) =>
       sub
         .setName('leaderboard')
-        .setDescription('Show current performance metrics and leaderboard standing for RYVL Esports')
+        .setDescription('Same as /ryvl performance (record, form and league standing)')
         .addStringOption((opt) =>
           opt
             .setName('competition')
@@ -561,27 +578,27 @@ export function getSlashCommands(): RESTPostAPIChatInputApplicationCommandsJSONB
     .addSubcommand((sub) =>
       sub
         .setName('setup')
-        .setDescription('Configure dedicated RYVL channels (ryvl-results, ryvl-fixtures, ryvl-leaderboard)')
+        .setDescription('Set the RYVL feed channels and the website contact/trial channels')
         .addChannelOption((opt) =>
-          opt.setName('results_channel').setDescription('Channel for ryvl-results').setRequired(false),
+          opt.setName('results_channel').setDescription('Channel for ryvl-results').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(false),
         )
         .addChannelOption((opt) =>
-          opt.setName('fixtures_channel').setDescription('Channel for ryvl-fixtures').setRequired(false),
+          opt.setName('fixtures_channel').setDescription('Channel for ryvl-fixtures').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(false),
         )
         .addChannelOption((opt) =>
-          opt.setName('leaderboard_channel').setDescription('Channel for ryvl-leaderboard').setRequired(false),
+          opt.setName('leaderboard_channel').setDescription('Channel for ryvl-leaderboard').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(false),
         )
         .addChannelOption((opt) =>
-          opt.setName('contact_channel').setDescription('Channel where website contact messages are received').setRequired(false),
+          opt.setName('contact_channel').setDescription('Channel where website contact messages are received').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(false),
         )
         .addChannelOption((opt) =>
-          opt.setName('recruitment_channel').setDescription('Channel where trial applications are received').setRequired(false),
+          opt.setName('recruitment_channel').setDescription('Channel where trial applications are received').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(false),
         ),
     );
 
   const superligaMvpCommand = new SlashCommandBuilder()
     .setName('superliga_mvp')
-    .setDescription('Superliga MVP stats leaderboard (admins only)')
+    .setDescription('Superliga MVP stats leaderboard')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .setDMPermission(false)
     .addSubcommand((sub) =>

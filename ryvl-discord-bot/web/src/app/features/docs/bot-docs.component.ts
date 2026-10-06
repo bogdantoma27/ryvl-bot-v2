@@ -209,7 +209,7 @@ const TOURNAMENT_GUIDES: BotCommandDoc[] = [
           <div class="text-2xl">🏆</div>
           <div class="text-sm font-bold text-white">Tournaments & FC Draft</div>
           <p class="text-xs text-slate-400">
-            MultiBots-style automated category and channels, interactive draft wheel with jokers, 3-5-2 and 3-1-4-2 formations.
+            Standard (groups + knockouts) or FC Draft tournaments with their own channels, sign-up buttons, a draft wheel with jokers and score reporting.
           </p>
         </div>
 
@@ -217,7 +217,7 @@ const TOURNAMENT_GUIDES: BotCommandDoc[] = [
           <div class="text-2xl">⚽</div>
           <div class="text-sm font-bold text-white">Multi-Club EA FC Tracker</div>
           <p class="text-xs text-slate-400">
-            Auto-polls EA FC 27 Pro Clubs servers every 90s, posts match stats and MOTM cards to dedicated Discord channels.
+            Polls EA Pro Clubs for every tracked club (every 90s by default) and posts match results and player stats; members link gamertags with /register-player.
           </p>
         </div>
 
@@ -225,7 +225,7 @@ const TOURNAMENT_GUIDES: BotCommandDoc[] = [
           <div class="text-2xl">⭐</div>
           <div class="text-sm font-bold text-white">Team of the Week (TOTW)</div>
           <p class="text-xs text-slate-400">
-            Automated weekly cron generates high-resolution 12-player pitch cards with Discord player avatars and nameplates.
+            Builds the Superliga Team of the Week image from VPG stats and posts it on the schedule set in the admin panel, or on demand with /totw post.
           </p>
         </div>
 
@@ -233,7 +233,7 @@ const TOURNAMENT_GUIDES: BotCommandDoc[] = [
           <div class="text-2xl">🔄</div>
           <div class="text-sm font-bold text-white">VPG Transfers & Feeds</div>
           <p class="text-xs text-slate-400">
-            Instant transfer announcements with "HERE WE GO" cards, transfer fees, club badges, and player history.
+            Posts new VPG Superliga România transfers, results, fixtures and standings to the channels configured in the admin panel.
           </p>
         </div>
       </div>
@@ -325,6 +325,11 @@ const TOURNAMENT_GUIDES: BotCommandDoc[] = [
 
       <!-- Commands Directory -->
       <div class="space-y-4">
+        <p class="text-xs text-slate-400">
+          <strong class="text-rose-400">Admin</strong> means the Manage Server permission (Administrator includes it).
+          Tournament admin commands also accept the tournament admin roles set in the dashboard.
+          Every other command can be used by all members.
+        </p>
         @if (loading()) {
           <p class="text-xs text-slate-400" role="status">Loading the bot's registered commands…</p>
         } @else if (loadError()) {

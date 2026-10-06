@@ -3,6 +3,7 @@ import {
   ChatInputCommandInteraction,
   ChannelType,
   EmbedBuilder,
+  MessageFlags,
 } from 'discord.js';
 import { VpgService } from '../../vpg/vpg.service';
 import { VpgSuperligaPollerService } from '../../vpg/vpg-superliga-poller.service';
@@ -75,9 +76,11 @@ export class SuperligaCommands {
           .setTitle(`⚽ VPG ${SUPERLIGA_NAME} — Rezultatele de Astăzi`);
       }
       const recent = await this.vpgService.getResults({ season: today.season, limit: 5 });
-      return buildSuperligaResultsEmbed(recent.results, recent.season, 5)
-        .setTitle(`🏁 VPG ${SUPERLIGA_NAME} — Ultimele Rezultate`)
-        .setDescription(`*Nu s-au găsit meciuri jucate astăzi (${day}). Iată ultimele meciuri încheiate:*`);
+      const embed = buildSuperligaResultsEmbed(recent.results, recent.season, 5)
+        .setTitle(`🏁 VPG ${SUPERLIGA_NAME} — Ultimele Rezultate`);
+      // Prepend the note: the builder puts the result list itself in the description.
+      const note = `*Nu s-au găsit meciuri jucate astăzi (${day}). Iată ultimele meciuri încheiate:*`;
+      return embed.setDescription(recent.results.length ? `${note}\n\n${embed.data.description ?? ''}` : note);
     }
     const count = opts.count || 10;
     const { season, results } = await this.vpgService.getResults({ season: opts.season, limit: count });
@@ -92,7 +95,7 @@ export class SuperligaCommands {
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommand === 'setup') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const guildId = interaction.guildId;
       if (!guildId) {
         await interaction.editReply('This command can only be run inside a Discord server.');
@@ -136,7 +139,7 @@ export class SuperligaCommands {
     }
 
     if (subcommand === 'check') {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       const guildId = interaction.guildId;
       if (!guildId) {
         await interaction.editReply('This command can only be run inside a Discord server.');

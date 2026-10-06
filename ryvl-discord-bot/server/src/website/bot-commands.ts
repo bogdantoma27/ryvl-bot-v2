@@ -1,6 +1,6 @@
 import { ApplicationCommandOptionType, RESTPostAPIChatInputApplicationCommandsJSONBody } from 'discord.js';
 import { getSlashCommands } from '../discord/commands/register-commands';
-import { isAdminSubcommand } from '../discord/commands/command-permissions';
+import { isAdminSubcommand, TOURNAMENT_ADMIN_SUBCOMMANDS } from '../discord/commands/command-permissions';
 
 export interface BotCommandOptionDoc {
   name: string;
@@ -20,21 +20,8 @@ export interface BotCommandDoc {
   options: BotCommandOptionDoc[];
 }
 
-// Tournament subcommands check their own admin rule (Manage Server or a tournament admin
-// role) inside tournament-commands.ts; listed here only so the docs label them.
-const TOURNAMENT_ADMIN_SUBCOMMANDS = new Set([
-  'setup-admin',
-  'create',
-  'set-status',
-  'toggle-signups',
-  'start-draft',
-  'start',
-  'notify',
-  'generate-standings',
-]);
-
 function adminSubcommand(command: string, sub: string): boolean {
-  return isAdminSubcommand(command, sub) || (command === 'tournament' && TOURNAMENT_ADMIN_SUBCOMMANDS.has(sub));
+  return isAdminSubcommand(command, sub) || (command === 'tournament' && TOURNAMENT_ADMIN_SUBCOMMANDS.includes(sub));
 }
 
 const TYPE_LABELS: Partial<Record<ApplicationCommandOptionType, string>> = {
