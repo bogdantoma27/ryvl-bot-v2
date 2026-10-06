@@ -32,6 +32,16 @@ function escapeXml(unsafe: any): string {
     .replace(/'/g, '&apos;');
 }
 
+/**
+ * Shortens text to at most maxChars characters (whole code points, so an emoji is never
+ * split), ending with an ellipsis when cut.
+ */
+export function truncateText(value: string, maxChars: number): string {
+  const chars = Array.from(value);
+  if (chars.length <= maxChars) return value;
+  return chars.slice(0, Math.max(1, maxChars - 1)).join('').trimEnd() + '…';
+}
+
 function safeColor(value: string | undefined, fallback: string): string {
   return value && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
 }
@@ -254,6 +264,8 @@ export class LineupRendererService {
 
     const titleX = 50;
     const titleY = 56;
+    // 34px bold text averages under 21px per character: stop before the formation pill.
+    const titleMaxChars = Math.floor((pillX - titleX - 24) / 21);
 
     const row1 = kickoffRows[0] || { flag: 'ro', text: 'Kickoff pending' };
     const row2 = kickoffRows[1] || { flag: 'uk', text: 'Kickoff pending' };
@@ -274,7 +286,7 @@ export class LineupRendererService {
     <text x="${pillX + pillWidth / 2}" y="${pillY + 31}" class="txt-pill" text-anchor="middle">${escapeXml(formationLabel)}</text>
 
     <!-- Title -->
-    <text x="${titleX}" y="${titleY}" class="txt-title" font-size="34">${escapeXml(title)}</text>
+    <text x="${titleX}" y="${titleY}" class="txt-title" font-size="34">${escapeXml(truncateText(title, titleMaxChars))}</text>
 
     <!-- Kickoff row in a single clean horizontal banner -->
     ${flag1Svg}

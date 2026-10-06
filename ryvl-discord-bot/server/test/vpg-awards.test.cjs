@@ -252,16 +252,17 @@ test('weekly TOTW picks are recorded without a post, and a recorded week is kept
   const where = { leagueSlug: 'Superliga-Romania', season: 98 };
   try {
     await prisma.superligaMvpTotwSelection.deleteMany({ where });
-    assert.equal(await service.recordSuperligaWeek(), 11);
+    // One pick per nameplate on the card: GK, 3 CB, CDM, 2 CM, CAM, LM, RM, 2 ST.
+    assert.equal(await service.recordSuperligaWeek(), 12);
     const rows = await prisma.superligaMvpTotwSelection.findMany({ where: { ...where, week: 4 } });
-    assert.equal(rows.length, 11, 'session week 7 is TOTW week 4');
+    assert.equal(rows.length, 12, 'session week 7 is TOTW week 4');
     assert.deepEqual(rows.find((r) => r.vpgUsername === 'gk-a').eaNames, ['gk-a-psn']);
     assert.equal(await service.recordSuperligaWeek(), 0, 'already recorded');
     week = null;
     assert.equal(await service.recordSuperligaWeek(), 0, 'no week, nothing recorded');
     vpg.fetchLeaderboardPage = async () => { throw new Error('VPG down'); };
     assert.equal(await service.recordSuperligaWeek(), 0, 'VPG errors are not recorded as an empty week');
-    assert.equal(await prisma.superligaMvpTotwSelection.count({ where }), 11);
+    assert.equal(await prisma.superligaMvpTotwSelection.count({ where }), 12);
   } finally {
     await prisma.superligaMvpTotwSelection.deleteMany({ where });
     await prisma.$disconnect();
