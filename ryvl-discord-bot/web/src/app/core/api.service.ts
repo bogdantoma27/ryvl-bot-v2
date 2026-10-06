@@ -15,6 +15,13 @@ import {
   LineupDraft,
   LineupRenderPayload,
   LineupPostPayload,
+  LineupPostResult,
+  LineupDraftPayload,
+  LineupMemberOption,
+  LineupMatchOccurrence,
+  LineupAssignments,
+  UpcomingFixture,
+  CreateFixtureEventsResult,
   VpgStandingsRow,
   VpgMatchItem,
   VpgLeaderboardEntry,
@@ -129,8 +136,10 @@ export class ApiService {
     );
   }
 
-  getEvents(guildId: string, status?: string): Promise<EventItem[]> {
-    const params = status ? { status } : undefined;
+  /** The server pages events (20 by default); ask for its maximum so lists and counts are complete. */
+  getEvents(guildId: string, status?: string, limit = 100): Promise<EventItem[]> {
+    const params: Record<string, string> = { limit: String(limit) };
+    if (status) params['status'] = status;
     return firstValueFrom(
       this.http.get<EventItem[]>(`${this.baseUrl}/api/guilds/${guildId}/events`, {
         headers: this.headers(),
@@ -184,6 +193,25 @@ export class ApiService {
     );
   }
 
+  getUpcomingFixtures(guildId: string): Promise<UpcomingFixture[]> {
+    return firstValueFrom(
+      this.http.get<UpcomingFixture[]>(`${this.baseUrl}/api/guilds/${guildId}/events/fixtures/upcoming`, {
+        headers: this.headers(),
+      })
+    );
+  }
+
+  createEventsFromFixtures(
+    guildId: string,
+    payload: { channelId: string; matchIds?: number[]; durationMinutes?: number; mentionRoleIds?: string[] }
+  ): Promise<CreateFixtureEventsResult> {
+    return firstValueFrom(
+      this.http.post<CreateFixtureEventsResult>(`${this.baseUrl}/api/guilds/${guildId}/events/fixtures/create`, payload, {
+        headers: this.headers(),
+      })
+    );
+  }
+
   getSettings(guildId: string): Promise<GuildSettings> {
     return firstValueFrom(
       this.http.get<GuildSettings>(`${this.baseUrl}/api/guilds/${guildId}/settings`, {
@@ -200,9 +228,9 @@ export class ApiService {
     );
   }
 
-  cancelOccurrence(guildId: string, eventId: string, occurrenceId: string): Promise<void> {
+  cancelOccurrence(guildId: string, eventId: string, occurrenceId: string): Promise<{ status: string; discordSync?: { updated: number; failed: number } }> {
     return firstValueFrom(
-      this.http.post<void>(
+      this.http.post<{ status: string; discordSync?: { updated: number; failed: number } }>(
         `${this.baseUrl}/api/guilds/${guildId}/events/${eventId}/occurrences/${occurrenceId}/cancel`,
         {},
         { headers: this.headers() }
@@ -234,12 +262,9 @@ export class ApiService {
     );
   }
 
-  postLineup(
-    guildId: string,
-    payload: LineupPostPayload,
-  ): Promise<{ ok: boolean; channel_id: string; message_id: string }> {
+  postLineup(guildId: string, payload: LineupPostPayload): Promise<LineupPostResult> {
     return firstValueFrom(
-      this.http.post<{ ok: boolean; channel_id: string; message_id: string }>(
+      this.http.post<LineupPostResult>(
         `${this.baseUrl}/api/guilds/${guildId}/lineup/post`,
         payload,
         { headers: this.headers() },
@@ -258,7 +283,7 @@ export class ApiService {
 
   createLineupDraft(
     guildId: string,
-    payload: Partial<LineupDraft>,
+    payload: LineupDraftPayload,
   ): Promise<LineupDraft> {
     return firstValueFrom(
       this.http.post<LineupDraft>(
@@ -272,11 +297,42 @@ export class ApiService {
   updateLineupDraft(
     guildId: string,
     draftId: string,
-    payload: Partial<LineupDraft>,
+    payload: LineupDraftPayload,
   ): Promise<LineupDraft> {
     return firstValueFrom(
       this.http.patch<LineupDraft>(
         `${this.baseUrl}/api/guilds/${guildId}/lineup/drafts/${draftId}`,
+        payload,
+        { headers: this.headers() },
+      ),
+    );
+  }
+
+  /** Members with their RSVP status for the occurrence, EA name and preferred position. */
+  getLineupMembers(guildId: string, occurrenceId?: string | null): Promise<LineupMemberOption[]> {
+    return firstValueFrom(
+      this.http.get<LineupMemberOption[]>(`${this.baseUrl}/api/guilds/${guildId}/lineup/members`, {
+        headers: this.headers(),
+        params: occurrenceId ? { occurrence_id: occurrenceId } : {},
+      }),
+    );
+  }
+
+  getLineupOccurrences(guildId: string): Promise<LineupMatchOccurrence[]> {
+    return firstValueFrom(
+      this.http.get<LineupMatchOccurrence[]>(`${this.baseUrl}/api/guilds/${guildId}/lineup/occurrences`, {
+        headers: this.headers(),
+      }),
+    );
+  }
+
+  autoFillLineup(
+    guildId: string,
+    payload: { formation: string; occurrence_id: string; assignments: LineupAssignments },
+  ): Promise<{ assignments: LineupAssignments; unplaced: string[] }> {
+    return firstValueFrom(
+      this.http.post<{ assignments: LineupAssignments; unplaced: string[] }>(
+        `${this.baseUrl}/api/guilds/${guildId}/lineup/auto-fill`,
         payload,
         { headers: this.headers() },
       ),

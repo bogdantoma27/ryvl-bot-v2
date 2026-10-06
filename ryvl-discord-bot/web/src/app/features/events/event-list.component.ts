@@ -11,16 +11,18 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
-import { EventItem, RsvpCounts } from '../../core/models';
+import { EventItem } from '../../core/models';
 import { RsvpBadgeComponent } from '../../shared/components/rsvp-badge.component';
+import { eventStatusLabel, formatEventDate } from './event-display';
+import { FixtureEventsDialogComponent } from './fixture-events-dialog.component';
 
-type FilterTab = 'all' | 'active' | 'draft' | 'archived';
+type FilterTab = 'all' | 'active' | 'archived';
 
 @Component({
   selector: 'app-event-list',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, FormsModule, RsvpBadgeComponent],
+  imports: [RouterLink, FormsModule, RsvpBadgeComponent, FixtureEventsDialogComponent],
   template: `
     <div class="max-w-7xl w-full mx-auto space-y-6">
       <!-- Header -->
@@ -32,6 +34,14 @@ type FilterTab = 'all' | 'active' | 'draft' | 'archived';
           </p>
         </div>
 
+        <div class="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          (click)="fixturesOpen.set(true)"
+          class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-600 text-white text-sm font-semibold transition cursor-pointer"
+        >
+          ⚽ Create match events from fixtures
+        </button>
         <a
           routerLink="/admin/events/new"
           class="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-[#5865F2] hover:bg-[#4752C4] text-white text-sm font-bold shadow-md hover:shadow-indigo-500/25 transition active:scale-95 cursor-pointer"
@@ -41,7 +51,12 @@ type FilterTab = 'all' | 'active' | 'draft' | 'archived';
           </svg>
           <span class="text-white">Create Event</span>
         </a>
+        </div>
       </div>
+
+      @if (fixturesOpen()) {
+        <app-fixture-events-dialog (closed)="fixturesOpen.set(false)" (created)="onFixtureEventsCreated()" />
+      }
 
       <!-- Filters & Search Bar -->
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-3 rounded-xl bg-[#16213e] border border-slate-700/60">
@@ -70,18 +85,6 @@ type FilterTab = 'all' | 'active' | 'draft' | 'archived';
             class="px-3 py-1.5 rounded-md text-xs font-medium hover:text-white hover:bg-slate-800/80 transition cursor-pointer"
           >
             Active ({{ activeCount() }})
-          </button>
-          <button
-            type="button"
-            (click)="setTab('draft')"
-            [class.bg-[#5865F2]]="selectedTab() === 'draft'"
-            [class.text-white]="selectedTab() === 'draft'"
-            [class.font-bold]="selectedTab() === 'draft'"
-            [class.shadow-sm]="selectedTab() === 'draft'"
-            [class.text-slate-300]="selectedTab() !== 'draft'"
-            class="px-3 py-1.5 rounded-md text-xs font-medium hover:text-white hover:bg-slate-800/80 transition cursor-pointer"
-          >
-            Draft ({{ draftCount() }})
           </button>
           <button
             type="button"
@@ -154,18 +157,15 @@ type FilterTab = 'all' | 'active' | 'draft' | 'archived';
                 <div class="flex items-center justify-between gap-2">
                   <span
                     class="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider"
-                    [class.bg-emerald-500/20]="event.status === 'active'"
-                    [class.text-emerald-400]="event.status === 'active'"
+                    [class.bg-emerald-500/20]="event.status === 'ACTIVE'"
+                    [class.text-emerald-400]="event.status === 'ACTIVE'"
                     [class.border]="true"
-                    [class.border-emerald-500/30]="event.status === 'active'"
-                    [class.bg-amber-500/20]="event.status === 'draft'"
-                    [class.text-amber-400]="event.status === 'draft'"
-                    [class.border-amber-500/30]="event.status === 'draft'"
-                    [class.bg-slate-700/60]="event.status === 'archived'"
-                    [class.text-slate-400]="event.status === 'archived'"
-                    [class.border-slate-600]="event.status === 'archived'"
+                    [class.border-emerald-500/30]="event.status === 'ACTIVE'"
+                    [class.bg-slate-700/60]="event.status !== 'ACTIVE'"
+                    [class.text-slate-400]="event.status !== 'ACTIVE'"
+                    [class.border-slate-600]="event.status !== 'ACTIVE'"
                   >
-                    {{ event.status }}
+                    {{ statusLabel(event.status) }}
                   </span>
 
                   @if (event.isRecurring) {
@@ -198,7 +198,13 @@ type FilterTab = 'all' | 'active' | 'draft' | 'archived';
                     <svg class="w-4 h-4 text-[#5865F2] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    <span class="font-medium text-white">{{ event.nextOccurrence || event.startsAt }}</span>
+                    <span class="font-medium text-white">
+                      @if (event.nextOccurrence) {
+                        {{ formatDate(event.nextOccurrence.startsAt, event.timezone) }}
+                      } @else {
+                        <span class="text-slate-400">No upcoming date</span>
+                      }
+                    </span>
                   </div>
 
                   @if (event.location) {
@@ -215,7 +221,7 @@ type FilterTab = 'all' | 'active' | 'draft' | 'archived';
 
               <!-- Footer with RSVP badge & Action -->
               <div class="px-5 py-3 bg-[#11192e] border-t border-slate-700/50 flex items-center justify-between">
-                <app-rsvp-badge [counts]="getEventCounts(event)" />
+                <app-rsvp-badge [counts]="event.nextOccurrence?.rsvpCounts ?? event.rsvpsCount" />
 
                 <div class="flex items-center gap-3">
                   <button
@@ -248,85 +254,45 @@ export class EventListComponent implements OnInit {
   readonly guildStore = inject(GuildStore);
 
   readonly events = signal<EventItem[]>([]);
-  readonly selectedTab = signal<FilterTab>('all');
+  readonly selectedTab = signal<FilterTab>('active');
   readonly searchQuery = signal<string>('');
   readonly isLoading = signal<boolean>(true);
+  readonly fixturesOpen = signal<boolean>(false);
+
+  readonly statusLabel = eventStatusLabel;
+  readonly formatDate = formatEventDate;
 
   readonly allCount = computed(() => this.events().length);
-  readonly activeCount = computed(() => this.events().filter((e) => e.status === 'active').length);
-  readonly draftCount = computed(() => this.events().filter((e) => e.status === 'draft').length);
-  readonly archivedCount = computed(() => this.events().filter((e) => e.status === 'archived').length);
-
-  isEventFinished(event: EventItem): boolean {
-    const now = Date.now();
-    if (event.status === 'archived') return true;
-    const durMs = (event.durationMinutes || (event as any).duration || 60) * 60000;
-    if (!event.occurrences || event.occurrences.length === 0) {
-      const start = new Date(event.startsAt).getTime();
-      return !isNaN(start) && start + durMs < now;
-    }
-    return event.occurrences.every((occ: any) => {
-      const start = new Date(occ.startsAt).getTime();
-      const end = occ.endsAt ? new Date(occ.endsAt).getTime() : start + durMs;
-      return occ.status === 'closed' || occ.status === 'CLOSED' || occ.status === 'cancelled' || occ.status === 'CANCELLED' || end < now;
-    });
-  }
+  readonly activeCount = computed(() => this.events().filter((e) => e.status === 'ACTIVE').length);
+  readonly archivedCount = computed(() => this.events().filter((e) => e.status === 'ARCHIVED').length);
 
   readonly filteredEvents = computed(() => {
     const tab = this.selectedTab();
     const query = this.searchQuery().toLowerCase().trim();
 
-    return this.events().filter((event) => {
-      // Finished/closed events should not appear in the active or all lists
-      if (this.isEventFinished(event)) return false;
-
-      const matchesTab = tab === 'all' || event.status === tab;
-      const matchesQuery =
-        !query ||
-        event.title.toLowerCase().includes(query) ||
-        (event.description && event.description.toLowerCase().includes(query)) ||
-        (event.location && event.location.toLowerCase().includes(query));
-
-      return matchesTab && matchesQuery;
-    });
+    return this.events()
+      .filter((event) => {
+        const matchesTab =
+          tab === 'all' || (tab === 'active' ? event.status === 'ACTIVE' : event.status === 'ARCHIVED');
+        const matchesQuery =
+          !query ||
+          event.title.toLowerCase().includes(query) ||
+          (event.description ?? '').toLowerCase().includes(query) ||
+          (event.location ?? '').toLowerCase().includes(query);
+        return matchesTab && matchesQuery;
+      })
+      .sort((a, b) => {
+        // Upcoming dates first (soonest first), then everything else as returned.
+        const an = a.nextOccurrence?.startsAt;
+        const bn = b.nextOccurrence?.startsAt;
+        if (an && bn) return an.localeCompare(bn);
+        return an ? -1 : bn ? 1 : 0;
+      });
   });
-
-  getEventCounts(event: EventItem): RsvpCounts {
-    let accepted = 0;
-    let tentative = 0;
-    let declined = 0;
-
-    if (event.rsvpsCount) {
-      accepted = Number(event.rsvpsCount.accepted) || 0;
-      tentative = Number(event.rsvpsCount.tentative) || 0;
-      declined = Number(event.rsvpsCount.declined) || 0;
-    }
-
-    if (accepted === 0 && tentative === 0 && declined === 0 && event.occurrences) {
-      for (const occ of event.occurrences) {
-        const counts = (occ as any).rsvpCounts || (occ as any).counts;
-        if (counts) {
-          accepted += Number(counts.accepted) || 0;
-          tentative += Number(counts.tentative) || 0;
-          declined += Number(counts.declined) || 0;
-        }
-        if (Array.isArray((occ as any).rsvps)) {
-          for (const r of (occ as any).rsvps) {
-            const st = String(r.status || '').toUpperCase();
-            if (st === 'ACCEPTED') accepted++;
-            else if (st === 'TENTATIVE') tentative++;
-            else if (st === 'DECLINED') declined++;
-          }
-        }
-      }
-    }
-
-    return { accepted, tentative, declined, total: accepted + tentative + declined };
-  }
 
   async deleteEvent(e: MouseEvent, eventId: string): Promise<void> {
     e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this event?')) return;
+    if (!confirm('Delete this event? Its Discord announcements will be marked as cancelled.')) return;
     const gid = this.guildStore.activeGuildId();
     if (!gid) return;
     try {
@@ -359,6 +325,11 @@ export class EventListComponent implements OnInit {
 
   openDetail(eventId: string): void {
     this.router.navigate(['/admin/events', eventId]);
+  }
+
+  onFixtureEventsCreated(): void {
+    const gid = this.guildStore.activeGuildId();
+    if (gid) this.loadEvents(gid);
   }
 
   async loadEvents(guildId: string): Promise<void> {

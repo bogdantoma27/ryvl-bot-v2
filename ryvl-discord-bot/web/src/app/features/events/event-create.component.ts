@@ -13,6 +13,12 @@ import { Router, RouterLink } from '@angular/router';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 import { EventCreatePayload } from '../../core/models';
+import {
+  MonthlyRule,
+  RecurrenceBuilderComponent,
+  RecurrenceEnd,
+  RecurrenceFrequency,
+} from './recurrence-builder.component';
 
 type StepNumber = 1 | 2 | 3 | 4;
 
@@ -25,16 +31,6 @@ const PRESET_COLORS = [
   { name: 'Cyan', hex: '#00A8FC' },
   { name: 'Coral', hex: '#F26522' },
   { name: 'White', hex: '#FFFFFF' },
-];
-
-const WEEKDAYS = [
-  { id: 1, label: 'Mon' },
-  { id: 2, label: 'Tue' },
-  { id: 3, label: 'Wed' },
-  { id: 4, label: 'Thu' },
-  { id: 5, label: 'Fri' },
-  { id: 6, label: 'Sat' },
-  { id: 0, label: 'Sun' },
 ];
 
 const TIMEZONES = [
@@ -52,7 +48,7 @@ const TIMEZONES = [
   selector: 'app-event-create',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, FormsModule, TitleCasePipe],
+  imports: [RouterLink, FormsModule, TitleCasePipe, RecurrenceBuilderComponent],
   template: `
     <div class="max-w-7xl w-full mx-auto space-y-6">
       <!-- Breadcrumb & Header -->
@@ -339,134 +335,16 @@ const TIMEZONES = [
                 <p class="text-xs text-slate-400">Configure repetition rules or keep as a one-time event.</p>
               </div>
 
-              <!-- Toggle One-time vs Recurring -->
-              <div class="p-4 rounded-xl bg-[#1a1a2e] border border-slate-700 flex items-center justify-between">
-                <div>
-                  <div class="text-sm font-semibold text-white">Recurring Event</div>
-                  <div class="text-xs text-slate-400">Automatically generate future occurrences and post RSVP alerts</div>
-                </div>
-                <label class="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    [checked]="isRecurring()"
-                    (change)="isRecurring.set(!isRecurring())"
-                    class="sr-only peer"
-                  />
-                  <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5865F2]"></div>
-                </label>
-              </div>
-
-              @if (isRecurring()) {
-                <div class="space-y-4 pt-2">
-                  <!-- Frequency -->
-                  <div>
-                    <label class="block text-xs font-semibold text-slate-300 mb-1">Frequency</label>
-                    <select
-                      [ngModel]="frequency()"
-                      (ngModelChange)="frequency.set($event)"
-                      class="w-full bg-[#1a1a2e] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#5865F2] transition"
-                    >
-                      <option value="daily">Daily</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="biweekly">Biweekly (Every 2 weeks)</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
-                  </div>
-
-                  <!-- Weekday checkboxes (if Weekly or Biweekly) -->
-                  @if (frequency() === 'weekly' || frequency() === 'biweekly') {
-                    <div>
-                      <label class="block text-xs font-semibold text-slate-300 mb-2">Repeat on Days</label>
-                      <div class="flex flex-wrap gap-2">
-                        @for (day of weekdays; track day.id) {
-                          <button
-                            type="button"
-                            (click)="toggleWeekday(day.id)"
-                            class="px-3.5 py-1.5 rounded-lg text-xs font-bold border transition cursor-pointer"
-                            [class.bg-[#5865F2]]="selectedWeekdays().includes(day.id)"
-                            [class.border-[#5865F2]]="selectedWeekdays().includes(day.id)"
-                            [class.text-white]="selectedWeekdays().includes(day.id)"
-                            [class.shadow-sm]="selectedWeekdays().includes(day.id)"
-                            [class.bg-slate-800]="!selectedWeekdays().includes(day.id)"
-                            [class.border-slate-700]="!selectedWeekdays().includes(day.id)"
-                            [class.text-slate-200]="!selectedWeekdays().includes(day.id)"
-                          >
-                            {{ day.label }}
-                          </button>
-                        }
-                      </div>
-                    </div>
-                  }
-
-                  <!-- Monthly Options -->
-                  @if (frequency() === 'monthly') {
-                    <div class="space-y-2">
-                      <label class="block text-xs font-semibold text-slate-300 mb-1">Monthly Rule</label>
-                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <label
-                          (click)="monthlyType.set('day_of_month')"
-                          class="p-3 rounded-lg border cursor-pointer flex items-center gap-2"
-                          [class.border-[#5865F2]]="monthlyType() === 'day_of_month'"
-                          [class.bg-indigo-500/10]="monthlyType() === 'day_of_month'"
-                          [class.border-slate-700]="monthlyType() !== 'day_of_month'"
-                        >
-                          <input type="radio" name="monthlyRule" [checked]="monthlyType() === 'day_of_month'" class="text-[#5865F2]" />
-                          <span class="text-xs text-slate-200">On this day of the month</span>
-                        </label>
-                        <label
-                          (click)="monthlyType.set('nth_weekday')"
-                          class="p-3 rounded-lg border cursor-pointer flex items-center gap-2"
-                          [class.border-[#5865F2]]="monthlyType() === 'nth_weekday'"
-                          [class.bg-indigo-500/10]="monthlyType() === 'nth_weekday'"
-                          [class.border-slate-700]="monthlyType() !== 'nth_weekday'"
-                        >
-                          <input type="radio" name="monthlyRule" [checked]="monthlyType() === 'nth_weekday'" class="text-[#5865F2]" />
-                          <span class="text-xs text-slate-200">On the Nth weekday</span>
-                        </label>
-                      </div>
-                    </div>
-                  }
-
-                  <!-- End Condition -->
-                  <div>
-                    <label class="block text-xs font-semibold text-slate-300 mb-1">End Condition</label>
-                    <select
-                      [ngModel]="endCondition()"
-                      (ngModelChange)="endCondition.set($event)"
-                      class="w-full bg-[#1a1a2e] border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-[#5865F2] transition"
-                    >
-                      <option value="never">Never (Keep generating)</option>
-                      <option value="after_count">After a specific number of occurrences</option>
-                      <option value="on_date">On a specific date</option>
-                    </select>
-
-                    @if (endCondition() === 'after_count') {
-                      <div class="mt-2 flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="1"
-                          max="52"
-                          [ngModel]="endCount()"
-                          (ngModelChange)="endCount.set($event)"
-                          class="w-28 bg-[#1a1a2e] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
-                        />
-                        <span class="text-xs text-slate-400">occurrences</span>
-                      </div>
-                    }
-
-                    @if (endCondition() === 'on_date') {
-                      <div class="mt-2">
-                        <input
-                          type="date"
-                          [ngModel]="endDate()"
-                          (ngModelChange)="endDate.set($event)"
-                          class="w-full sm:w-64 bg-[#1a1a2e] border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
-                        />
-                      </div>
-                    }
-                  </div>
-                </div>
-              }
+              <app-recurrence-builder
+                [(isRecurring)]="isRecurring"
+                [(frequency)]="frequency"
+                [(weekdays)]="selectedWeekdays"
+                [(monthlyType)]="monthlyType"
+                [(endCondition)]="endCondition"
+                [(endCount)]="endCount"
+                [(endDate)]="endDate"
+                [(publishLeadMinutes)]="publishLeadMinutes"
+              />
 
               <!-- Step 3 Actions -->
               <div class="pt-4 flex items-center justify-between border-t border-slate-700/50">
@@ -631,18 +509,18 @@ export class EventCreateComponent implements OnInit {
   readonly timezone = signal<string>('Europe/Bucharest');
 
   readonly isRecurring = signal<boolean>(false);
-  readonly frequency = signal<'daily' | 'weekly' | 'biweekly' | 'monthly'>('weekly');
+  readonly frequency = signal<RecurrenceFrequency>('weekly');
   readonly selectedWeekdays = signal<number[]>([1]);
-  readonly monthlyType = signal<'day_of_month' | 'nth_weekday'>('day_of_month');
-  readonly endCondition = signal<'never' | 'after_count' | 'on_date'>('never');
+  readonly monthlyType = signal<MonthlyRule>('day_of_month');
+  readonly endCondition = signal<RecurrenceEnd>('never');
   readonly endCount = signal<number>(5);
   readonly endDate = signal<string>('');
+  readonly publishLeadMinutes = signal<number>(2880);
 
   readonly channelId = signal<string>('');
   readonly selectedRoleIds = signal<string[]>([]);
 
   readonly presetColors = PRESET_COLORS;
-  readonly weekdays = WEEKDAYS;
   readonly timezones = TIMEZONES;
 
   readonly steps: { num: StepNumber; title: string; sub: string }[] = [
@@ -744,17 +622,6 @@ export class EventCreateComponent implements OnInit {
     }
   }
 
-  toggleWeekday(dayId: number): void {
-    const current = this.selectedWeekdays();
-    if (current.includes(dayId)) {
-      if (current.length > 1) {
-        this.selectedWeekdays.set(current.filter((d) => d !== dayId));
-      }
-    } else {
-      this.selectedWeekdays.set([...current, dayId]);
-    }
-  }
-
   toggleRole(roleId: string): void {
     const current = this.selectedRoleIds();
     if (current.includes(roleId)) {
@@ -805,11 +672,12 @@ export class EventCreateComponent implements OnInit {
       endDate: this.isRecurring() && this.endCondition() === 'on_date' ? this.endDate() : undefined,
       channelId: this.channelId(),
       roleMentionIds: this.selectedRoleIds(),
+      publishLeadMinutes: this.isRecurring() ? this.publishLeadMinutes() : undefined,
     };
 
     try {
       const created = await this.api.createEvent(guildId, payload);
-      this.router.navigate(['/events', created.id]);
+      this.router.navigate(['/admin/events', created.id]);
     } catch (err: any) {
       console.error('Failed to create event:', err);
       const msg = err?.error?.message || err?.message || 'Failed to create event on server. Please try again.';
