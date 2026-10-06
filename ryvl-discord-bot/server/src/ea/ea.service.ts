@@ -341,44 +341,44 @@ export class EaService {
     }
   }
 
-  async getPublicRoster(platform = 'common-gen5', clubId?: string): Promise<PublicRosterMember[]> {
-    let targetClubId = clubId;
-    if (!targetClubId) {
-      // Same deterministic "default" club as the public club page.
-      const config = await this.getDefaultTrackerConfig();
-      targetClubId = config.clubId || '128199'; // Default RYVL Esports club ID
-      platform = config.platform || platform;
-    }
+  /** The default club's members for the public Team page. Throws 503 when EA is unavailable. */
+  async getPublicRoster(): Promise<PublicRosterMember[]> {
+    // Same deterministic "default" club as the public club page.
+    const config = await this.getDefaultTrackerConfig();
+    const targetClubId = config.clubId || '128199'; // Default RYVL Esports club ID
+    const platform = config.platform || DEFAULT_EA_PLATFORM;
 
+    let data: any;
     try {
-      const data = await this.fetchMemberStats(targetClubId, platform);
-      const members = Array.isArray(data?.members) ? data.members : [];
-
-      return members.map((m: any) => {
-        const posInfo = this.mapPosition(m.proPos, m.favoritePosition);
-        return {
-          name: m.name || 'Unknown',
-          proName: m.proName || m.name || 'Virtual Pro',
-          proOverall: parseInt(String(m.proOverall || 80), 10) || 80,
-          position: posInfo.position,
-          positionGroup: posInfo.positionGroup,
-          gamesPlayed: parseInt(String(m.gamesPlayed || 0), 10) || 0,
-          goals: parseInt(String(m.goals || 0), 10) || 0,
-          assists: parseInt(String(m.assists || 0), 10) || 0,
-          ratingAve: parseFloat(String(m.ratingAve || 0.0)) || 0.0,
-          cleanSheets: parseInt(String(m.cleanSheetsGK || m.cleanSheetsDef || 0), 10) || 0,
-          manOfTheMatch: parseInt(String(m.manOfTheMatch || 0), 10) || 0,
-          passSuccessRate: parseInt(String(m.passSuccessRate || 0), 10) || 0,
-          tackleSuccessRate: parseInt(String(m.tackleSuccessRate || 0), 10) || 0,
-          shotSuccessRate: parseInt(String(m.shotSuccessRate || 0), 10) || 0,
-          nationality: String(m.proNationality || '39'),
-          height: parseInt(String(m.proHeight || 180), 10) || 180,
-        };
-      });
+      data = await this.fetchMemberStats(targetClubId, platform);
     } catch (err: any) {
+      // An outage must not look like a club without players.
       this.logger.error(`Failed to get public roster for club ${targetClubId}: ${err.message}`);
-      return [];
+      throw new ServiceUnavailableException('The EA Pro Clubs roster is temporarily unavailable. Please try again.');
     }
+    const members = Array.isArray(data?.members) ? data.members : [];
+
+    return members.map((m: any) => {
+      const posInfo = this.mapPosition(m.proPos, m.favoritePosition);
+      return {
+        name: m.name || 'Unknown',
+        proName: m.proName || m.name || 'Virtual Pro',
+        proOverall: parseInt(String(m.proOverall || 80), 10) || 80,
+        position: posInfo.position,
+        positionGroup: posInfo.positionGroup,
+        gamesPlayed: parseInt(String(m.gamesPlayed || 0), 10) || 0,
+        goals: parseInt(String(m.goals || 0), 10) || 0,
+        assists: parseInt(String(m.assists || 0), 10) || 0,
+        ratingAve: parseFloat(String(m.ratingAve || 0.0)) || 0.0,
+        cleanSheets: parseInt(String(m.cleanSheetsGK || m.cleanSheetsDef || 0), 10) || 0,
+        manOfTheMatch: parseInt(String(m.manOfTheMatch || 0), 10) || 0,
+        passSuccessRate: parseInt(String(m.passSuccessRate || 0), 10) || 0,
+        tackleSuccessRate: parseInt(String(m.tackleSuccessRate || 0), 10) || 0,
+        shotSuccessRate: parseInt(String(m.shotSuccessRate || 0), 10) || 0,
+        nationality: String(m.proNationality || '39'),
+        height: parseInt(String(m.proHeight || 180), 10) || 180,
+      };
+    });
   }
 
   parsePlayer(stat: EaMatchPlayerStat): ParsedEaPlayer {
