@@ -13,6 +13,7 @@ FILES=(
   ea-fixes.sql
   platform-security-fixes.sql
   vpg-awards-fixes.sql
+  events-lineup-fixes.sql
 )
 for f in "${FILES[@]}"; do
   echo "Applying prisma/deploy/$f"

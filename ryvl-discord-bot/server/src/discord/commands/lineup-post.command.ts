@@ -28,6 +28,8 @@ import {
 } from '../../lineup/lineup-renderer.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertChannelInGuild } from '../channel-guard';
+import { Prisma } from '@prisma/client';
+import { LineupAssignments, assignmentNames } from '../../lineup/lineup-assignments';
 
 export const LINEUP_MODAL_SETUP_PREFIX = 'lineup:modal:setup:';
 export const LINEUP_MODAL_CUSTOM_PREFIX = 'lineup:modal:custom:';
@@ -81,7 +83,7 @@ interface LineupWizardSession {
   title: string;
   kickoffAt: Date | null;
   currentIndex: number;
-  players: Record<string, string>;
+  players: LineupAssignments;
   expiresAt: number;
 }
 
@@ -102,7 +104,7 @@ export class LineupPostCommand {
           this.sessions.delete(id);
         }
       }
-    }, 5 * 60 * 1000);
+    }, 5 * 60 * 1000).unref?.();
   }
 
   async handleAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
@@ -201,7 +203,7 @@ export class LineupPostCommand {
 
     const guild = await this.prisma.guild.findUnique({ where: { id: guildId } });
     const targetChannelId =
-      requestedChannelId || guild?.defaultChannelId || interaction.channelId;
+      requestedChannelId || guild?.defaultLineupChannelId || guild?.defaultChannelId || interaction.channelId;
 
     if (!targetChannelId) {
       await interaction.editReply({
@@ -255,7 +257,7 @@ export class LineupPostCommand {
     });
 
     const targetChannelId =
-      requestedChannelId || guild?.defaultChannelId || interaction.channelId;
+      requestedChannelId || guild?.defaultLineupChannelId || guild?.defaultChannelId || interaction.channelId;
 
     if (!targetChannelId) {
       await interaction.editReply({
@@ -321,7 +323,7 @@ export class LineupPostCommand {
     const displayName = member?.displayName || interaction.users.get(selectedUserId)?.username || 'Player';
 
     const currentSlot = session.layout.positions[session.currentIndex];
-    session.players[currentSlot.key] = displayName.slice(0, 24);
+    session.players[currentSlot.key] = { discordUserId: selectedUserId, name: displayName.slice(0, 24) };
 
     await this.advanceWizard(interaction, session);
   }
@@ -423,7 +425,7 @@ export class LineupPostCommand {
     const name = interaction.fields.getTextInputValue('player_name')?.trim();
     if (name) {
       const currentSlot = session.layout.positions[session.currentIndex];
-      session.players[currentSlot.key] = name.slice(0, 24);
+      session.players[currentSlot.key] = { name: name.slice(0, 24) };
     }
 
     await interaction.deferUpdate();
@@ -457,7 +459,7 @@ export class LineupPostCommand {
 
     if (Object.keys(session.players).length > 0) {
       const preview = Object.entries(session.players)
-        .map(([k, v]) => `\`${k.toUpperCase()}\`: ${v}`)
+        .map(([k, v]) => `\`${k.toUpperCase()}\`: ${v.name}`)
         .join(', ');
       lines.push(`\n**Selected:** ${preview}`);
     }
@@ -542,7 +544,7 @@ export class LineupPostCommand {
       const pngBuffer = await this.renderer.renderPng({
         formation: session.formationKey,
         title: session.title,
-        players: session.players,
+        players: assignmentNames(session.players),
         kickoffAt: session.kickoffAt,
       });
 
@@ -566,8 +568,14 @@ export class LineupPostCommand {
         files: [attachment],
       });
 
+      // Keep the result as a draft so it shows up (and can be edited/re-posted) in the dashboard.
+      const saved = await this.saveAsDraft(session, postedMessage.id).catch((error) => {
+        this.logger.warn(`Lineup posted but could not be saved as a draft: ${error}`);
+        return false;
+      });
+
       await interaction.editReply({
-        content: `✅ Lineup successfully posted in <#${session.channelId}>!\n[Jump to message](${postedMessage.url})`,
+        content: `✅ Lineup successfully posted in <#${session.channelId}>!\n[Jump to message](${postedMessage.url})${saved ? '\nSaved to the dashboard under Lineups → Saved Drafts.' : ''}`,
         components: [],
       });
     } catch (error) {
@@ -579,5 +587,25 @@ export class LineupPostCommand {
     } finally {
       this.sessions.delete(session.id);
     }
+  }
+
+  private async saveAsDraft(session: LineupWizardSession, messageId: string): Promise<boolean> {
+    const guild = await this.prisma.guild.findUnique({ where: { id: session.guildId }, select: { timezone: true } });
+    await this.prisma.lineupDraft.create({
+      data: {
+        guildId: session.guildId,
+        title: session.title,
+        channelId: session.channelId,
+        formation: session.formationKey,
+        kickoffAt: session.kickoffAt,
+        timezone: guild?.timezone || 'Europe/Bucharest',
+        assignments: session.players as unknown as Prisma.InputJsonValue,
+        createdByDiscordId: session.userId,
+        lastPostedMessageId: messageId,
+        lastPostedChannelId: session.channelId,
+        lastPostedAt: new Date(),
+      },
+    });
+    return true;
   }
 }

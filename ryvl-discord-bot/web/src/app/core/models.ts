@@ -117,41 +117,72 @@ export interface RsvpCounts {
   total?: number;
 }
 
+export type EventStatus = 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
+export type OccurrenceStatus = 'SCHEDULED' | 'PUBLISHED' | 'CLOSED' | 'CANCELLED';
+export type EventFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
+
+/** One date of an event, as returned by the server. */
 export interface EventOccurrence {
   id: string;
   eventId: string;
+  index: number;
   startsAt: string;
-  closesAt?: string;
-  status: 'scheduled' | 'open' | 'closed' | 'cancelled';
-  rsvps: EventRsvp[];
-  counts: RsvpCounts;
+  endsAt: string | null;
+  status: OccurrenceStatus;
+  messageId: string | null;
+  channelId: string | null;
+  publishedAt: string | null;
+  closedAt: string | null;
+  rsvpCounts: RsvpCounts;
 }
 
+/** Event view returned by /api/guilds/:guildId/events (stored row + derived fields). */
 export interface EventItem {
   id: string;
   guildId: string;
   title: string;
-  description: string;
-  location?: string;
-  color?: string;
-  startsAt: string;
-  time?: string;
-  durationMinutes?: number;
-  duration?: string;
-  timezone: string;
-  isRecurring: boolean;
-  frequency?: 'daily' | 'weekly' | 'biweekly' | 'monthly';
-  weekdays?: number[];
-  monthlyType?: 'day_of_month' | 'nth_weekday';
-  endCondition?: 'never' | 'after_count' | 'on_date';
-  endCount?: number;
-  endDate?: string;
+  description: string | null;
+  location: string | null;
+  imageUrl: string | null;
+  color: string;
   channelId: string;
-  roleMentionIds: string[];
-  status: 'active' | 'draft' | 'archived';
-  nextOccurrence?: string;
+  timezone: string;
+  createdById: string;
+  mentionRoleIds: string[];
+  rrule: string | null;
+  /** Minutes. */
+  duration: number;
+  status: EventStatus;
+  publishLeadMinutes: number;
+  vpgMatchId: number | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  isRecurring: boolean;
+  frequency: EventFrequency | null;
+  /** First kickoff of the series. */
+  startsAt: string | null;
+  nextOccurrence: EventOccurrence | null;
   occurrences: EventOccurrence[];
   rsvpsCount: RsvpCounts;
+  discordSync?: { updated: number; failed: number };
+}
+
+export interface UpcomingFixture {
+  vpgMatchId: number;
+  kickoff: string;
+  competition: string;
+  matchDay: number | null;
+  homeName: string;
+  awayName: string;
+  opponent: string;
+  title: string;
+  eventId: string | null;
+}
+
+export interface CreateFixtureEventsResult {
+  created: { vpgMatchId: number; eventId: string; title: string }[];
+  skipped: number;
 }
 
 export interface EventCreatePayload {
@@ -172,6 +203,7 @@ export interface EventCreatePayload {
   endDate?: string;
   channelId: string;
   roleMentionIds: string[];
+  publishLeadMinutes?: number;
 }
 
 
@@ -328,6 +360,14 @@ export interface LineupFormationsResponse {
   canvas_height: number;
 }
 
+/** A filled lineup slot; members picked from Discord carry their user ID. */
+export interface LineupSlotAssignment {
+  discordUserId?: string;
+  name: string;
+}
+
+export type LineupAssignments = Record<string, LineupSlotAssignment>;
+
 export interface LineupDraft {
   id: string;
   guildId: string;
@@ -337,16 +377,59 @@ export interface LineupDraft {
   kickoffAt: string | null;
   timezone: string;
   mentionRoleIds: string[];
-  assignments: Record<string, string>;
+  /** The server returns the current format; older payloads may still be { slot: name }. */
+  assignments: LineupAssignments | Record<string, string>;
+  occurrenceId: string | null;
+  showEaNames: boolean;
+  lastPostedMessageId: string | null;
+  lastPostedChannelId: string | null;
+  lastPostedAt: string | null;
   createdByDiscordId?: string;
   createdAt: string;
   updatedAt: string;
 }
 
+export interface LineupDraftPayload {
+  title?: string;
+  channel_id?: string | null;
+  formation?: string;
+  kickoff_at?: string | null;
+  timezone?: string;
+  mention_role_ids?: string[];
+  assignments?: LineupAssignments;
+  occurrence_id?: string | null;
+  show_ea_names?: boolean;
+}
+
+export type LineupRsvpStatus = 'ACCEPTED' | 'TENTATIVE' | 'DECLINED' | null;
+
+export interface LineupMemberOption {
+  discordUserId: string;
+  displayName: string;
+  username: string | null;
+  avatarUrl: string | null;
+  rsvpStatus: LineupRsvpStatus;
+  eaPlayerName: string | null;
+  preferredPos: string | null;
+  inGuild: boolean;
+}
+
+export interface LineupMatchOccurrence {
+  occurrenceId: string;
+  eventId: string;
+  title: string;
+  startsAt: string;
+  status: OccurrenceStatus;
+  isMatch: boolean;
+  counts: { accepted: number; tentative: number; declined: number };
+}
+
 export interface LineupRenderPayload {
   formation: string;
   title: string;
-  players: Record<string, string>;
+  assignments: LineupAssignments;
+  ea_names?: Record<string, string>;
+  show_ea_names?: boolean;
   kickoff_at?: string | null;
   primary_color?: string;
   secondary_color?: string;
@@ -356,6 +439,16 @@ export interface LineupRenderPayload {
 export interface LineupPostPayload extends LineupRenderPayload {
   channel_id: string;
   mention_role_ids?: string[];
+  draft_id?: string;
+  update_existing?: boolean;
+}
+
+export interface LineupPostResult {
+  ok: boolean;
+  channel_id: string;
+  message_id: string;
+  updated: boolean;
+  draft_id: string | null;
 }
 
 export interface RosterPlayer {

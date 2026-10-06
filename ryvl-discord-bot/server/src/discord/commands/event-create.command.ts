@@ -6,14 +6,11 @@ import {
   TextInputStyle,
   ActionRowBuilder,
   ModalSubmitInteraction,
-  TextBasedChannel,
   MessageFlags,
 } from 'discord.js';
 import { Injectable, Logger } from '@nestjs/common';
-import { OccurrenceStatus } from '@prisma/client';
 import { EventsService } from '../../events/events.service';
 import { PrismaService } from '../../prisma/prisma.service';
-import { buildEventEmbed } from '../embeds/event-embed.builder';
 
 export const EVENT_CREATE_MODAL_ID = 'modal:event:create';
 
@@ -102,7 +99,9 @@ export class EventCreateCommand {
         throw new Error('No channel found for interaction');
       }
 
-      const eventWithOccurrences = await this.eventsService.createEvent(
+      // The event publisher posts the announcement (immediately for a new event), so
+      // this command never sends its own copy that could race the scheduler.
+      await this.eventsService.createEvent(
         guildId,
         interaction.user.id,
         {
@@ -115,37 +114,8 @@ export class EventCreateCommand {
         },
       );
 
-      const firstOccurrence = eventWithOccurrences.occurrences[0];
-
-      if (firstOccurrence && interaction.channel && 'send' in interaction.channel) {
-        const textChannel = interaction.channel as TextBasedChannel;
-        const { embed, row } = buildEventEmbed({
-          event: eventWithOccurrences,
-          occurrence: firstOccurrence,
-          rsvps: [],
-          creatorName: interaction.user.displayName || interaction.user.username,
-        });
-
-        if ('send' in textChannel) {
-          const sentMessage = await (textChannel as { send: (options: unknown) => Promise<{ id: string }> }).send({
-            embeds: [embed],
-            components: [row],
-          });
-
-          await this.prisma.eventOccurrence.update({
-            where: { id: firstOccurrence.id },
-            data: {
-              messageId: sentMessage.id,
-              channelId,
-              status: OccurrenceStatus.PUBLISHED,
-              publishedAt: new Date(),
-            },
-          });
-        }
-      }
-
       await interaction.editReply({
-        content: `✅ Event **${title}** created: ${formatEventDateTime(parsedDate, timezone).date} at ${formatEventDateTime(parsedDate, timezone).time} (${timezone}).`,
+        content: `✅ Event **${title}** created: ${formatEventDateTime(parsedDate, timezone).date} at ${formatEventDateTime(parsedDate, timezone).time} (${timezone}). The announcement will appear in this channel shortly.`,
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';

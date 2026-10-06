@@ -65,6 +65,30 @@ export class LineupController {
     return this.lineupService.postLineup(guildId, dto);
   }
 
+  @Get('members')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async listMembers(
+    @Param('guildId') guildId: string,
+    @Query('occurrence_id') occurrenceId?: string,
+  ) {
+    return this.lineupService.getLineupMembers(guildId, occurrenceId || null);
+  }
+
+  @Get('occurrences')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async listOccurrences(@Param('guildId') guildId: string) {
+    return this.lineupService.listMatchOccurrences(guildId);
+  }
+
+  @Post('auto-fill')
+  @UseGuards(AuthGuard, GuildAdminGuard)
+  async autoFill(
+    @Param('guildId') guildId: string,
+    @Body() body: { formation: string; occurrence_id: string; assignments?: unknown },
+  ) {
+    return this.lineupService.autoFill(guildId, body);
+  }
+
   @Get('drafts')
   async listDrafts(@Param('guildId') guildId: string) {
     return this.lineupService.listDrafts(guildId);

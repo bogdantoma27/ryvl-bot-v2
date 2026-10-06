@@ -64,7 +64,7 @@ export class EventEditCommand {
       const zone = event.timezone || DEFAULT_EVENT_TIMEZONE;
       const startsAt = parseEventDateTime(interaction.fields.getTextInputValue('edit_date'), interaction.fields.getTextInputValue('edit_time'), zone, receivedAt);
       if (!startsAt) throw new Error(`Invalid date or time. Use YYYY-MM-DD (or today/tomorrow) and HH:mm in ${zone}.`);
-      const updated = await this.eventsService.updateEvent(eventId, { title, description, startsAt: startsAt.toISOString() }, target.id);
+      const updated = await this.eventsService.updateEvent(event.guildId, eventId, { title, description, startsAt: startsAt.toISOString() }, target.id);
       if (updated.discordSync?.failed) {
         await interaction.editReply({ content: '⚠️ The event was saved, but Discord could not refresh every announcement. Check the bot’s View Channel and Read Message History permissions, then retry the edit.' });
       } else {

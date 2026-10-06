@@ -66,9 +66,10 @@ test('edit submit acknowledges first, preserves 19:00 and supports clearing desc
   await new EventEditCommand(f.prisma, f.service).handleModalSubmit(f.interaction, eid, oid);
   assert.equal(f.calls[0], 'defer');
   const update = f.calls.find(call => call[0] === 'update');
-  assert.equal(update[2].startsAt, '2026-09-25T16:00:00.000Z');
-  assert.equal(update[2].description, '');
-  assert.equal(update[3], oid);
+  assert.equal(update[1], gid, 'Edits are scoped to the event guild');
+  assert.equal(update[3].startsAt, '2026-09-25T16:00:00.000Z');
+  assert.equal(update[3].description, '');
+  assert.equal(update[4], oid);
 });
 test('event embed contains the correct instant, explicit event timezone and working staff URL', () => {
   const f = fixture('', '');

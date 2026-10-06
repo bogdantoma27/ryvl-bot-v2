@@ -3,7 +3,7 @@ process.env.TZ = 'UTC';
 require('reflect-metadata');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { EventMessageService } = require('../dist/events/event-message.service');
+const { EventPublisher } = require('../dist/events/event-publisher.service');
 const { EventsController } = require('../dist/events/events.controller');
 const { ValidationPipe } = require('@nestjs/common');
 const { parseEventDateTime, formatEventDateTime } = require('../dist/events/event-time');
@@ -13,7 +13,7 @@ function updater() {
   const event = { id: 'event', title: 'Edited training', description: 'Updated description', timezone: 'Europe/Bucharest', channelId: 'channel', color: '#EAE905' };
   const occurrence = { id: 'occ', index: 0, startsAt: new Date('2030-09-25T16:00:00Z'), endsAt: new Date('2030-09-25T17:00:00Z'), status: 'PUBLISHED', messageId: 'message', channelId: 'channel', event, rsvps: [{ displayName: 'Fixture Attendee', status: 'ACCEPTED' }] };
   const calls = [];
-  const service = new EventMessageService({ eventOccurrence: { findMany: async () => [occurrence] } }, { discordToken: 'fixture-token', frontendUrl: 'https://ryvl.top' });
+  const service = new EventPublisher({ eventOccurrence: { findMany: async () => [occurrence] } }, { discordToken: 'fixture-token', frontendUrl: 'https://ryvl.top' });
   service.rest = { get: async route => { calls.push(['get', route]); return { embeds: [{ footer: { text: 'Created by Original Creator' } }] }; }, patch: async (route, options) => calls.push(['patch', route, options.body]) };
   return { service, calls, occurrence };
 }
@@ -45,7 +45,7 @@ test('autumn repeated local time has a deterministic instant; invalid zones do n
   assert.equal(parseEventDateTime('2026-09-24', '19:00', 'MadeUp/Zone'), null);
 });
 test('HTTP event edit fields survive the actual global validation pipe', async () => {
-  const metatype = Reflect.getMetadata('design:paramtypes', EventsController.prototype, 'updateEvent')[1];
+  const metatype = Reflect.getMetadata('design:paramtypes', EventsController.prototype, 'updateEvent')[2];
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: false });
   const input = { title: 'Changed', description: '', startsAt: '2030-09-25T16:00:00Z' };
   assert.deepEqual(await pipe.transform(input, { type: 'body', metatype }), input);

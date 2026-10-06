@@ -16,6 +16,8 @@ export const createEventSchema = z.object({
     message: 'startsAt must be a valid ISO date string',
   }),
   status: z.nativeEnum(EventStatus).optional().default(EventStatus.ACTIVE),
+  // Later occurrences are announced this many minutes before kickoff (max 30 days).
+  publishLeadMinutes: z.coerce.number().int().min(0).max(43200).optional(),
 });
 
 export type CreateEventDtoType = z.infer<typeof createEventSchema>;
@@ -33,4 +35,5 @@ export class CreateEventDto {
   duration?: number;
   startsAt!: string;
   status?: EventStatus;
+  publishLeadMinutes?: number;
 }

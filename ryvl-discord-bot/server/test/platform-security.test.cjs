@@ -4,6 +4,7 @@
 require('reflect-metadata');
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { NotFoundException } = require('@nestjs/common');
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const { assertChannelInGuild } = require('../dist/discord/channel-guard');
 const {
@@ -192,35 +193,39 @@ test('choosing a transfers channel never creates an enabled transfer tracker', a
 
 function eventsController() {
   const calls = [];
-  const events = {
-    getEvent: async (id) => ({ id, guildId: id === 'mine' ? GUILD : OTHER_GUILD, occurrences: [] }),
-    getOccurrence: async (id) => ({ id, eventId: 'mine', event: { guildId: id === 'occ-mine' ? GUILD : OTHER_GUILD } }),
-    updateEvent: async (id) => { calls.push(['update', id]); return { id }; },
-    deleteEvent: async (id) => { calls.push(['delete', id]); return { id }; },
-    cancelOccurrence: async (id) => { calls.push(['cancel', id]); return { id }; },
+  // EventsService/RsvpService scope every lookup by guild (see event-lifecycle-database
+  // tests); the controller must always hand them the :guildId from the path.
+  const scoped = (name) => async (guildId, ...rest) => {
+    calls.push([name, guildId, ...rest.filter((v) => typeof v === 'string')]);
+    if (rest.includes('theirs') || rest.includes('occ-theirs')) throw new NotFoundException();
+    return { id: rest[0] };
   };
-  const rsvps = { getRsvps: async () => ({}), getFlatRsvps: async () => [] };
+  const events = {
+    getEvent: scoped('get'),
+    updateEvent: scoped('update'),
+    deleteEvent: scoped('delete'),
+    cancelOccurrence: scoped('cancel'),
+  };
+  const rsvps = { getRsvps: scoped('rsvps'), getFlatRsvps: scoped('flat') };
   return { controller: new EventsController(events, rsvps), calls };
 }
 
-test('event routes refuse ids that belong to another server', async () => {
+test('event routes pass the path guild to every scoped lookup', async () => {
   const { controller, calls } = eventsController();
   await assert.rejects(() => controller.getEvent(GUILD, 'theirs'), (e) => e.getStatus() === 404);
   await assert.rejects(() => controller.updateEvent(GUILD, 'theirs', {}), (e) => e.getStatus() === 404);
   await assert.rejects(() => controller.deleteEvent(GUILD, 'theirs'), (e) => e.getStatus() === 404);
   await assert.rejects(() => controller.cancelOccurrence(GUILD, 'mine', 'occ-theirs'), (e) => e.getStatus() === 404);
   await assert.rejects(() => controller.getEventRsvps(GUILD, 'mine', 'occ-theirs'), (e) => e.getStatus() === 404);
-  assert.deepEqual(calls, []);
-  await controller.updateEvent(GUILD, 'mine', {});
-  await controller.cancelOccurrence(GUILD, 'mine', 'occ-mine');
-  assert.deepEqual(calls, [['update', 'mine'], ['cancel', 'occ-mine']]);
+  await controller.getOccurrenceRsvps(GUILD, 'mine', 'occ-mine');
+  assert.ok(calls.length === 6 && calls.every((c) => c[1] === GUILD), JSON.stringify(calls));
 });
 
 test('the public event Delete button only lets the creator or event managers delete', async () => {
   const { EventDeleteCommand } = require('../dist/discord/commands/event-delete.command');
   const deleted = [];
-  const prisma = { event: { findUnique: async () => ({ id: 'e1', guildId: GUILD, createdById: 'creator', title: 'Training' }) } };
-  const command = new EventDeleteCommand({ deleteEvent: async (id) => deleted.push(id) }, prisma);
+  const prisma = { event: { findFirst: async ({ where }) => (where.guildId === GUILD ? { id: 'e1', guildId: GUILD, createdById: 'creator', title: 'Training' } : null) } };
+  const command = new EventDeleteCommand({ deleteEvent: async (_guildId, id) => { deleted.push(id); return { discordSync: { failed: 0 } }; } }, prisma);
   const click = (userId, perms = []) => {
     const replies = [];
     return {

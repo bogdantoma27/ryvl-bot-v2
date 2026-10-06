@@ -11,6 +11,7 @@ import { DatePipe } from '@angular/common';
 import { ApiService } from '../../core/api.service';
 import { GuildStore } from '../../core/guild.store';
 import { LineupDraft } from '../../core/models';
+import { normalizeAssignments } from './lineup-assignments';
 
 @Component({
   selector: 'app-lineup-drafts',
@@ -94,6 +95,9 @@ import { LineupDraft } from '../../core/models';
                   <tr class="hover:bg-[#1f2e54]/50 transition">
                     <td class="py-3.5 px-4 font-bold text-white">
                       {{ draft.title }}
+                      @if (draft.lastPostedMessageId) {
+                        <span class="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-900/60 text-emerald-300 border border-emerald-800">Posted</span>
+                      }
                     </td>
                     <td class="py-3.5 px-4">
                       <span class="px-2.5 py-1 rounded-md bg-slate-800 text-[#EAE905] font-bold border border-slate-700">
@@ -176,12 +180,7 @@ export class LineupDraftsComponent implements OnInit {
   }
 
   getFilledSlotsCount(draft: LineupDraft): number {
-    if (!draft.assignments) return 0;
-    const map =
-      typeof draft.assignments === 'string'
-        ? JSON.parse(draft.assignments)
-        : draft.assignments;
-    return Object.values(map || {}).filter((v) => Boolean(String(v || '').trim())).length;
+    return Object.keys(normalizeAssignments(draft.assignments)).length;
   }
 
   async deleteDraft(draftId: string): Promise<void> {
