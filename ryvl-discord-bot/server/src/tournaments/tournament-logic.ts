@@ -46,6 +46,8 @@ export interface TournamentTeam {
   crestUrl?: string;
   managerId?: string;
   managerName?: string;
+  /** Group letter in a group-stage tournament. */
+  group?: string;
   picks: TournamentPick[];
 }
 
@@ -59,6 +61,12 @@ export interface TournamentMatchItem {
   homeScore: number;
   awayScore: number;
   completed: boolean;
+  /** Set on group-stage tournaments; matches without it belong to a plain league. */
+  stage?: 'GROUP' | 'KNOCKOUT';
+  group?: string;
+  /** Penalty shoot-out score, only for knockout matches level after extra time. */
+  homePens?: number;
+  awayPens?: number;
   date?: string;
   reportedBy?: string;
 }
@@ -354,4 +362,156 @@ export function upsertSignup(
 
 export function teamForUser(teams: TournamentTeam[], userId: string): TournamentTeam | undefined {
   return teams.find((t) => t.managerId === userId);
+}
+
+// ----------------------------------------------------
+// Group stage + knockouts (standard tournaments)
+// ----------------------------------------------------
+
+export const GROUP_SIZE = 4;
+export const GROUP_QUALIFIERS = 2;
+
+export function isCupFormat(matches: TournamentMatchItem[]): boolean {
+  return matches.some((m) => m.stage === 'GROUP' || m.stage === 'KNOCKOUT');
+}
+
+function shuffle<T>(items: T[], random: () => number): T[] {
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
+
+/**
+ * Random group draw into groups of 4 (8 teams → 2 groups, 16 → 4, 32 → 8), then a
+ * round robin inside each group.
+ */
+export function generateGroupStage(
+  teams: TournamentTeam[],
+  random: () => number = Math.random,
+): { teams: TournamentTeam[]; matches: TournamentMatchItem[] } {
+  const groupCount = Math.max(1, Math.round(teams.length / GROUP_SIZE));
+  const drawn = shuffle(teams, random);
+  const grouped = teams.map((t) => ({ ...t }));
+  const byId = new Map(grouped.map((t) => [t.id, t]));
+  drawn.forEach((t, i) => (byId.get(t.id)!.group = String.fromCharCode(65 + (i % groupCount))));
+
+  const matches: TournamentMatchItem[] = [];
+  for (let g = 0; g < groupCount; g++) {
+    const letter = String.fromCharCode(65 + g);
+    const members = grouped.filter((t) => t.group === letter);
+    for (const m of generateRoundRobin(members)) {
+      matches.push({ ...m, id: `g${letter}_${m.id}`, stage: 'GROUP', group: letter });
+    }
+  }
+  return { teams: grouped, matches };
+}
+
+export function groupLetters(teams: TournamentTeam[]): string[] {
+  return Array.from(new Set(teams.map((t) => t.group).filter((g): g is string => Boolean(g)))).sort();
+}
+
+export function groupStandings(
+  teams: TournamentTeam[],
+  matches: TournamentMatchItem[],
+): Array<{ group: string; rows: TournamentStandingsRow[] }> {
+  return groupLetters(teams).map((group) => ({
+    group,
+    rows: calculateStandings(
+      teams.filter((t) => t.group === group),
+      matches.filter((m) => m.stage === 'GROUP' && m.group === group),
+    ),
+  }));
+}
+
+export function knockoutRoundName(matchesInRound: number): string {
+  if (matchesInRound === 1) return 'Finala';
+  if (matchesInRound === 2) return 'Semifinale';
+  if (matchesInRound === 4) return 'Sferturi';
+  if (matchesInRound === 8) return 'Optimi';
+  if (matchesInRound === 16) return 'Șaisprezecimi';
+  return `Runda eliminatorie (${matchesInRound * 2} echipe)`;
+}
+
+/** Winner of a completed knockout match (penalties decide a draw); null when undecided. */
+export function knockoutWinnerSide(m: TournamentMatchItem): 'home' | 'away' | null {
+  if (!m.completed) return null;
+  if (m.homeScore !== m.awayScore) return m.homeScore > m.awayScore ? 'home' : 'away';
+  if (m.homePens === undefined || m.awayPens === undefined || m.homePens === m.awayPens) return null;
+  return m.homePens > m.awayPens ? 'home' : 'away';
+}
+
+function knockoutMatch(
+  round: number,
+  index: number,
+  home: { id?: string; name: string },
+  away: { id?: string; name: string },
+): TournamentMatchItem {
+  return {
+    id: `ko_r${round}_${index + 1}`,
+    round,
+    stage: 'KNOCKOUT',
+    homeTeam: home.name,
+    awayTeam: away.name,
+    homeTeamId: home.id,
+    awayTeamId: away.id,
+    homeScore: 0,
+    awayScore: 0,
+    completed: false,
+  };
+}
+
+/**
+ * Matches the next stage needs once the current one is finished: the first knockout
+ * round after the groups (A1–B2, C1–D2 … then B1–A2, D1–C2 … so a group's two
+ * qualifiers sit in opposite halves), or the next knockout round from the winners.
+ * Returns [] while the current stage is still being played.
+ */
+export function nextStageMatches(teams: TournamentTeam[], matches: TournamentMatchItem[]): TournamentMatchItem[] {
+  if (!isCupFormat(matches)) return [];
+  const knockout = matches.filter((m) => m.stage === 'KNOCKOUT');
+
+  if (knockout.length === 0) {
+    const groupMatches = matches.filter((m) => m.stage === 'GROUP');
+    if (groupMatches.length === 0 || groupMatches.some((m) => !m.completed)) return [];
+    const tables = groupStandings(teams, matches);
+    const byName = new Map(teams.map((t) => [t.name, t]));
+    const place = (group: number, pos: number) => {
+      const row = tables[group]?.rows[pos];
+      return { id: byName.get(row?.team ?? '')?.id, name: row?.team ?? '?' };
+    };
+    if (tables.length === 1) return [knockoutMatch(1, 0, place(0, 0), place(0, 1))];
+    const first: TournamentMatchItem[] = [];
+    const second: TournamentMatchItem[] = [];
+    for (let g = 0; g + 1 < tables.length; g += 2) {
+      first.push(knockoutMatch(1, 0, place(g, 0), place(g + 1, 1)));
+      second.push(knockoutMatch(1, 0, place(g + 1, 0), place(g, 1)));
+    }
+    return [...first, ...second].map((m, i) => ({ ...m, id: `ko_r1_${i + 1}` }));
+  }
+
+  const lastRound = Math.max(...knockout.map((m) => m.round ?? 1));
+  const current = knockout.filter((m) => (m.round ?? 1) === lastRound);
+  if (current.length < 2 || current.some((m) => !knockoutWinnerSide(m))) return [];
+  const winner = (m: TournamentMatchItem) =>
+    knockoutWinnerSide(m) === 'home' ? { id: m.homeTeamId, name: m.homeTeam } : { id: m.awayTeamId, name: m.awayTeam };
+  const next: TournamentMatchItem[] = [];
+  for (let i = 0; i + 1 < current.length; i += 2) {
+    next.push(knockoutMatch(lastRound + 1, next.length, winner(current[i]), winner(current[i + 1])));
+  }
+  return next;
+}
+
+/** Winner of the final, once it has been played. */
+export function cupChampion(matches: TournamentMatchItem[]): string | null {
+  const knockout = matches.filter((m) => m.stage === 'KNOCKOUT');
+  if (knockout.length === 0) return null;
+  const lastRound = Math.max(...knockout.map((m) => m.round ?? 1));
+  const final = knockout.filter((m) => (m.round ?? 1) === lastRound);
+  if (final.length !== 1) return null;
+  const side = knockoutWinnerSide(final[0]);
+  if (!side) return null;
+  return side === 'home' ? final[0].homeTeam : final[0].awayTeam;
 }

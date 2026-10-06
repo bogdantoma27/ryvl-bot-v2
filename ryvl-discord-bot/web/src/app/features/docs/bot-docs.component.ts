@@ -114,7 +114,7 @@ const TOURNAMENT_GUIDES: BotCommandDoc[] = [
     categoryLabel: '🏆 Tournaments & Draft',
     syntax: '/tournament start',
     description:
-      'Closes signups and starts play. Standard: the bracket auto-scales to 8, 16 or 32 teams in signup order (extra teams are told by DM) and a round-robin fixture list is posted. Draft: managers become teams and the draft wheel starts in #draft-wheel. Also on the admin panel as Start Tournament / Draft.',
+      'Closes signups and starts play. Standard: the bracket auto-scales to 8, 16 or 32 teams in signup order (extra teams are told by DM), teams are drawn into groups of 4, and the top 2 of each group go to single-match knockouts (penalties on a draw) drawn automatically after the groups. Draft: managers become teams and the draft wheel starts in #draft-wheel. Also on the admin panel as Start Tournament / Draft.',
     permission: 'Admin',
     example: '/tournament start',
     responsePreview: '🚀 Draftul a început: 4 echipe, 40 jucători disponibili pentru 40 alegeri.',
