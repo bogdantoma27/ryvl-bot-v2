@@ -164,6 +164,12 @@ export class EaService {
   }
 
 
+  /** Forward one read-only EA request for the FC Draft RO site (see EaRelayController). */
+  async relay(path: string, params: Record<string, string>): Promise<unknown> {
+    const sorted = Object.fromEntries(Object.entries(params).sort(([a], [b]) => a.localeCompare(b)));
+    return this.runBridge('relay', [path, JSON.stringify(sorted)]);
+  }
+
   async searchClubs(query: string, platform = 'common-gen5'): Promise<EaClubSearchResult[]> {
     if (!query || !query.trim()) return [];
     return this.runBridge('search', [platform, query.trim()]);

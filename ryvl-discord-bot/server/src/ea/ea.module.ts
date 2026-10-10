@@ -6,6 +6,7 @@ import { AuthModule } from '../auth/auth.module';
 import { EaService } from './ea.service';
 import { EaPollerService } from './ea-poller.service';
 import { EaController } from './ea.controller';
+import { EaRelayController } from './ea-relay.controller';
 
 @Module({
   imports: [
@@ -15,7 +16,7 @@ import { EaController } from './ea.controller';
     forwardRef(() => DiscordModule),
   ],
   providers: [EaService, EaPollerService],
-  controllers: [EaController],
+  controllers: [EaController, EaRelayController],
   exports: [EaService, EaPollerService],
 })
 export class EaModule {}
