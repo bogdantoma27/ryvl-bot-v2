@@ -89,6 +89,25 @@ def cmd_member_stats(platform: str, club_id: str):
     data = do_get("/members/stats", {"platform": platform, "clubId": club_id})
     print(json.dumps(data if isinstance(data, dict) else {}))
 
+# Read-only EA paths the relay may forward (used by the FC Draft RO site).
+RELAY_PATHS = {
+    "/clubs/matches",
+    "/clubs/info",
+    "/clubs/overallStats",
+    "/members/stats",
+    "/members/career/stats",
+    "/club/playoffAchievements",
+    "/allTimeLeaderboard/search",
+}
+
+def cmd_relay(path: str, params_json: str):
+    if path not in RELAY_PATHS:
+        raise RuntimeError(f"Path not allowed: {path}")
+    params = json.loads(params_json or "{}")
+    if not isinstance(params, dict):
+        raise RuntimeError("Params must be an object")
+    print(json.dumps(do_get(path, {str(k): str(v) for k, v in params.items()})))
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"error": "No command specified"}))
@@ -118,6 +137,8 @@ def main():
             platform = sys.argv[2] if len(sys.argv) > 2 else "common-gen5"
             club_id = sys.argv[3] if len(sys.argv) > 3 else ""
             cmd_member_stats(platform, club_id)
+        elif cmd == "relay":
+            cmd_relay(sys.argv[2] if len(sys.argv) > 2 else "", sys.argv[3] if len(sys.argv) > 3 else "{}")
         else:
             print(json.dumps({"error": f"Unknown command: {cmd}"}))
             sys.exit(1)
